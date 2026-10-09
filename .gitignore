@@ -1,0 +1,81 @@
+# Agent workflow
+.scratch/
+
+# Worktrees (AGENTS.md) — git does not self-ignore a nested one.
+.agents/worktrees/
+
+# dependencies (bun install)
+node_modules
+node-compile-cache
+
+# build output
+build
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# vitest browser-mode failure screenshots, written beside the test that failed
+**/__screenshots__/
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files, except the tracked documentation of them
+.env
+.env.*
+!.env.example
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# Composer dependencies (composer install)
+vendor/
+
+# Documentation — local by default, except the docs agents actually read.
+# `docs/*` rather than `docs`: git never descends into an excluded directory, so
+# a negation inside one can never be reached.
+docs/*
+!docs/agents/
+!docs/adr/
+
+# Playwright CLI
+.playwright-cli
+tmp-playwright-artifacts
+
+# Playwright test runner output (traces, failure screenshots, HTML report)
+test-results
+playwright-report
+
+# Playwrights' testing playground, except the tracked design-system showcase.
+# The directory itself has to be re-included before its contents can be: git
+# will not look inside a directory it has already excluded.
+**/playground/*
+!**/playground/design-system
+
+# OpenCode - oh-my-opencode plugin
+.sisyphus
+.opencode/oh-my-opencode.json
+
+# Claude - oh-my-claude plugin
+.omc
+
+# ignore temporary files
+tmp
+temp
+.temp
