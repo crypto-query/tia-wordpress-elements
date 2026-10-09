@@ -1,0 +1,50 @@
+{
+    "name": "${localWorkspaceFolderBasename}",
+    "service": "workspace",
+    "dockerComposeFile": "compose.yaml",
+    "workspaceFolder": "${localWorkspaceFolder}",
+    "mounts": [
+        "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+        "source=${localWorkspaceFolder}/../tia-trading-strategies,target=${localWorkspaceFolder}/temp/tia-trading-strategies,type=bind",
+        "source=${localEnv:HOME}/.mcp-auth,target=${localEnv:HOME}/.mcp-auth,type=bind",
+        "source=${localEnv:HOME}/.agents,target=${localEnv:HOME}/.agents,type=bind",
+        "source=${localEnv:HOME}/.pi,target=${localEnv:HOME}/.pi,type=bind",
+        "source=${localEnv:HOME}/.codex,target=${localEnv:HOME}/.codex,type=bind",
+        "source=${localEnv:HOME}/.claude,target=${localEnv:HOME}/.claude,type=bind",
+        "source=${localEnv:HOME}/.config,target=${localEnv:HOME}/.config,type=bind",
+        "source=${localEnv:HOME}/.local/share,target=${localEnv:HOME}/.local/share,type=bind",
+        "source=${localEnv:HOME}/.local/state,target=${localEnv:HOME}/.local/state,type=bind"
+    ],
+    "remoteEnv": {
+        "USER": "${localEnv:USER}",
+        "WORKSPACE": "${localWorkspaceFolder}"
+    },
+    "postCreateCommand": "npm update -g --loglevel error",
+    "postStartCommand": "chmod 700 \"$HOME/.mcp-auth\"",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "openai.chatgpt",
+                "Anthropic.claude-code",
+                "HuggingFace.huggingface-vscode-chat",
+                "touyu.devcontainers-terminal-image-paste",
+                "DEVSENSE.phptools-vscode",
+                "cweijan.vscode-database-client2",
+                "stylelint.vscode-stylelint",
+                "esbenp.prettier-vscode",
+                "svelte.svelte-vscode",
+                "dbaeumer.vscode-eslint",
+                "bradlc.vscode-tailwindcss",
+                "redhat.vscode-yaml",
+                "tamasfe.even-better-toml",
+                "DavidAnson.vscode-markdownlint",
+                "shd101wyy.markdown-preview-enhanced",
+                "vunguyentuan.vscode-postcss",
+                "grimmer.vscode-back-forward-button",
+                "vitest.explorer",
+                "semanticdiff.semanticdiff",
+                "mhutchie.git-graph"
+            ]
+        }
+    }
+}

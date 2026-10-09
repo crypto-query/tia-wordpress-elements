@@ -1,0 +1,24 @@
+{
+    "recommendations": [
+        "openai.chatgpt",
+        "Anthropic.claude-code",
+        "HuggingFace.huggingface-vscode-chat",
+        "touyu.devcontainers-terminal-image-paste",
+        "DEVSENSE.phptools-vscode",
+        "cweijan.vscode-database-client2",
+        "stylelint.vscode-stylelint",
+        "esbenp.prettier-vscode",
+        "svelte.svelte-vscode",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "DavidAnson.vscode-markdownlint",
+        "shd101wyy.markdown-preview-enhanced",
+        "vunguyentuan.vscode-postcss",
+        "grimmer.vscode-back-forward-button",
+        "vitest.explorer",
+        "semanticdiff.semanticdiff",
+        "mhutchie.git-graph"
+    ]
+}

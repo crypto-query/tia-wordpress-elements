@@ -1,0 +1,90 @@
+FROM node:24.12-trixie-slim
+
+ARG USER=developer
+ARG HOME=/home/${USER}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update
+RUN apt-get install -y --no-install-recommends sudo bash bash-completion ca-certificates openssh-client curl file git jq nano make g++ pkg-config python3 procps net-tools iproute2 iputils-ping xclip xdg-utils tmux unzip
+
+# Use the built-in UTF-8 locale, so no locales package or locale-gen step is needed.
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+# install Composer (dependency management tool for PHP)
+RUN apt-get install -y --no-install-recommends php-cli php-mbstring php-xml
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# install uv Python package manager
+RUN UV_ARCH=$(uname -m) && \
+    curl -fsSL https://api.github.com/repos/astral-sh/uv/releases/latest | \
+    jq -r ".assets[] | select(.name == \"uv-${UV_ARCH}-unknown-linux-musl.tar.gz\") | .browser_download_url" | \
+    xargs curl -fsSL | \
+    tar -xz --strip-components=1 -C /usr/local/bin \
+        uv-${UV_ARCH}-unknown-linux-musl/uv \
+        uv-${UV_ARCH}-unknown-linux-musl/uvx
+
+# Create non-root user
+RUN useradd -m -s /bin/bash -d ${HOME} ${USER}
+RUN cp /etc/skel/.bashrc ${HOME}/.bashrc && \
+    cp /etc/skel/.bash_logout ${HOME}/.bash_logout && \
+    cp /etc/skel/.profile ${HOME}/.profile
+RUN sed -i 's/#alias grep=/alias grep=/' ${HOME}/.bashrc && \
+    sed -i 's/#alias fgrep=/alias fgrep=/' ${HOME}/.bashrc && \
+    sed -i 's/#alias egrep=/alias egrep=/' ${HOME}/.bashrc
+RUN chown -R ${USER}:${USER} ${HOME}
+RUN usermod -aG sudo ${USER}
+RUN sed -i 's/%sudo.*ALL$/%sudo ALL=(ALL:ALL) NOPASSWD: ALL/' /etc/sudoers
+
+# The Playwright browser cache lives outside the home directory, so it has to be
+# created and handed to the non-root user before that user can populate it.
+RUN mkdir -p /opt/pw-browsers && chown ${USER}:${USER} /opt/pw-browsers
+
+# install npm global packages into the user's home
+ENV NPM_CONFIG_PREFIX="${HOME}/.npm-global"
+ENV PATH="${HOME}/.npm-global/bin:$PATH"
+
+USER ${USER}
+
+# install Bun runtime
+RUN npm install -g bun
+
+# install AI CLI agents
+RUN npm install -g opencode-ai oh-my-opencode @anthropic-ai/claude-code @mariozechner/pi-coding-agent
+# RUN npm install -g opencode-ai oh-my-opencode @openai/codex @github/copilot @google/gemini-cli @anthropic-ai/claude-code @mariozechner/pi-coding-agent
+
+# install linters and language servers
+RUN npm install -g eslint oxlint svelte-language-server typescript-language-server
+
+# install Dev Containers CLI
+RUN npm install -g @devcontainers/cli
+
+# install Playwright and Playwright CLI
+RUN npm install -g playwright
+RUN npm install -g @playwright/cli
+
+# install Playwright with Chromium browser
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+RUN sudo env PATH="${PATH}" playwright install-deps chromium
+RUN playwright install chromium
+
+# Playwright renames the chromium-<build> directory on every upgrade, so point
+# the browser tools at a stable symlink resolved from whatever was just installed.
+RUN ln -s "$(ls -d ${PLAYWRIGHT_BROWSERS_PATH}/chromium-*/chrome-linux*/chrome)" ${PLAYWRIGHT_BROWSERS_PATH}/chrome
+# playwright-cli and the Playwright MCP default to Google Chrome (not built for Linux arm64)
+# and bundle their own Playwright, which expects a different Chromium build than the one above.
+ENV PLAYWRIGHT_MCP_BROWSER=chromium
+ENV PLAYWRIGHT_MCP_EXECUTABLE_PATH=${PLAYWRIGHT_BROWSERS_PATH}/chrome
+
+# Copy .claude.json from the read-only host home in every interactive shell. Claude Code
+# must write to it, and a single-file bind mount is unreliable on Docker Desktop for macOS.
+RUN echo '[ -f "${HOME}/.host-home/.claude.json" ] && cp "${HOME}/.host-home/.claude.json" "${HOME}/.claude.json" 2>/dev/null' >> ${HOME}/.bashrc
+
+# Ensure ~/.local/bin exists with correct ownership for uv tools
+RUN mkdir -p ${HOME}/.local/bin && chown -R ${USER}:${USER} ${HOME}/.local
+ENV PATH="${HOME}/.local/bin:$PATH"
+
+# install jdocmunch-mcp
+# https://github.com/jgravelle/jcodemunch-mcp
+RUN uv tool install --no-cache jdocmunch-mcp

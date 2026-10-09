@@ -1,0 +1,56 @@
+services:
+    workspace:
+        build:
+            context: .
+            dockerfile: dockerfile
+            args:
+                USER: ${USER}
+                HOME: ${HOME}
+        network_mode: host
+        init: true
+        cap_add:
+            - SYS_ADMIN
+        volumes:
+            - ${HOME}:${HOME}/.host-home:ro
+            - ${HOME}/.ssh:${HOME}/.ssh:ro
+        command: sleep infinity
+
+    # WordPress core and the database live in named volumes; only this repo (the plugin) is bind-mounted.
+    wordpress:
+        image: wordpress:php8.3
+        depends_on:
+            database:
+                condition: service_healthy
+        volumes:
+            - wordpress:/var/www/html
+            - ..:/var/www/html/wp-content/plugins/tia-wordpress-elements
+        ports:
+            - 8000:80
+        restart: always
+        environment:
+            WORDPRESS_DB_USER: wordpress
+            WORDPRESS_DB_NAME: wordpress
+            WORDPRESS_DB_PASSWORD: wordpress
+            WORDPRESS_DB_HOST: database:3306
+
+    database:
+        image: mysql:8.4
+        volumes:
+            - database:/var/lib/mysql
+        ports:
+            - 3306:3306
+        restart: always
+        environment:
+            MYSQL_DATABASE: wordpress
+            MYSQL_USER: wordpress
+            MYSQL_PASSWORD: wordpress
+            MYSQL_ROOT_PASSWORD: wordpress
+        healthcheck:
+            test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+            interval: 5s
+            timeout: 5s
+            retries: 3
+
+volumes:
+    wordpress:
+    database:
