@@ -1,39 +1,21 @@
 {
   "mcpServers": {
+    "stripe": {
+      "directTools": false
+    },
     "svelte": {
-      "url": "https://mcp.svelte.dev/mcp",
       "directTools": false
     },
     "shadcn": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "shadcn@latest",
-        "mcp"
-      ],
       "directTools": false
     },
     "context7": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ],
       "directTools": true
     },
     "playwright": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest",
-        "--browser",
-        "chromium"
-      ],
       "directTools": false
     },
     "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp",
       "directTools": false
     },
     "claude-design": {
@@ -48,11 +30,15 @@
     },
     "coolify-prod": {
       "approveTools": "destructive",
-      "excludeTools": ["hetzner"]
+      "excludeTools": [
+        "hetzner"
+      ]
     },
     "coolify-test": {
       "approveTools": "destructive",
-      "excludeTools": ["hetzner"]
+      "excludeTools": [
+        "hetzner"
+      ]
     }
   }
 }

@@ -84,7 +84,3 @@ RUN echo '[ -f "${HOME}/.host-home/.claude.json" ] && cp "${HOME}/.host-home/.cl
 # Ensure ~/.local/bin exists with correct ownership for uv tools
 RUN mkdir -p ${HOME}/.local/bin && chown -R ${USER}:${USER} ${HOME}/.local
 ENV PATH="${HOME}/.local/bin:$PATH"
-
-# install jdocmunch-mcp
-# https://github.com/jgravelle/jcodemunch-mcp
-RUN uv tool install --no-cache jdocmunch-mcp
