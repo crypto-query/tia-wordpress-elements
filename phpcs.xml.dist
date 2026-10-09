@@ -9,6 +9,7 @@
     <exclude-pattern>*/build/*</exclude-pattern>
     <exclude-pattern>*/.agents/*</exclude-pattern>
     <exclude-pattern>*/.scratch/*</exclude-pattern>
+    <exclude-pattern>*/wordpress/themes/tia/*</exclude-pattern>
 
     <arg name="extensions" value="php"/>
     <arg name="colors"/>

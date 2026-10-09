@@ -1,0 +1,558 @@
+// =============================================================================
+// Header Styles
+// =============================================================================
+
+#masthead {
+	width: 100%;
+	background-color: transparent; // Light blue-grey background
+	padding: 1.5rem 0;
+	position: relative;
+
+	.site-branding {
+		margin: 10px 10px 0 0;
+	}
+
+	.member-login-btn {
+		align-items: center;
+		border: 2px solid #04273f;
+		border-radius: 2rem;
+		color: #04273f;
+		font-family: Poppins, sans-serif;
+		font-size: 16px;
+		font-weight: 500;
+		justify-content: center;
+		line-height: 40px;
+		margin-bottom: 20px;
+		text-align: center;
+		min-height: 40px;
+		padding: .25rem 1.5rem;
+		text-decoration: none;
+		transition: all .2s ease;
+		white-space: nowrap;
+		display: block;
+
+		&:hover {
+			background-color: #04273F;
+			color: white;
+			text-decoration: none;
+		}
+	}
+
+	.row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		max-width: 1340px;
+		margin: 0 auto;
+		padding: 0 1rem;
+		gap: 2rem;
+	}
+
+	// Desktop Navigation
+	.main-navigation.desktop-nav {
+		flex: 1;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+
+		#primary-menu {
+			display: flex;
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			gap: 2rem;
+			align-items: center;
+
+			li {
+				position: relative;
+				display: flex;
+				align-items: center;
+
+				a {
+					color: #04273F; // Dark blue
+					text-decoration: none;
+					font-family: "Poppins", sans-serif;
+					font-size: 16px;
+					font-weight: 500;
+					transition: color 0.2s ease;
+					display: flex;
+					align-items: center;
+					line-height: 1;
+					white-space: nowrap;
+
+					&:hover {
+						color: #04273F;
+						opacity: 0.8;
+					}
+				}
+
+				// Dropdown indicator for "Indicators" menu item
+				&.menu-item-has-children > a::after {
+					content: "\f078";
+					font-family: "Font Awesome 6 Free";
+					font-weight: 900;
+					margin-left: 0.25rem;
+					font-size: 0.8rem;
+					display: inline-block;
+					transition: transform 0.2s ease;
+				}
+
+				&.menu-item-has-children:hover > a::after {
+					transform: rotate(180deg);
+				}
+
+				// Dropdown submenu
+				.sub-menu {
+					position: absolute;
+					top: calc(100% + 20px);
+					left: 50%;
+					transform: translateX(-50%) translateY(-10px);
+					background: white;
+					border: 1px solid #e5e7eb;
+					border-radius: 0.5rem;
+					box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+					min-width: 220px;
+					opacity: 0;
+					visibility: hidden;
+					transition: all 0.2s ease;
+					z-index: 1000;
+					list-style: none;
+					margin: 0;
+					padding: 0;
+
+					// Upward pointing arrow
+					&::before {
+						content: '';
+						position: absolute;
+						top: -6px;
+						left: 50%;
+						transform: translateX(-50%);
+						width: 0;
+						height: 0;
+						border-left: 6px solid transparent;
+						border-right: 6px solid transparent;
+						border-bottom: 6px solid white;
+						z-index: 1001;
+					}
+
+					&::after {
+						content: '';
+						position: absolute;
+						top: -7px;
+						left: 50%;
+						transform: translateX(-50%);
+						width: 0;
+						height: 0;
+						border-left: 7px solid transparent;
+						border-right: 7px solid transparent;
+						border-bottom: 7px solid #e5e7eb;
+						z-index: 1000;
+					}
+
+					li {
+						position: relative;
+
+						a {
+							display: flex;
+							align-items: center;
+							justify-content: space-between;
+							padding: 1rem 1.25rem;
+							color: #04273F;
+							font-size: 0.875rem;
+							transition: background-color 0.2s ease;
+							width: 100%;
+							text-decoration: none;
+
+							&::after {
+								content: "\f054";
+								font-family: "Font Awesome 6 Free";
+								font-weight: 900;
+								font-size: 0.75rem;
+								color: #6b7280;
+								margin-left: 0.5rem;
+							}
+
+							&:hover {
+								background: linear-gradient(109deg, #07223F 7.95%, #0A315A 89.33%);
+								color: #fff;
+								&::after {
+									color: #fff;
+								}
+							}
+						}
+
+						// Second level submenu
+						.sub-menu {
+							position: absolute;
+							top: 0;
+							left: 100%;
+							background: white;
+							border: 1px solid #e5e7eb;
+							border-radius: 0.5rem;
+							box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+							min-width: 200px;
+							opacity: 0;
+							visibility: hidden;
+							transform: translateX(-10px);
+							transition: all 0.2s ease;
+							z-index: 1001;
+							list-style: none;
+							margin: 0;
+							padding: 0.5rem 0;
+
+							// Remove arrow for second level
+							&::before,
+							&::after {
+								display: none;
+							}
+
+							li {
+								a {
+									padding: 0.75rem 1rem;
+									color: #04273F;
+									font-size: 0.875rem;
+									transition: background-color 0.2s ease;
+									width: 100%;
+									text-decoration: none;
+
+									&::after {
+										content: "\f054";
+										font-family: "Font Awesome 6 Free";
+										font-weight: 900;
+										font-size: 0.75rem;
+										color: #6b7280;
+										margin-left: 0.5rem;
+									}
+
+									&:hover {
+										background-color: #f3f4f6;
+										color: #04273F;
+									}
+								}
+
+								&:last-child a {
+									background-color: #f8fafc;
+									font-weight: 600;
+								}
+							}
+						}
+
+						&:hover .sub-menu {
+							opacity: 1;
+							visibility: visible;
+							transform: translateX(0);
+						}
+					}
+				}
+
+				&:hover .sub-menu {
+					opacity: 1;
+					visibility: visible;
+					transform: translateY(0);
+				}
+			}
+		}
+	}
+
+	// Mobile Menu Toggle
+	.mobile-menu-toggle {
+		display: none;
+		flex-direction: column;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		gap: 4px;
+		margin-left: auto; // Align to the right
+
+		span {
+			width: 24px;
+			height: 2px;
+			background-color: #04273F;
+			transition: all 0.3s ease;
+		}
+
+		&:hover span {
+			background-color: #04273F;
+		}
+	}
+
+	// Header Actions
+	.header-actions {
+		flex: 0 0 auto;
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+	}
+
+	// Mobile Navigation Overlay
+	.mobile-nav-overlay {
+		position: fixed;
+		top: 0;
+		right: 0; // Changed from left: 0
+		width: 85%;
+		height: 100vh;
+		background-color: white;
+		z-index: 9999;
+		opacity: 0;
+		visibility: hidden;
+		transform: translateX(100%); // Changed from translateX(-100%)
+		transition: all 0.3s ease;
+		overflow-y: auto;
+		box-shadow: -4px 0 8px 0 rgba(0, 0, 0, 0.15);
+
+		&.active {
+			opacity: 1;
+			visibility: visible;
+			transform: translateX(0);
+		}
+
+		// Account for WordPress admin toolbar when logged in
+		body.admin-bar & {
+			top: 32px; // WordPress admin toolbar height
+			height: calc(100vh - 32px);
+		}
+
+		// Account for WordPress admin toolbar on mobile when logged in
+		@media (max-width: 782px) {
+			body.admin-bar & {
+				top: 46px; // WordPress admin toolbar height on mobile
+				height: calc(100vh - 46px);
+			}
+		}
+
+		.mobile-nav-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 1rem;
+			.mobile-logo {
+				.tia-logo {
+					display: flex;
+					align-items: center;
+					gap: 0.5rem;
+
+					.logo-text {
+						font-family: "Poppins", sans-serif;
+						font-size: 1.25rem;
+						font-weight: 700;
+						color: #04273F;
+					}
+				}
+			}
+
+			.mobile-nav-close {
+				background: none;
+				border: none;
+				cursor: pointer;
+				padding: 0.5rem;
+				color: #04273F;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+
+				&:hover {
+					opacity: 0.7;
+				}
+			}
+		}
+
+		.mobile-navigation {
+			padding: 1rem 4rem 1rem 1rem;
+
+			#mobile-primary-menu {
+				list-style: none;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 0.5rem;
+
+				li {
+					width: 100%;
+
+					a {
+						display: flex;
+						align-items: center;
+						justify-content: space-between;
+						padding: 1rem;
+						color: #04273F;
+						text-decoration: none;
+						font-family: "Poppins", sans-serif;
+						font-size: 1rem;
+						font-weight: 500;
+						border-radius: 0.5rem;
+						transition: background-color 0.2s ease;
+						width: 100%;
+
+						&:hover {
+							background-color: #f3f4f6;
+						}
+					}
+
+					&.menu-item-has-children > a::after {
+						content: "\f078";
+						font-family: "Font Awesome 6 Free";
+						font-weight: 900;
+						font-size: 1rem;
+						transition: transform 0.2s ease;
+					}
+
+					&.menu-item-has-children.active > a::after {
+						transform: rotate(180deg);
+					}
+
+					// Mobile dropdown styling - Members button (first dropdown)
+					&.menu-item-has-children:first-child > a {
+						background: linear-gradient(135deg, #FF6B35, #FF8C42);
+						color: white;
+						font-weight: 600;
+					}
+
+					// Mobile dropdown styling - Indicators button (second dropdown)
+					&.menu-item-has-children:nth-child(2) > a {
+						background: white;
+						color: #04273F;
+						border: 2px solid #04273F;
+					}
+
+					.sub-menu {
+						display: none;
+						list-style: none;
+						margin: 0;
+						padding: 0.5rem 0 0 0;
+
+						&.active {
+							display: block;
+						}
+
+						li {
+							position: relative;
+
+							a {
+								padding: 0.75rem 1rem;
+								font-size: 0.875rem;
+								background: white;
+								color: #04273F;
+								border: none;
+								border-radius: 0.375rem;
+								margin: 0.25rem 0;
+
+								&::after {
+									content: "\f054";
+									font-family: "Font Awesome 6 Free";
+									font-weight: 900;
+									font-size: 0.75rem;
+									color: #6b7280;
+								}
+
+								&:hover {
+									background-color: #f3f4f6;
+								}
+							}
+
+							&:last-child a {
+								background-color: #f8fafc;
+								font-weight: 600;
+							}
+
+							// Second level submenu for mobile
+							.sub-menu {
+								display: none;
+								list-style: none;
+								margin: 0;
+								padding: 0.5rem 0 0 1rem;
+								border-left: 2px solid #e5e7eb;
+
+								&.active {
+									display: block;
+								}
+
+								li a {
+									padding: 0.5rem 1rem;
+									font-size: 0.8rem;
+									background: #f8fafc;
+									color: #04273F;
+									border: none;
+									border-radius: 0.25rem;
+									margin: 0.125rem 0;
+
+									&::after {
+										content: "\f054";
+										font-family: "Font Awesome 6 Free";
+										font-weight: 900;
+										font-size: 0.7rem;
+										color: #6b7280;
+									}
+
+									&:hover {
+										background-color: #e5e7eb;
+									}
+								}
+
+								li:last-child a {
+									background-color: #f1f5f9;
+									font-weight: 600;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// Responsive Design
+@media (max-width: 991.98px) {
+	#masthead {
+		.main-navigation.desktop-nav {
+			display: none;
+		}
+
+		.mobile-menu-toggle {
+			display: flex;
+		}
+
+		.header-actions {
+			display: none; // Hide member login button on mobile
+		}
+	}
+}
+
+@media (max-width: 767.98px) {
+	#masthead {
+		padding: 0.75rem 0;
+
+		.row {
+			padding: 0 0.75rem;
+		}
+
+		.site-branding {
+			.custom-logo .tia-logo .logo-text {
+				font-size: 1.25rem;
+			}
+		}
+
+		.header-actions {
+			.member-login-btn {
+				padding: 0.375rem 1rem;
+				font-size: 0.8rem;
+				min-height: 36px;
+			}
+		}
+	}
+	.account-level-logo {
+		display: none !important;
+	}
+} 
+
+.mobile-navigation .account-level-menu {
+	display: flex !important;
+}
+
+@media (min-width: 767.89px) {
+	#page.my-account #masthead {
+		display: none !important;
+	}
+}

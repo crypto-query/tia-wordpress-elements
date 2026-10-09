@@ -1,0 +1,241 @@
+body.woocommerce-dashboard, body.woocommerce-account {
+
+    .uagb-heading-text {
+        font-size: 1.17em;
+    }
+
+    .ld-item-list-item-preview {
+        padding: 10px 0 20px 0 !important;
+    }
+    
+    .learndash-wrapper .ld-item-list .ld-item-list-item {
+        background: transparent !important;
+        border-top: none !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-bottom: 1px solid #BED0E3 !important;
+        &:last-child {
+            border-bottom: none !important;
+        }
+    }
+    
+    .learndash-wrapper .ld-item-list .ld-item-list-item .ld-item-name {
+        column-gap: 20px;
+    }
+
+    .ld-item-title {
+        color: var(--wp--preset--color--midnight-blue);
+        font-family: Poppins;
+        font-size: 18px;
+        font-style: normal;
+        font-weight: 700;
+        line-height: normal;
+        span {
+            font-size: 15px;
+            font-weight: 400;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .learndash-wrapper .ld-item-list .ld-item-list-item .ld-item-list-item-preview {
+            flex-direction: row;
+        }
+    }
+
+    h3 a {
+        text-decoration: none;
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+}
+
+body.page-template-member-layout {
+    .ld-item-list {
+        margin: 0 0 40px 0 !important;
+    }
+}
+
+.ld-course-custom-grid {
+    display: grid;
+    // Above 1300px 5 columns, from 1300px to 1024px 4 columns, from 1024px to 768px 3 columns, from 768px to 480px 2 columns and below 480px 1 column
+    @media (min-width: 1300px) {
+        grid-template-columns: repeat(5, 1fr);
+    }
+    @media (min-width: 1024px) and (max-width: 1300px) {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    @media (min-width: 768px) and (max-width: 1024px) {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    @media (min-width: 480px) and (max-width: 768px) {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    @media (max-width: 479px) {
+        grid-template-columns: repeat(1, 1fr);
+    }
+    gap: 20px;
+    .ld-item-list-item {
+        background: #fff;
+        border-radius: 16px !important;
+        padding: 20px;
+        margin: 0 !important;
+        @media (max-width: 479px) {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+        .ld-item-list-item-preview {
+            padding: 0 !important;
+            @media (max-width: 479px) {
+                flex-grow: 1;
+            }
+            a {
+                flex-direction: column !important;
+                @media (max-width: 479px) {
+                    flex-direction: row !important;
+                    gap: 20px;
+                }
+            }
+            .ld-status {
+                text-align: left !important;
+                height: 70px;
+                @media (max-width: 479px) {
+                    height: auto !important;
+                    margin: 0 !important;
+                }
+            }
+            .ld-status-icon {
+                width: 60px !important;
+                height: 60px !important;
+                flex-basis: 60px !important;
+            }
+            .ld-status-complete {
+                background-color: transparent !important;
+                padding: 0 !important;
+                img {
+                    max-width: 100%;
+                }
+            }
+            .ld-status-in-progress {
+                border-width: 8px !important;
+                border-color: var(--wp--preset--color--orange) #e2e7ed #e2e7ed var(--wp--preset--color--orange);
+            }
+            .ld-secondary-in-progress-icon {
+                border-left-color: var(--wp--preset--color--orange) !important;
+                border-top-color: var(--wp--preset--color--orange) !important;
+            }
+            .ld-item-title {
+                font-family: "Poppins" !important;
+                font-size: 14px !important;
+                font-weight: 700 !important;
+                line-height: normal !important;
+                color: var(--wp--preset--color--tia-blue) !important;
+                height: 70px;
+                align-items: center;
+                display: flex;
+                justify-content: center;
+                @media (max-width: 479px) {
+                    height: auto !important;
+                }
+            }
+            .ld-status-percentage-text {
+                display: inline-block;
+                transform: rotate(45deg);
+                font-family: "Poppins";
+                font-size: 10px;
+                font-weight: 700;
+                color: var(--wp--preset--color--tia-blue);
+                width: 100%;
+                text-align: center;
+                margin: 15px 0 0 0;
+            }
+        }
+    }
+    circle-progress::part(base) {
+        width: 60px;
+        height: 60px;
+    }
+    circle-progress::part(value) {
+        stroke: var(--wp--preset--color--orange);
+        stroke-width: 12px;
+    }
+    circle-progress::part(circle) {
+        stroke-width: 12px;
+        stroke: #D9E3EE;
+    }
+    circle-progress::part(text) {
+        font: 18px "Poppins";
+        font-weight: 700;
+    } 
+    .ld-status-complete-desktop {
+        display: block;
+    }
+    .ld-status-complete-mobile {
+        display: none;
+    }
+    @media (max-width: 479px) {
+        .ld-status-complete-desktop {
+            display: none;
+        }
+        .ld-status-complete-mobile {
+            display: block;
+        }
+    }
+}
+
+.ld-user-status-link {
+    font-family: "Noto Sans";
+    font-size: 14px;
+    font-style: normal;
+    font-weight: 700;
+    line-height: normal;
+    letter-spacing: 0.28px;
+    color: var(--wp--preset--color--midnight-blue);
+    display: inline-flex;
+    height: 40px;
+    padding: 10px 24px;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    border-radius: 100px;
+    border: 2px solid var(--wp--preset--color--midnight-blue);
+    text-decoration: none;
+    &--completed {
+    }
+    &--progress {
+        color: #fff;
+        background-color: var(--wp--preset--color--midnight-blue);
+    }
+    &--notcompleted {
+    }
+    &:hover {
+        opacity: 0.7;
+    }
+}
+
+body.single-sfwd-courses {
+    #content {
+        max-width: 1360px;
+        margin: 0 auto;
+    }
+    .entry-header + picture {
+        display: none;
+    }
+    article.sfwd-courses {
+        padding: 40px;
+        background: #fff;
+        border-radius: 16px;
+        margin-bottom: 100px;
+    }
+    .ld-status.ld-status-complete {
+        background-color: transparent !important;
+        img {
+            width: 100px;
+        }
+    }
+    h1 {
+        margin-top: 0;
+    }
+}

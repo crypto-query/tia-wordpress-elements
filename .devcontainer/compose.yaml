@@ -15,7 +15,7 @@ services:
             - ${HOME}/.ssh:${HOME}/.ssh:ro
         command: sleep infinity
 
-    # WordPress core and the database live in named volumes; only this repo (the plugin) is bind-mounted.
+    # WordPress core and the database live in named volumes; this repo (the plugin) and the TIA theme are bind-mounted.
     wordpress:
         image: wordpress:php8.3
         depends_on:
@@ -24,6 +24,7 @@ services:
         volumes:
             - wordpress:/var/www/html
             - ..:/var/www/html/wp-content/plugins/tia-wordpress-elements
+            - ../wordpress/themes/tia:/var/www/html/wp-content/themes/tia
         ports:
             - 8000:80
         restart: always
