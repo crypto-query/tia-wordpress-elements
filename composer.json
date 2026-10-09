@@ -1,0 +1,20 @@
+{
+    "name": "tia/tia-wordpress-elements",
+    "description": "TIA WordPress Elements: Gutenberg blocks written in Svelte 5.",
+    "type": "wordpress-plugin",
+    "license": "proprietary",
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "phpcompatibility/phpcompatibility-wp": "^2.1",
+        "squizlabs/php_codesniffer": "^3.13",
+        "wp-coding-standards/wpcs": "^3.1"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "platform": {
+            "php": "8.3"
+        }
+    }
+}
