@@ -1,56 +1,36 @@
 {
-  "mcpServers": {
-    "stripe": {
-      "type": "http",
-      "url": "https://mcp.stripe.com"
-    },
-    "svelte": {
-      "type": "http",
-      "url": "https://mcp.svelte.dev/mcp"
-    },
-    "shadcn": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "shadcn@latest",
-        "mcp"
-      ]
-    },
-    "context7": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ]
-    },
-    "playwright": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@playwright/mcp@latest",
-        "--browser",
-        "chromium"
-      ]
-    },
-    "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp"
-    },
-    "coolify-prod": {
-      "command": "bun",
-      "args": [
-        "--env-file=.env.coolify-prod.local",
-        "exec",
-        "bunx @masonator/coolify-mcp@3.5.1"
-      ]
-    },
-    "coolify-test": {
-      "command": "bun",
-      "args": [
-        "--env-file=.env.coolify-test.local",
-        "exec",
-        "bunx @masonator/coolify-mcp@3.5.1"
-      ]
+    "mcpServers": {
+        "stripe": {
+            "type": "http",
+            "url": "https://mcp.stripe.com"
+        },
+        "svelte": {
+            "type": "http",
+            "url": "https://mcp.svelte.dev/mcp"
+        },
+        "shadcn": {
+            "command": "npx",
+            "args": ["-y", "shadcn@latest", "mcp"]
+        },
+        "context7": {
+            "command": "npx",
+            "args": ["-y", "@upstash/context7-mcp@latest"]
+        },
+        "playwright": {
+            "command": "npx",
+            "args": ["-y", "@playwright/mcp@latest", "--browser", "chromium"]
+        },
+        "supabase": {
+            "type": "http",
+            "url": "https://mcp.supabase.com/mcp"
+        },
+        "coolify-prod": {
+            "command": "bun",
+            "args": ["--env-file=.env.coolify-prod.local", "exec", "bunx @masonator/coolify-mcp@3.5.1"]
+        },
+        "coolify-test": {
+            "command": "bun",
+            "args": ["--env-file=.env.coolify-test.local", "exec", "bunx @masonator/coolify-mcp@3.5.1"]
+        }
     }
-  }
 }
