@@ -112,7 +112,7 @@ export default [
             "dist",
             "package",
             "vendor",
-            "wordpress/themes/tia",
+            "wordpress",
             "**/.env",
             "**/.env.*",
             "!**/.env.example",

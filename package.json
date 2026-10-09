@@ -13,7 +13,8 @@
         "lint:php:fix": "vendor/bin/phpcbf",
         "typecheck": "bun run check && bun run lint",
         "test": "vitest run --project=server --project=client",
-        "test:unit": "vitest run --project=server"
+        "test:unit": "vitest run --project=server",
+        "wp:plugins": "bash scripts/wp-plugins.sh"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",

@@ -20,5 +20,5 @@ package-lock.json
 vendor
 composer.lock
 dist
-# The live TIA theme, copied as it is from the site
-wordpress/themes/tia
+# Third-party WordPress code (the live theme and plugins), kept as it is
+wordpress

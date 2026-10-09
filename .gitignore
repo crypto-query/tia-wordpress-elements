@@ -17,6 +17,8 @@ dist
 *.tgz
 # The live TIA theme has no build toolchain here, so its built assets are tracked.
 !/wordpress/themes/tia/dist/
+# Third-party plugins for the local WordPress, copied by `bun run wp:plugins`
+/wordpress/plugins/
 
 # code coverage
 coverage
