@@ -1,0 +1,16 @@
+diff --git a/dist/node.js b/dist/node.js
+index f7dad3e28e1cef9420b076c4a8886c2f98166bae..885bcc821647c6bc66d13989ac00de0377a26232 100644
+--- a/dist/node.js
++++ b/dist/node.js
+@@ -376,7 +376,10 @@ function dynamicImportPlugin(options = {}) {
+ 	return {
+ 		name: "vitest:browser:esm-injector",
+ 		enforce: "post",
+-		transform(source, id) {
++		transform(source, id, transformOptions) {
++			if (transformOptions?.ssr) {
++				return;
++			}
+ 			// TODO: test is not called for static imports
+ 			if (!regexDynamicImport.test(source)) {
+ 				return;

@@ -1,0 +1,60 @@
+{
+    "name": "tia-wordpress-elements",
+    "version": "0.1.0",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "build": "vite build",
+        "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+        "check:watch": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings --watch",
+        "lint": "prettier --check . && eslint .",
+        "lint:fix": "prettier --write . && eslint . --fix",
+        "lint:php": "vendor/bin/phpcs",
+        "lint:php:fix": "vendor/bin/phpcbf",
+        "typecheck": "bun run check && bun run lint",
+        "test": "vitest run --project=server --project=client",
+        "test:unit": "vitest run --project=server"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@sveltejs/vite-plugin-svelte": "^6.2.4",
+        "@tailwindcss/forms": "^0.5.11",
+        "@tailwindcss/vite": "^4.3.3",
+        "@testing-library/jest-dom": "7.0.1",
+        "@testing-library/svelte": "5.4.2",
+        "@types/bun": "latest",
+        "@typescript-eslint/eslint-plugin": "^8.67.0",
+        "@typescript-eslint/parser": "^8.67.0",
+        "@vitest/browser": "3.2.6",
+        "eslint": "^10.8.1",
+        "eslint-plugin-better-tailwindcss": "^4.7.0",
+        "eslint-plugin-svelte": "^3.23.0",
+        "globals": "^17.11.0",
+        "playwright": "1.62.1",
+        "prettier": "^3.9.6",
+        "prettier-plugin-svelte": "^4.1.1",
+        "prettier-plugin-tailwindcss": "^0.8.1",
+        "svelte": "^5.56.9",
+        "svelte-check": "^4.7.6",
+        "svelte-eslint-parser": "^1.8.1",
+        "tailwindcss": "^4.3.3",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.6",
+        "vitest": "3.2.6"
+    },
+    "dependencies": {
+        "@internationalized/date": "^3.12.3",
+        "bits-ui": "2.19.2",
+        "clsx": "^2.1.1",
+        "lucide-svelte": "^1.0.1",
+        "mode-watcher": "^1.1.0",
+        "tailwind-merge": "^3.6.0",
+        "tailwindcss-animate": "^1.0.7",
+        "vimeo-video-element": "^1.7.3",
+        "youtube-video-element": "^1.9.0"
+    },
+    "patchedDependencies": {
+        "@vitest/mocker@3.2.6": "patches/@vitest%2Fmocker@3.2.6.patch",
+        "bits-ui@2.19.2": "patches/bits-ui@2.19.2.patch"
+    }
+}
