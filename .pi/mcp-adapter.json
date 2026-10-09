@@ -1,0 +1,58 @@
+{
+  "mcpServers": {
+    "svelte": {
+      "url": "https://mcp.svelte.dev/mcp",
+      "directTools": false
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "shadcn@latest",
+        "mcp"
+      ],
+      "directTools": false
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
+      "directTools": true
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium"
+      ],
+      "directTools": false
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp",
+      "directTools": false
+    },
+    "claude-design": {
+      "type": "http",
+      "url": "https://api.anthropic.com/v1/design/mcp",
+      "auth": "bearer",
+      "bearerToken": "!security find-generic-password -s 'Claude Code-credentials' -w | jq -r .designOauth.accessToken",
+      "directTools": false
+    },
+    "atlassian": {
+      "disabled": true
+    },
+    "coolify-prod": {
+      "approveTools": "destructive",
+      "excludeTools": ["hetzner"]
+    },
+    "coolify-test": {
+      "approveTools": "destructive",
+      "excludeTools": ["hetzner"]
+    }
+  }
+}
