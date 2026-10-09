@@ -47,13 +47,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Composer dependencies (composer install)
 vendor/
 
-# Documentation — local by default, except the docs agents actually read.
-# `docs/*` rather than `docs`: git never descends into an excluded directory, so
-# a negation inside one can never be reached.
-docs/*
-!docs/agents/
-!docs/adr/
-
 # Playwright CLI
 .playwright-cli
 tmp-playwright-artifacts

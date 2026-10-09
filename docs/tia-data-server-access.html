@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="color-scheme" content="light">
+        <title>TIA data server access for TIA WordPress Elements</title>
+        <style>
+            :root {
+                --fg: #1a1a1a;
+                --fg-muted: #555;
+                --bg: #ffffff;
+                --bg-alt: #f6f6f7;
+                --border: #d9d9de;
+                --accent: #1f5fa8;
+                --ok: #1e7b3c;
+                --ok-bg: #e8f5ec;
+                --bad: #b3261e;
+                --bad-bg: #fbeaea;
+                --warn: #8a5a00;
+                --warn-bg: #fff6e0;
+                --code-bg: #f2f2f4;
+            }
+            body {
+                margin: 0 auto;
+                max-width: 900px;
+                padding: 48px 24px 96px;
+                font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+                line-height: 1.6;
+                color: var(--fg);
+                background: var(--bg);
+            }
+            h1 { font-size: 1.7rem; line-height: 1.3; }
+            h2 { font-size: 1.25rem; margin-top: 2.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+            h3 { font-size: 1.05rem; margin-top: 1.8em; }
+            code, pre {
+                font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+                font-size: 0.875em;
+                background: var(--code-bg);
+                border-radius: 4px;
+            }
+            code { padding: 1px 5px; overflow-wrap: anywhere; }
+            pre { padding: 14px 16px; overflow-x: auto; line-height: 1.5; }
+            pre code { padding: 0; background: none; }
+            td pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+            table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.92em; }
+            th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+            th { background: var(--bg-alt); }
+            .meta { color: var(--fg-muted); font-size: 0.9em; margin-top: -0.5em; }
+            .callout {
+                border-left: 4px solid var(--accent);
+                background: var(--bg-alt);
+                padding: 12px 18px;
+                border-radius: 0 6px 6px 0;
+                margin: 1.2em 0;
+            }
+            .callout.key { border-color: var(--warn); background: var(--warn-bg); }
+            .callout.alert { border-color: var(--bad); background: var(--bad-bg); }
+            .ok { color: var(--ok); font-weight: 600; }
+            .bad { color: var(--bad); font-weight: 600; }
+            figure { margin: 1.2em 0; }
+            figure svg { width: 100%; height: auto; display: block; }
+            figcaption { color: var(--fg-muted); font-size: 0.85em; margin-top: 6px; }
+            ol li, ul li { margin-bottom: 0.4em; }
+            a { color: var(--accent); }
+            @media (max-width: 640px) {
+                body { padding: 24px 12px 48px; }
+                table { display: block; overflow-x: auto; }
+            }
+        </style>
+    </head>
+    <body>
+        <h1>TIA data server access for TIA WordPress Elements</h1>
+        <p class="meta">
+            Changed 2026-10-09 · Consumer: <code>wordpress-elements</code> plugin on <code>tiainvestor.com</code> (future) ·
+            Data server: Dokku app <code>tia-data-server-prod</code> on <code>contabo</code>
+        </p>
+
+        <!-- 1 -->
+        <h2>1. Summary</h2>
+        <table>
+            <thead><tr><th>Item</th><th>Value</th></tr></thead>
+            <tbody>
+            <tr><td>Production base URL for the plugin</td><td><code>https://tia-data-server.cryptoquery.eu</code></td></tr>
+            <tr><td>DNS / edge</td><td>Cloudflare, proxied (orange cloud)</td></tr>
+            <tr><td>Origin TLS</td><td>Let's Encrypt cert <code>CN=tia-data-server.cryptoquery.eu</code>, auto-renew on</td></tr>
+            <tr><td>Plain HTTP</td><td><code>301</code> redirect to HTTPS</td></tr>
+            <tr><td>Access control</td><td>IP allowlist in nginx. Listed sources pass. All other sources get nginx <code>403</code>.</td></tr>
+            <tr><td>Authentication</td><td>None. The plugin sends no API key or auth header.</td></tr>
+            <tr><td>Verified from Hostinger</td><td><span class="ok">200</span> on all 4 routes with <code>wp_remote_request</code></td></tr>
+            </tbody>
+        </table>
+        <p>
+            The data server is not open to the internet any more. The plugin can call it only from the
+            WordPress server, in PHP. Section 5 lists what this means for plugin code and local development.
+        </p>
+
+        <!-- 2 -->
+        <h2>2. Request path</h2>
+        <figure>
+            <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" role="img"
+                 aria-label="Request path from the WordPress plugin through Cloudflare to the contabo nginx allowlist and the data server">
+                <defs>
+                    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#444" />
+                    </marker>
+                    <marker id="arrOk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#1e7b3c" />
+                    </marker>
+                    <marker id="arrBad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#b3261e" />
+                    </marker>
+                </defs>
+                <style>
+                    .t { font: 13px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+                    .tb { font: 600 13px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+                    .ts { font: 11px ui-monospace, Menlo, monospace; fill: #333; }
+                    .tm { font: 11px system-ui, -apple-system, sans-serif; fill: #666; }
+                </style>
+
+                <!-- Column labels -->
+                <text x="15" y="16" class="tm">SOURCES</text>
+                <text x="315" y="16" class="tm">EDGE</text>
+                <text x="465" y="16" class="tm">ORIGIN: contabo 149.102.139.75</text>
+                <text x="725" y="16" class="tm">RESULT</text>
+
+                <!-- WordPress plugin (focus) -->
+                <rect x="10" y="28" width="270" height="112" rx="8" fill="#e8f0fb" stroke="#1f5fa8" stroke-width="2" />
+                <text x="22" y="50" class="tb">WordPress plugin (PHP)</text>
+                <text x="22" y="68" class="t">wp_remote_request · Hostinger</text>
+                <text x="22" y="84" class="tm">egress, first choice:</text>
+                <text x="22" y="99" class="ts">IPv6 2a02:4780:1:1055:0:1fbf:82a2:1</text>
+                <text x="22" y="117" class="tm">egress, fallback:</text>
+                <text x="22" y="132" class="ts">IPv4 145.14.147.195</text>
+
+                <!-- Mitja static IP -->
+                <rect x="10" y="155" width="270" height="52" rx="8" fill="#f6f6f7" stroke="#999" />
+                <text x="22" y="177" class="tb">Mitja's static IP</text>
+                <text x="22" y="195" class="ts">212.85.161.117</text>
+
+                <!-- Everyone else -->
+                <rect x="10" y="222" width="270" height="52" rx="8" fill="#fbeaea" stroke="#b3261e" />
+                <text x="22" y="244" class="tb">Everyone else</text>
+                <text x="22" y="262" class="t">browsers, scanners, other hosts</text>
+
+                <!-- Dokku apps -->
+                <rect x="10" y="345" width="270" height="70" rx="8" fill="#f6f6f7" stroke="#999" />
+                <text x="22" y="367" class="tb">Dokku apps on contabo</text>
+                <text x="22" y="385" class="ts">172.17.0.0/16 (tia-indicators-prod)</text>
+                <text x="22" y="403" class="ts">http://host.docker.internal:8080</text>
+
+                <!-- Cloudflare -->
+                <rect x="310" y="28" width="125" height="246" rx="8" fill="#fff6e0" stroke="#c78a00" />
+                <text x="322" y="52" class="tb">Cloudflare</text>
+                <text x="322" y="72" class="t">proxied DNS</text>
+                <text x="322" y="90" class="t">HTTPS</text>
+                <text x="322" y="116" class="t">adds header</text>
+                <text x="322" y="132" class="ts">CF-Connecting-IP</text>
+
+                <!-- Arrows sources -> Cloudflare -->
+                <line x1="280" y1="84" x2="308" y2="84" stroke="#1f5fa8" stroke-width="2" marker-end="url(#arr)" />
+                <line x1="280" y1="181" x2="308" y2="181" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="280" y1="248" x2="308" y2="248" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+
+                <!-- nginx -->
+                <rect x="460" y="28" width="235" height="387" rx="8" fill="#f6f6f7" stroke="#555" />
+                <text x="472" y="52" class="tb">nginx :80 / :443 / :8080</text>
+                <text x="472" y="74" class="t">real client IP =</text>
+                <text x="472" y="90" class="ts">CF-Connecting-IP</text>
+                <text x="472" y="108" class="t">trusted only when the TCP peer</text>
+                <text x="472" y="124" class="t">is a Cloudflare range</text>
+
+                <rect x="475" y="150" width="205" height="100" rx="6" fill="#ffffff" stroke="#1f5fa8" stroke-width="1.5" />
+                <text x="487" y="172" class="tb">allowlist.conf</text>
+                <text x="487" y="192" class="t">IP listed? → pass</text>
+                <text x="487" y="210" class="t">ACME challenge? → pass</text>
+                <text x="487" y="228" class="t">else → 403</text>
+
+                <!-- Cloudflare -> nginx -->
+                <line x1="435" y1="150" x2="458" y2="150" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+
+                <!-- Dokku apps direct -> nginx :8080 -->
+                <line x1="280" y1="380" x2="458" y2="380" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+                <text x="300" y="372" class="tm">direct, no Cloudflare</text>
+
+                <!-- inner arrow to allowlist -->
+                <line x1="577" y1="132" x2="577" y2="148" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="577" y1="370" x2="577" y2="252" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+                <text x="585" y="320" class="tm">peer IP is the</text>
+                <text x="585" y="334" class="tm">client IP</text>
+
+                <!-- App -->
+                <rect x="720" y="110" width="170" height="70" rx="8" fill="#e8f5ec" stroke="#1e7b3c" stroke-width="2" />
+                <text x="732" y="134" class="tb">tia-data-server-prod</text>
+                <text x="732" y="152" class="ts">app :8080</text>
+                <text x="732" y="170" class="tm">JSON response</text>
+
+                <!-- 403 -->
+                <rect x="720" y="220" width="170" height="56" rx="8" fill="#fbeaea" stroke="#b3261e" stroke-width="2" />
+                <text x="732" y="244" class="tb">403 Forbidden</text>
+                <text x="732" y="262" class="tm">from nginx, app not reached</text>
+
+                <line x1="680" y1="180" x2="718" y2="150" stroke="#1e7b3c" stroke-width="2" marker-end="url(#arrOk)" />
+                <line x1="680" y1="225" x2="718" y2="245" stroke="#b3261e" stroke-width="2" marker-end="url(#arrBad)" />
+
+                <!-- Legend -->
+                <rect x="10" y="440" width="14" height="12" fill="#e8f0fb" stroke="#1f5fa8" />
+                <text x="30" y="451" class="tm">this project</text>
+                <rect x="120" y="440" width="14" height="12" fill="#f6f6f7" stroke="#999" />
+                <text x="140" y="451" class="tm">other allowed sources (context)</text>
+                <rect x="330" y="440" width="14" height="12" fill="#fbeaea" stroke="#b3261e" />
+                <text x="350" y="451" class="tm">blocked</text>
+            </svg>
+            <figcaption>The plugin path is blue. A direct request to 149.102.139.75 with a fake Host or CF-Connecting-IP header also gets 403. nginx trusts that header only from the 22 Cloudflare ranges in allowlist.conf.</figcaption>
+        </figure>
+
+        <!-- 3 -->
+        <h2>3. Key finding: Hostinger sends over IPv6 first</h2>
+        <figure>
+            <svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg" role="img"
+                 aria-label="First WordPress call over IPv6 got 403; after the IPv6 address was added it got 200">
+                <defs>
+                    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#444" />
+                    </marker>
+                </defs>
+                <style>
+                    .t { font: 13px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+                    .tb { font: 600 13px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+                    .ts { font: 11px ui-monospace, Menlo, monospace; fill: #333; }
+                    .tm { font: 11px system-ui, -apple-system, sans-serif; fill: #666; }
+                </style>
+
+                <text x="10" y="20" class="tm">STEP</text>
+                <text x="150" y="20" class="tm">ALLOWLIST</text>
+                <text x="430" y="20" class="tm">WORDPRESS CALL SEEN AS</text>
+                <text x="770" y="20" class="tm">RESULT</text>
+
+                <!-- Row 1 -->
+                <text x="10" y="62" class="tb">1. First call</text>
+                <rect x="150" y="38" width="250" height="44" rx="6" fill="#f6f6f7" stroke="#999" />
+                <text x="162" y="58" class="ts">145.14.147.195</text>
+                <text x="162" y="74" class="tm">(site's inbound IPv4 only)</text>
+                <line x1="400" y1="60" x2="428" y2="60" stroke="#444" stroke-width="1.5" marker-end="url(#arr2)" />
+                <rect x="430" y="38" width="310" height="44" rx="6" fill="#fff6e0" stroke="#c78a00" />
+                <text x="442" y="65" class="ts">2a02:4780:1:1055:0:1fbf:82a2:1</text>
+                <line x1="740" y1="60" x2="768" y2="60" stroke="#444" stroke-width="1.5" marker-end="url(#arr2)" />
+                <rect x="770" y="38" width="120" height="44" rx="6" fill="#fbeaea" stroke="#b3261e" stroke-width="2" />
+                <text x="792" y="65" class="tb" style="fill:#b3261e">403</text>
+
+                <!-- Row 2 -->
+                <text x="10" y="132" class="tb">2. IPv6 added</text>
+                <rect x="150" y="108" width="250" height="44" rx="6" fill="#f6f6f7" stroke="#999" />
+                <text x="162" y="127" class="ts">145.14.147.195</text>
+                <text x="162" y="143" class="ts">2a02:4780:1:1055:0:1fbf:82a2:1</text>
+                <line x1="400" y1="130" x2="428" y2="130" stroke="#444" stroke-width="1.5" marker-end="url(#arr2)" />
+                <rect x="430" y="108" width="310" height="44" rx="6" fill="#fff6e0" stroke="#c78a00" />
+                <text x="442" y="135" class="ts">2a02:4780:1:1055:0:1fbf:82a2:1</text>
+                <line x1="740" y1="130" x2="768" y2="130" stroke="#444" stroke-width="1.5" marker-end="url(#arr2)" />
+                <rect x="770" y="108" width="120" height="44" rx="6" fill="#e8f5ec" stroke="#1e7b3c" stroke-width="2" />
+                <text x="792" y="135" class="tb" style="fill:#1e7b3c">200</text>
+
+                <text x="10" y="185" class="tm">Same request both times: wp_remote_get on /forecast_curves_assets, run with WP-CLI on the Hostinger server.</text>
+            </svg>
+        </figure>
+        <div class="callout key">
+            <strong>The site's inbound IP is not its outbound IP.</strong>
+            The DNS address of <code>tiainvestor.com</code> is <code>145.14.147.195</code>.
+            But PHP on Hostinger connects over IPv6 first, from <code>2a02:4780:1:1055:0:1fbf:82a2:1</code>.
+            IPv4 is only the fallback. Always allowlist both addresses.
+        </div>
+
+        <!-- 4 -->
+        <h2>4. Allowlist</h2>
+        <table>
+            <thead><tr><th>Source</th><th>Who</th><th>Reaches nginx through</th><th>Status</th></tr></thead>
+            <tbody>
+            <tr><td><code>2a02:4780:1:1055:0:1fbf:82a2:1</code></td><td>WordPress on Hostinger, IPv6 egress (used first)</td><td>Cloudflare</td><td class="ok">verified 200</td></tr>
+            <tr><td><code>145.14.147.195</code></td><td>WordPress on Hostinger, IPv4 (fallback)</td><td>Cloudflare</td><td>listed, no real call seen over IPv4</td></tr>
+            <tr><td><code>212.85.161.117</code></td><td>Mitja's static IP</td><td>Cloudflare, or direct to <code>149.102.139.75:8080</code></td><td class="ok">verified 200</td></tr>
+            <tr><td><code>172.17.0.0/16</code></td><td>Dokku apps on contabo, e.g. <code>tia-indicators-prod</code></td><td>direct, <code>http://host.docker.internal:8080</code></td><td class="ok">verified 200</td></tr>
+            <tr><td>any IP, path <code>/.well-known/acme-challenge/</code></td><td>Let's Encrypt renewal</td><td>port 80</td><td>open</td></tr>
+            <tr><td>all others</td><td>everyone else</td><td>any</td><td class="bad">403</td></tr>
+            </tbody>
+        </table>
+        <table>
+            <thead><tr><th>Item</th><th>Value</th></tr></thead>
+            <tbody>
+            <tr><td>File</td><td><code>/home/dokku/tia-data-server-prod/nginx.conf.d/allowlist.conf</code></td></tr>
+            <tr><td>Applies to ports</td><td><code>80</code>, <code>443</code>, <code>8080</code></td></tr>
+            <tr><td>Owner</td><td><code>dokku</code>. Changes need <code>sudo</code> on contabo (see section 10).</td></tr>
+            </tbody>
+        </table>
+
+        <!-- 5 -->
+        <h2>5. Hard constraints for plugin code</h2>
+        <figure>
+            <svg viewBox="0 0 900 190" xmlns="http://www.w3.org/2000/svg" role="img"
+                 aria-label="Server-side PHP calls pass; browser JavaScript calls from visitors get 403; browsers must go through a WordPress proxy">
+                <defs>
+                    <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#444" />
+                    </marker>
+                </defs>
+                <style>
+                    .t { font: 13px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+                    .tb { font: 600 13px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+                    .tm { font: 11px system-ui, -apple-system, sans-serif; fill: #666; }
+                </style>
+
+                <!-- Wrong -->
+                <rect x="10" y="20" width="180" height="48" rx="8" fill="#f6f6f7" stroke="#999" />
+                <text x="22" y="40" class="tb">Visitor browser</text>
+                <text x="22" y="57" class="tm">fetch() in a Block</text>
+                <line x1="190" y1="44" x2="628" y2="44" stroke="#b3261e" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr3)" />
+                <text x="300" y="36" class="t" style="fill:#b3261e">visitor IP is not on the list</text>
+                <rect x="630" y="20" width="260" height="48" rx="8" fill="#fbeaea" stroke="#b3261e" stroke-width="2" />
+                <text x="642" y="40" class="tb" style="fill:#b3261e">403 for every visitor</text>
+                <text x="642" y="57" class="tm">do not do this</text>
+
+                <!-- Right -->
+                <rect x="10" y="110" width="180" height="48" rx="8" fill="#f6f6f7" stroke="#999" />
+                <text x="22" y="130" class="tb">Visitor browser</text>
+                <text x="22" y="147" class="tm">calls WordPress only</text>
+                <line x1="190" y1="134" x2="268" y2="134" stroke="#444" stroke-width="1.5" marker-end="url(#arr3)" />
+                <rect x="270" y="110" width="250" height="48" rx="8" fill="#e8f0fb" stroke="#1f5fa8" stroke-width="2" />
+                <text x="282" y="130" class="tb">Plugin PHP (REST service / render)</text>
+                <text x="282" y="147" class="tm">wp_remote_request from Hostinger</text>
+                <line x1="520" y1="134" x2="628" y2="134" stroke="#1e7b3c" stroke-width="2" marker-end="url(#arr3)" />
+                <text x="530" y="126" class="tm">allowed IP</text>
+                <rect x="630" y="110" width="260" height="48" rx="8" fill="#e8f5ec" stroke="#1e7b3c" stroke-width="2" />
+                <text x="642" y="130" class="tb" style="fill:#1e7b3c">200 from tia-data-server-prod</text>
+                <text x="642" y="147" class="tm">do this</text>
+            </svg>
+        </figure>
+        <table>
+            <thead><tr><th>Situation</th><th>Result</th><th>What to do</th></tr></thead>
+            <tbody>
+            <tr>
+                <td>PHP on the Hostinger server calls the data server</td>
+                <td class="ok">200</td>
+                <td>Use this path for every call.</td>
+            </tr>
+            <tr>
+                <td>JavaScript in a visitor's browser calls the data server</td>
+                <td class="bad">403</td>
+                <td>Do not call the data server from the browser. Let the browser call a plugin Element (e.g. a REST service). That Element calls the data server in PHP.</td>
+            </tr>
+            <tr>
+                <td>Local development from Mitja's static IP <code>212.85.161.117</code></td>
+                <td class="ok">200</td>
+                <td>Works with the production URL.</td>
+            </tr>
+            <tr>
+                <td>Local development from any other machine or network</td>
+                <td class="bad">403</td>
+                <td>Use a dev data server, e.g. <code>http://localhost:8080</code> as in the reference app's <code>.env.dev</code>. Or ask to add the IP to the allowlist.</td>
+            </tr>
+            </tbody>
+        </table>
+        <div class="callout">
+            <strong>Update to the project research.</strong>
+            <code>.scratch/wordpress-elements/research/upstream-data-contracts.md</code> says the data server needs no auth
+            and answers any internet host. That probe ran against <code>test-data-server.cryptoquery.eu</code>.
+            The production server <code>tia-data-server.cryptoquery.eu</code> is now IP-allowlisted.
+            It still needs no auth header. This also answers open questions 2 and 3 in that note.
+            The production URL is <code>https://tia-data-server.cryptoquery.eu</code>.
+            The production server now limits by IP. Nobody checked rate limits.
+        </div>
+
+        <!-- 6 -->
+        <h2>6. API routes verified from Hostinger</h2>
+        <table>
+            <thead><tr><th>Route</th><th>Request body (tested)</th><th>Result from WordPress</th></tr></thead>
+            <tbody>
+            <tr><td><code>GET /forecast_curves_assets</code></td><td>none</td><td class="ok">200</td></tr>
+            <tr><td><code>POST /forecast_curves_data</code></td><td><code>{"id":"dji","base_year":2026,"curves":[{"id":0}]}</code></td><td class="ok">200</td></tr>
+            <tr><td><code>GET /decennial_assets</code></td><td>none</td><td class="ok">200</td></tr>
+            <tr><td><code>POST /decennial_data</code></td><td><code>{"id":"dji"}</code></td><td class="ok">200</td></tr>
+            </tbody>
+        </table>
+        <ul>
+            <li>Send <code>Content-Type: application/json</code> on every POST.</li>
+            <li>All four routes only read data. A test call does not write anything.</li>
+            <li><code>GET /</code> returns <code>404</code>. The app sends this itself. It is normal.</li>
+        </ul>
+        <div class="callout alert">
+            <strong>App bug: always send <code>curves</code>.</strong>
+            <code>POST /forecast_curves_data</code> without <code>curves</code> returns
+            <code>500 'NoneType' object is not iterable</code>. The validator marks <code>curves</code> as optional,
+            but the response code loops over it. Send at least <code>"curves":[{"id":0}]</code>.
+        </div>
+
+        <!-- 7 -->
+        <h2>7. PHP example</h2>
+        <p>This example sends the same body as the tested call. Put the base URL in the plugin settings, not in code.</p>
+        <pre><code>&lt;?php
+function tia_fetch_forecast_curves( $base_url ) {
+    $response = wp_remote_post( $base_url . '/forecast_curves_data', array(
+        'timeout' =&gt; 10,
+        'headers' =&gt; array(
+            'Content-Type' =&gt; 'application/json',
+            'Accept'       =&gt; 'application/json',
+        ),
+        // Always send "curves": the server returns 500 without it.
+        'body'    =&gt; wp_json_encode( array(
+            'id'        =&gt; 'dji',
+            'base_year' =&gt; 2026,
+            'curves'    =&gt; array( array( 'id' =&gt; 0 ) ),
+        ) ),
+    ) );
+
+    if ( is_wp_error( $response ) ) {
+        // Network error, DNS error or timeout.
+        error_log( 'TIA data server: ' . $response-&gt;get_error_message() );
+        return false;
+    }
+
+    $code = wp_remote_retrieve_response_code( $response );
+    if ( 403 === $code ) {
+        // The egress IP of this server is not on the allowlist. See section 9.
+        error_log( 'TIA data server: 403, egress IP not allowlisted' );
+        return false;
+    }
+    if ( 200 !== $code ) {
+        error_log( 'TIA data server: HTTP ' . $code );
+        return false;
+    }
+
+    // { ids: int[], columns: string[], index: int[] (epoch ms), data: (float|null)[][] }
+    return json_decode( wp_remote_retrieve_body( $response ), true );
+}
+
+$data = tia_fetch_forecast_curves( 'https://tia-data-server.cryptoquery.eu' );
+</code></pre>
+
+        <!-- 8 -->
+        <h2>8. Verify access from the WordPress server</h2>
+        <table>
+            <thead><tr><th>Check</th><th>Expected</th></tr></thead>
+            <tbody>
+            <tr><td><code>wp eval</code> call to <code>/forecast_curves_assets</code></td><td><code>200</code></td></tr>
+            <tr><td><code>curl -6</code> egress</td><td><code>2a02:4780:1:1055:0:1fbf:82a2:1</code></td></tr>
+            <tr><td><code>curl -4</code> egress</td><td><code>145.14.147.195</code> (expected, not verified)</td></tr>
+            </tbody>
+        </table>
+        <ol>
+            <li>Connect to the Hostinger server (user <code>u532644514</code>, port <code>65002</code>):
+                <pre><code>ssh tia-investor</code></pre></li>
+            <li>Go to the WordPress root:
+                <pre><code>cd ~/domains/tiainvestor.com/public_html</code></pre></li>
+            <li>Make one call with the WordPress HTTP client. Expect <code>200</code>:
+                <pre><code>wp eval '
+$r = wp_remote_get( "https://tia-data-server.cryptoquery.eu/forecast_curves_assets", array( "timeout" =&gt; 15 ) );
+echo is_wp_error( $r ) ? $r-&gt;get_error_message() : wp_remote_retrieve_response_code( $r ), PHP_EOL;
+'</code></pre></li>
+            <li>Check the IPv6 egress address. Compare it with the allowlist:
+                <pre><code>curl -6 -s https://ifconfig.me; echo</code></pre></li>
+            <li>Check the IPv4 egress address. Compare it with the allowlist:
+                <pre><code>curl -4 -s https://ifconfig.me; echo</code></pre></li>
+        </ol>
+
+        <!-- 9 -->
+        <h2>9. Troubleshooting</h2>
+        <table>
+            <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+            <tbody>
+            <tr>
+                <td><code>403</code> from the WordPress server</td>
+                <td>The egress IP is not on the allowlist. Hostinger can change the site's IPv6 address.</td>
+                <td>Find the blocked IP in the nginx log (needs Dokku SSH access):
+                    <pre><code>ssh dokku@contabo nginx:access-logs tia-data-server-prod | awk '$9==403{print $1}' | sort | uniq -c</code></pre>
+                    Add that IP to the allowlist (section 10).</td>
+            </tr>
+            <tr>
+                <td><code>403</code> in the browser</td>
+                <td>The call runs in visitor JavaScript, not in PHP.</td>
+                <td>Move the call to PHP (section 5).</td>
+            </tr>
+            <tr>
+                <td><code>403</code> on a dev machine</td>
+                <td>The dev IP is not on the allowlist.</td>
+                <td>Use a local dev data server, or add the IP.</td>
+            </tr>
+            <tr>
+                <td><code>525</code> or other SSL error from Cloudflare</td>
+                <td>Cloudflare cannot complete TLS to the origin.</td>
+                <td>Set Cloudflare SSL/TLS mode to <strong>Full (strict)</strong>. Check that the origin Let's Encrypt cert is valid.</td>
+            </tr>
+            <tr>
+                <td><code>404</code> on <code>/</code></td>
+                <td>The app has no root route.</td>
+                <td>None. This is normal. Call a real route.</td>
+            </tr>
+            <tr>
+                <td><code>500 'NoneType' object is not iterable</code></td>
+                <td><code>POST /forecast_curves_data</code> without <code>curves</code>.</td>
+                <td>Always send <code>curves</code> (section 6).</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <!-- 10 -->
+        <h2>10. Change the allowlist</h2>
+        <table>
+            <thead><tr><th>Needs</th><th>Value</th></tr></thead>
+            <tbody>
+            <tr><td>Access</td><td><code>ssh mitja@contabo</code> with <code>sudo</code></td></tr>
+            <tr><td>File</td><td><code>/home/dokku/tia-data-server-prod/nginx.conf.d/allowlist.conf</code></td></tr>
+            <tr><td>Downtime</td><td>None. A reload keeps open connections.</td></tr>
+            </tbody>
+        </table>
+        <ol>
+            <li>Connect to contabo:
+                <pre><code>ssh -t mitja@contabo</code></pre></li>
+            <li>Edit the file with sudo. Add or remove the address in the same form as the existing entries:
+                <pre><code>sudo nano /home/dokku/tia-data-server-prod/nginx.conf.d/allowlist.conf</code></pre></li>
+            <li>Test the nginx config. Do not continue if it fails:
+                <pre><code>sudo nginx -t</code></pre></li>
+            <li>Apply the change:
+                <pre><code>sudo systemctl reload nginx</code></pre></li>
+            <li>Run the check in section 8, step 3. Expect <code>200</code>.</li>
+        </ol>
+
+        <!-- 11 -->
+        <h2>11. Known risks (accepted)</h2>
+        <table>
+            <thead><tr><th>Risk</th><th>Effect</th><th>Mitigation</th></tr></thead>
+            <tbody>
+            <tr>
+                <td>Shared hosting IP</td>
+                <td>Other Hostinger sites that share <code>145.14.147.195</code> also pass the allowlist.</td>
+                <td>Add an API key later.</td>
+            </tr>
+            <tr>
+                <td>IPv6 can change</td>
+                <td>If Hostinger changes the site's IPv6 address, the plugin gets <code>403</code>.</td>
+                <td>Log <code>403</code> in the plugin. Follow section 9.</td>
+            </tr>
+            <tr>
+                <td>Cloudflare ranges are hard-coded</td>
+                <td>The file lists 22 Cloudflare ranges. If Cloudflare adds ranges, nginx does not trust <code>CF-Connecting-IP</code> from them. Calls through those ranges get <code>403</code>.</td>
+                <td>Update the ranges in the file by hand.</td>
+            </tr>
+            <tr>
+                <td>No API key</td>
+                <td>Any allowed IP can read all data. The plugin's Access Cut-off hides data only in the plugin's own output.</td>
+                <td>Consider an API key header later. The plugin then needs a settings field for it.</td>
+            </tr>
+            <tr>
+                <td>Docker bridge is open</td>
+                <td>Every container on contabo's default Docker network (<code>172.17.0.0/16</code>) can call the data server.</td>
+                <td>None needed. All of them run on the same server.</td>
+            </tr>
+            </tbody>
+        </table>
+    </body>
+</html>
