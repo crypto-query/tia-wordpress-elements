@@ -17,7 +17,7 @@ _Avoid_: Widget, component
 ### Access
 
 **Member**:
-A WordPress user who holds the TIA Pro role and a TIA Pro subscription that gives access now.
+A WordPress user who holds the TIA Pro role and either a live subscription (`active`, `on-hold`, `pending-cancel`) or no subscription at all (a manual grant). A user whose subscriptions have all ended is not a Member. The TIA Pro subscription, when there is one, sets the access level and the Access Cut-off.
 _Avoid_: Subscriber (a WordPress role name), customer, user
 
 **TIA Pro**:
