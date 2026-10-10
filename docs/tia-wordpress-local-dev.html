@@ -142,6 +142,10 @@
             svg .mono {
                 font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
             }
+            .creds code {
+                white-space: nowrap;
+                overflow-wrap: normal;
+            }
             @media (max-width: 640px) {
                 body {
                     padding: 24px 12px 48px;
@@ -178,14 +182,14 @@
                 </defs>
 
                 <!-- Live server -->
-                <rect x="20" y="20" width="250" height="90" rx="8" fill="#fff6e0" stroke="#8a5a00" />
-                <text x="145" y="46" text-anchor="middle" font-weight="600" font-size="14">Live server</text>
-                <text x="145" y="68" text-anchor="middle" font-size="12" class="mono">ssh tia-investor</text>
-                <text x="145" y="90" text-anchor="middle" font-size="12" fill="#555">read-only</text>
+                <rect x="20" y="20" width="250" height="80" rx="8" fill="#fff6e0" stroke="#8a5a00" />
+                <text x="145" y="44" text-anchor="middle" font-weight="600" font-size="14">Live server</text>
+                <text x="145" y="64" text-anchor="middle" font-size="12" class="mono">ssh tia-investor</text>
+                <text x="145" y="84" text-anchor="middle" font-size="12" fill="#555">read-only</text>
 
                 <!-- Host repo -->
-                <rect x="20" y="160" width="250" height="250" rx="8" fill="#f6f6f7" stroke="#d9d9de" />
-                <text x="36" y="186" font-weight="600" font-size="14">Host: this repo</text>
+                <rect x="20" y="140" width="250" height="270" rx="8" fill="#f6f6f7" stroke="#d9d9de" />
+                <text x="145" y="166" text-anchor="middle" font-weight="600" font-size="14">Host: this repo</text>
                 <rect x="40" y="202" width="210" height="44" rx="6" fill="#fff" stroke="#d9d9de" />
                 <text x="145" y="220" text-anchor="middle" font-size="12" class="mono">wordpress/plugins/</text>
                 <text x="145" y="237" text-anchor="middle" font-size="11" fill="#555">gitignored · bun run wp:plugins</text>
@@ -195,15 +199,13 @@
                 <rect x="40" y="314" width="210" height="44" rx="6" fill="#fff" stroke="#d9d9de" />
                 <text x="145" y="332" text-anchor="middle" font-size="12" class="mono">repo root</text>
                 <text x="145" y="349" text-anchor="middle" font-size="11" fill="#555">our plugin</text>
-                <text x="145" y="390" text-anchor="middle" font-size="11" fill="#555" class="mono">scripts/wp-seed.php</text>
 
                 <!-- WordPress container -->
-                <rect x="360" y="160" width="280" height="250" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
-                <text x="500" y="186" text-anchor="middle" font-weight="600" font-size="14">wordpress container</text>
-                <text x="500" y="204" text-anchor="middle" font-size="11" fill="#555">localhost:8000 · wp-content/</text>
-                <rect x="380" y="202" width="240" height="0" fill="none" />
-                <text x="378" y="230" font-size="12" class="mono">plugins/woocommerce</text>
-                <text x="378" y="248" font-size="12" class="mono">plugins/woocommerce-subscriptions</text>
+                <rect x="360" y="140" width="280" height="270" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
+                <text x="500" y="166" text-anchor="middle" font-weight="600" font-size="14">wordpress container</text>
+                <text x="500" y="184" text-anchor="middle" font-size="11" fill="#555">localhost:8000 · wp-content/</text>
+                <text x="378" y="220" font-size="12" class="mono">plugins/woocommerce</text>
+                <text x="378" y="238" font-size="12" class="mono">plugins/woocommerce-subscriptions</text>
                 <text x="378" y="284" font-size="12" class="mono">themes/tia</text>
                 <text x="378" y="340" font-size="12" class="mono">plugins/tia-wordpress-elements</text>
                 <text x="500" y="390" text-anchor="middle" font-size="11" fill="#555">
@@ -212,10 +214,10 @@
                 </text>
 
                 <!-- Database -->
-                <rect x="700" y="160" width="140" height="90" rx="8" fill="#e8f5ec" stroke="#1e7b3c" />
-                <text x="770" y="190" text-anchor="middle" font-weight="600" font-size="14">database</text>
-                <text x="770" y="212" text-anchor="middle" font-size="12">MySQL 8.4</text>
-                <text x="770" y="232" text-anchor="middle" font-size="11" fill="#555">
+                <rect x="700" y="140" width="140" height="90" rx="8" fill="#e8f5ec" stroke="#1e7b3c" />
+                <text x="770" y="170" text-anchor="middle" font-weight="600" font-size="14">database</text>
+                <text x="770" y="192" text-anchor="middle" font-size="12">MySQL 8.4</text>
+                <text x="770" y="212" text-anchor="middle" font-size="11" fill="#555">
                     volume
                     <tspan class="mono">database</tspan>
                 </text>
@@ -228,15 +230,15 @@
                 <text x="770" y="386" text-anchor="middle" font-size="11" fill="#555">same volumes</text>
 
                 <!-- Arrows -->
-                <line x1="230" y1="110" x2="230" y2="200" stroke="#8a5a00" stroke-width="1.5" marker-end="url(#arr)" />
-                <text x="240" y="150" font-size="11" fill="#8a5a00">rsync (pinned versions)</text>
-                <line x1="250" y1="224" x2="358" y2="236" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="145" y1="100" x2="145" y2="138" stroke="#8a5a00" stroke-width="1.5" marker-end="url(#arr)" />
+                <text x="137" y="124" text-anchor="end" font-size="11" fill="#8a5a00">rsync (pinned versions)</text>
+                <line x1="250" y1="224" x2="358" y2="224" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
                 <line x1="250" y1="280" x2="358" y2="280" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
                 <line x1="250" y1="336" x2="358" y2="336" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
                 <text x="300" y="305" text-anchor="middle" font-size="11" fill="#555">bind mounts</text>
-                <line x1="640" y1="205" x2="698" y2="205" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="640" y1="185" x2="698" y2="185" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
                 <line x1="700" y1="355" x2="642" y2="355" stroke="#555" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)" />
-                <line x1="770" y1="300" x2="770" y2="252" stroke="#555" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)" />
+                <line x1="770" y1="300" x2="770" y2="232" stroke="#555" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)" />
             </svg>
             <figcaption>Only the repo folders are bind-mounted. WordPress core and the database live in Docker volumes.</figcaption>
         </figure>
@@ -375,7 +377,7 @@
 
         <h3>4. Install WordPress at the live version</h3>
         <pre><code>wp core install --url=http://localhost:8000 --title="TIA Local" \
-    --admin_user=admin --admin_password=admin --admin_email=admin@example.test --skip-email
+    --admin_user=admin --admin_password=admin --admin_email=admin@example.com --skip-email
 wp core update --version=7.0.7
 wp core update-db</code></pre>
         <p>The live site runs WordPress 7.0.7. The Docker image can ship an older version, so update it.</p>
@@ -445,12 +447,96 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
             </figcaption>
         </figure>
 
+        <h3>Test logins</h3>
+        <div class="callout">
+            <strong>Two different things.</strong> The <em>TIA Pro role</em> is the WordPress role <code>tia_pro_-_annual</code> ("TIA Pro -
+            Annual"). A <em>TIA Pro subscription</em> is a WooCommerce subscription to the product TIA Pro, ID <code>19339</code>, the same
+            ID as on the live site. The role is the gate: without it there is no access. The subscription then sets the access level and the
+            cut-off. A role with no subscription at all counts as a manual grant.
+        </div>
         <p>
-            All test users have the password <code>password</code> and the email <code>&lt;login&gt;@example.test</code>. TIA Pro is product
-            <code>19339</code>, the same ID as on the live site.
+            Log in at <a href="http://localhost:8000/wp-login.php">http://localhost:8000/wp-login.php</a> with the login or the email.
+            <code>bun run wp:seed</code> creates these users. The credentials work only on the local site.
         </p>
 
-        <table>
+        <table class="creds">
+            <tr>
+                <th>Login</th>
+                <th>Password</th>
+                <th>Email</th>
+                <th>Use it to test</th>
+            </tr>
+            <tr>
+                <td><code>fx-no-role</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-no-role@example.test</code></td>
+                <td>No paid role: Purchase card</td>
+            </tr>
+            <tr>
+                <td><code>fx-other-paid</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-other-paid@example.test</code></td>
+                <td>Another paid role: Upgrade card</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-active</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-active@example.test</code></td>
+                <td>TIA Pro role + active TIA Pro subscription: full access</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-trial</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-trial@example.test</code></td>
+                <td>TIA Pro role + TIA Pro subscription in trial: limited access</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-pending-cancel</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-pending-cancel@example.test</code></td>
+                <td>TIA Pro role + cancelled TIA Pro subscription, still paid: full access until the end date</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-cancel-in-trial</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-cancel-in-trial@example.test</code></td>
+                <td>TIA Pro role + TIA Pro subscription cancelled during the trial: limited access</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-on-hold-overdue</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-on-hold-overdue@example.test</code></td>
+                <td>TIA Pro role + overdue TIA Pro subscription: full access, cut-off in the past</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-no-subs</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-no-subs@example.test</code></td>
+                <td>TIA Pro role, no subscription (manual grant): full access, no cut-off</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-dead</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-dead@example.test</code></td>
+                <td>TIA Pro role, only dead TIA Pro subscriptions: Purchase card</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-other-product</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-pro-other-product@example.test</code></td>
+                <td>TIA Pro role + subscription to another product only: full access, no cut-off</td>
+            </tr>
+            <tr>
+                <td><code>fx-sub-no-role</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-sub-no-role@example.test</code></td>
+                <td>Active TIA Pro subscription, no TIA Pro role: denied</td>
+            </tr>
+        </table>
+
+        <h3>Subscriptions and expected access</h3>
+
+        <table class="creds">
             <tr>
                 <th>Login</th>
                 <th>Role</th>
@@ -459,13 +545,13 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
             </tr>
             <tr>
                 <td><code>admin</code></td>
-                <td>administrator</td>
+                <td><code>administrator</code></td>
                 <td>—</td>
                 <td>Full, no cut-off (admin bypass)</td>
             </tr>
             <tr>
                 <td><code>fx-no-role</code></td>
-                <td>subscriber</td>
+                <td><code>subscriber</code></td>
                 <td>—</td>
                 <td>Purchase card</td>
             </tr>
@@ -483,49 +569,49 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
             </tr>
             <tr>
                 <td><code>fx-pro-trial</code></td>
-                <td>TIA Pro</td>
+                <td><code>tia_pro_-_annual</code></td>
                 <td>19339 <code>active</code>, trial ends in 5 days</td>
                 <td>Trial (limited)</td>
             </tr>
             <tr>
                 <td><code>fx-pro-pending-cancel</code></td>
-                <td>TIA Pro</td>
+                <td><code>tia_pro_-_annual</code></td>
                 <td>19339 <code>pending-cancel</code>, ends in 2 months</td>
                 <td>Full until the end date</td>
             </tr>
             <tr>
                 <td><code>fx-pro-cancel-in-trial</code></td>
-                <td>TIA Pro</td>
+                <td><code>tia_pro_-_annual</code></td>
                 <td>19339 <code>pending-cancel</code>, <code>trial_end_pre_cancellation</code> in 5 days</td>
                 <td>Trial (limited)</td>
             </tr>
             <tr>
                 <td><code>fx-pro-on-hold-overdue</code></td>
-                <td>TIA Pro</td>
+                <td><code>tia_pro_-_annual</code></td>
                 <td>19339 <code>on-hold</code>, payment 1 month overdue</td>
                 <td>Full, cut-off in the past</td>
             </tr>
             <tr>
                 <td><code>fx-pro-no-subs</code></td>
-                <td>TIA Pro</td>
+                <td><code>tia_pro_-_annual</code></td>
                 <td>— (manual grant)</td>
                 <td>Full, no cut-off</td>
             </tr>
             <tr>
                 <td><code>fx-pro-dead</code></td>
-                <td>TIA Pro</td>
+                <td><code>tia_pro_-_annual</code></td>
                 <td>19339 <code>cancelled</code> + 19339 <code>pending</code></td>
                 <td>Purchase card</td>
             </tr>
             <tr>
                 <td><code>fx-pro-other-product</code></td>
-                <td>TIA Pro</td>
+                <td><code>tia_pro_-_annual</code></td>
                 <td>Other product <code>active</code></td>
                 <td>Full, no cut-off</td>
             </tr>
             <tr>
                 <td><code>fx-sub-no-role</code></td>
-                <td>subscriber</td>
+                <td><code>subscriber</code></td>
                 <td>19339 <code>active</code></td>
                 <td>Denied</td>
             </tr>
@@ -533,8 +619,8 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
 
         <p>
             The seed changes as little of the database as it can. It makes no orders, sends no email and leaves no scheduled actions, so
-            local cron cannot change a subscription later. It changes no option except the role list, plus one option that records the roles
-            it made.
+            local cron cannot change a subscription later. The seed itself changes no option except the role list, plus one option that
+            records the roles it made. WooCommerce adds a few cache transients on the side.
         </p>
 
         <h2>Everyday tasks</h2>
@@ -556,7 +642,7 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
                 <td>Live moved to a new plugin version</td>
                 <td>
                     <code>bun run wp:plugins</code> stops with "live has X, pinned is Y". Change the pin in
-                    <code>scripts/wp-plugins.sh</code>, then run it again.
+                    <code>scripts/wp-plugins.sh</code>, then run it again. After a WooCommerce change, also run <code>wp wc update</code>.
                 </td>
             </tr>
             <tr>
@@ -566,7 +652,8 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
         </table>
 
         <div class="callout alert">
-            <strong>Full reset.</strong> This command deletes the WordPress and database volumes, so all local content is lost:
+            <strong>Full reset.</strong> This command stops all containers of the project, the devcontainer too, and deletes the WordPress
+            and database volumes. All local content is lost:
             <pre><code>docker compose -p tia-wordpress-elements_devcontainer -f .devcontainer/compose.yaml down -v</code></pre>
             Then start again at step 2.
         </div>
@@ -587,7 +674,13 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
             <tr>
                 <td>Plugin folders in the container are empty</td>
                 <td>The containers started before step 1</td>
-                <td>Run step 1, then <code>docker compose … up -d --force-recreate wordpress</code></td>
+                <td>
+                    Run step 1, then
+                    <code
+                        >docker compose -p tia-wordpress-elements_devcontainer -f .devcontainer/compose.yaml up -d --force-recreate
+                        wordpress</code
+                    >
+                </td>
             </tr>
             <tr>
                 <td><code>wp: executable file not found</code></td>
@@ -600,8 +693,11 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
                 <td>Step 2, with the project name shown there</td>
             </tr>
             <tr>
-                <td>The seed stops with "exists and is not a seed user" or "is not a seed product"</td>
-                <td>A user or post without the seed marker has a fixture login or ID 19339</td>
+                <td>
+                    The seed stops with "exists and is not a seed user", "is not a seed product" or "belongs to a product the seed did not
+                    make"
+                </td>
+                <td>A user, post or SKU without the seed marker uses a fixture login, ID 19339 or the test SKU</td>
                 <td>Remove or rename that user or post. The seed never deletes data it did not make.</td>
             </tr>
             <tr>
