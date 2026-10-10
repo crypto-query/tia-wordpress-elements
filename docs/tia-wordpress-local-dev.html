@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="light" />
+        <title>Local WordPress: set up and seed</title>
+        <style>
+            :root {
+                --fg: #1a1a1a;
+                --fg-muted: #555;
+                --bg: #ffffff;
+                --bg-alt: #f6f6f7;
+                --border: #d9d9de;
+                --accent: #1f5fa8;
+                --ok: #1e7b3c;
+                --ok-bg: #e8f5ec;
+                --bad: #b3261e;
+                --bad-bg: #fbeaea;
+                --warn: #8a5a00;
+                --warn-bg: #fff6e0;
+                --code-bg: #f2f2f4;
+            }
+            body {
+                margin: 0 auto;
+                max-width: 900px;
+                padding: 48px 24px 96px;
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    "Segoe UI",
+                    sans-serif;
+                line-height: 1.6;
+                color: var(--fg);
+                background: var(--bg);
+            }
+            h1 {
+                font-size: 1.7rem;
+                line-height: 1.3;
+            }
+            h2 {
+                font-size: 1.25rem;
+                margin-top: 2.5em;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 6px;
+            }
+            h3 {
+                font-size: 1.05rem;
+                margin-top: 1.8em;
+            }
+            code,
+            pre {
+                font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+                font-size: 0.875em;
+                background: var(--code-bg);
+                border-radius: 4px;
+            }
+            code {
+                padding: 1px 5px;
+                overflow-wrap: anywhere;
+            }
+            pre {
+                padding: 14px 16px;
+                overflow-x: auto;
+                line-height: 1.5;
+            }
+            pre code {
+                padding: 0;
+                background: none;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                margin: 1em 0;
+                font-size: 0.92em;
+            }
+            th,
+            td {
+                border: 1px solid var(--border);
+                padding: 8px 12px;
+                text-align: left;
+                vertical-align: top;
+            }
+            th {
+                background: var(--bg-alt);
+            }
+            .meta {
+                color: var(--fg-muted);
+                font-size: 0.9em;
+                margin-top: -0.5em;
+            }
+            .callout {
+                border-left: 4px solid var(--accent);
+                background: var(--bg-alt);
+                padding: 12px 18px;
+                border-radius: 0 6px 6px 0;
+                margin: 1.2em 0;
+            }
+            .callout.key {
+                border-color: var(--warn);
+                background: var(--warn-bg);
+            }
+            .callout.alert {
+                border-color: var(--bad);
+                background: var(--bad-bg);
+            }
+            .ok {
+                color: var(--ok);
+                font-weight: 600;
+            }
+            .bad {
+                color: var(--bad);
+                font-weight: 600;
+            }
+            figure {
+                margin: 1.2em 0;
+            }
+            figure svg {
+                width: 100%;
+                height: auto;
+                display: block;
+            }
+            figcaption {
+                color: var(--fg-muted);
+                font-size: 0.85em;
+                margin-top: 6px;
+            }
+            ol li,
+            ul li {
+                margin-bottom: 0.4em;
+            }
+            a {
+                color: var(--accent);
+            }
+            svg text {
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    "Segoe UI",
+                    sans-serif;
+            }
+            svg .mono {
+                font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            }
+            @media (max-width: 640px) {
+                body {
+                    padding: 24px 12px 48px;
+                }
+                table {
+                    display: block;
+                    overflow-x: auto;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Local WordPress: set up and seed</h1>
+        <p class="meta">TIA WordPress Elements · local development only</p>
+
+        <p>
+            The local WordPress runs the live <code>tia</code> theme and the live WooCommerce plugins. A seed script adds test users with
+            TIA Pro subscriptions, one user for each access case. Use this guide to set it up from nothing, or to reset it.
+        </p>
+
+        <h2>What runs where</h2>
+
+        <figure>
+            <svg viewBox="0 0 860 430" role="img" aria-labelledby="arch-title arch-desc">
+                <title id="arch-title">Local WordPress architecture</title>
+                <desc id="arch-desc">
+                    The repo folders on the host are bind-mounted into the WordPress container. The plugins come from the live server over
+                    SSH. A one-off wordpress:cli container shares the WordPress volumes and runs wp commands.
+                </desc>
+                <defs>
+                    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#555" />
+                    </marker>
+                </defs>
+
+                <!-- Live server -->
+                <rect x="20" y="20" width="250" height="90" rx="8" fill="#fff6e0" stroke="#8a5a00" />
+                <text x="145" y="46" text-anchor="middle" font-weight="600" font-size="14">Live server</text>
+                <text x="145" y="68" text-anchor="middle" font-size="12" class="mono">ssh tia-investor</text>
+                <text x="145" y="90" text-anchor="middle" font-size="12" fill="#555">read-only</text>
+
+                <!-- Host repo -->
+                <rect x="20" y="160" width="250" height="250" rx="8" fill="#f6f6f7" stroke="#d9d9de" />
+                <text x="36" y="186" font-weight="600" font-size="14">Host: this repo</text>
+                <rect x="40" y="202" width="210" height="44" rx="6" fill="#fff" stroke="#d9d9de" />
+                <text x="145" y="220" text-anchor="middle" font-size="12" class="mono">wordpress/plugins/</text>
+                <text x="145" y="237" text-anchor="middle" font-size="11" fill="#555">gitignored · bun run wp:plugins</text>
+                <rect x="40" y="258" width="210" height="44" rx="6" fill="#fff" stroke="#d9d9de" />
+                <text x="145" y="276" text-anchor="middle" font-size="12" class="mono">wordpress/themes/tia/</text>
+                <text x="145" y="293" text-anchor="middle" font-size="11" fill="#555">tracked in git</text>
+                <rect x="40" y="314" width="210" height="44" rx="6" fill="#fff" stroke="#d9d9de" />
+                <text x="145" y="332" text-anchor="middle" font-size="12" class="mono">repo root</text>
+                <text x="145" y="349" text-anchor="middle" font-size="11" fill="#555">our plugin</text>
+                <text x="145" y="390" text-anchor="middle" font-size="11" fill="#555" class="mono">scripts/wp-seed.php</text>
+
+                <!-- WordPress container -->
+                <rect x="360" y="160" width="280" height="250" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
+                <text x="500" y="186" text-anchor="middle" font-weight="600" font-size="14">wordpress container</text>
+                <text x="500" y="204" text-anchor="middle" font-size="11" fill="#555">localhost:8000 · wp-content/</text>
+                <rect x="380" y="202" width="240" height="0" fill="none" />
+                <text x="378" y="230" font-size="12" class="mono">plugins/woocommerce</text>
+                <text x="378" y="248" font-size="12" class="mono">plugins/woocommerce-subscriptions</text>
+                <text x="378" y="284" font-size="12" class="mono">themes/tia</text>
+                <text x="378" y="340" font-size="12" class="mono">plugins/tia-wordpress-elements</text>
+                <text x="500" y="390" text-anchor="middle" font-size="11" fill="#555">
+                    core in volume
+                    <tspan class="mono">wordpress</tspan>
+                </text>
+
+                <!-- Database -->
+                <rect x="700" y="160" width="140" height="90" rx="8" fill="#e8f5ec" stroke="#1e7b3c" />
+                <text x="770" y="190" text-anchor="middle" font-weight="600" font-size="14">database</text>
+                <text x="770" y="212" text-anchor="middle" font-size="12">MySQL 8.4</text>
+                <text x="770" y="232" text-anchor="middle" font-size="11" fill="#555">
+                    volume
+                    <tspan class="mono">database</tspan>
+                </text>
+
+                <!-- wp-cli -->
+                <rect x="700" y="300" width="140" height="110" rx="8" fill="#fff" stroke="#555" stroke-dasharray="5 4" />
+                <text x="770" y="328" text-anchor="middle" font-weight="600" font-size="14">wp-cli</text>
+                <text x="770" y="350" text-anchor="middle" font-size="12" class="mono">wordpress:cli</text>
+                <text x="770" y="370" text-anchor="middle" font-size="11" fill="#555">one-off container,</text>
+                <text x="770" y="386" text-anchor="middle" font-size="11" fill="#555">same volumes</text>
+
+                <!-- Arrows -->
+                <line x1="230" y1="110" x2="230" y2="200" stroke="#8a5a00" stroke-width="1.5" marker-end="url(#arr)" />
+                <text x="240" y="150" font-size="11" fill="#8a5a00">rsync (pinned versions)</text>
+                <line x1="250" y1="224" x2="358" y2="236" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="250" y1="280" x2="358" y2="280" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="250" y1="336" x2="358" y2="336" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
+                <text x="300" y="305" text-anchor="middle" font-size="11" fill="#555">bind mounts</text>
+                <line x1="640" y1="205" x2="698" y2="205" stroke="#555" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="700" y1="355" x2="642" y2="355" stroke="#555" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)" />
+                <line x1="770" y1="300" x2="770" y2="252" stroke="#555" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)" />
+            </svg>
+            <figcaption>Only the repo folders are bind-mounted. WordPress core and the database live in Docker volumes.</figcaption>
+        </figure>
+
+        <table>
+            <tr>
+                <th>Part</th>
+                <th>Source</th>
+                <th>In git?</th>
+            </tr>
+            <tr>
+                <td><code>tia</code> theme</td>
+                <td>Copied once from the live site</td>
+                <td class="ok">Yes</td>
+            </tr>
+            <tr>
+                <td>WooCommerce 11.2.0, WooCommerce Subscriptions 9.3.0</td>
+                <td><code>bun run wp:plugins</code> copies them from the live site</td>
+                <td>No: about 80 MB of third-party code. Only the pinned versions are in git.</td>
+            </tr>
+            <tr>
+                <td>WordPress 7.0.7, database</td>
+                <td>Docker volumes</td>
+                <td>No</td>
+            </tr>
+            <tr>
+                <td>Test users, products, subscriptions</td>
+                <td><code>bun run wp:seed</code></td>
+                <td>No: the script is in git, the data is not</td>
+            </tr>
+        </table>
+
+        <h2>Before you start</h2>
+
+        <table>
+            <tr>
+                <th>You need</th>
+                <th>Check</th>
+            </tr>
+            <tr>
+                <td>Docker Desktop</td>
+                <td><code>docker ps</code> works</td>
+            </tr>
+            <tr>
+                <td>bun</td>
+                <td><code>bun --version</code></td>
+            </tr>
+            <tr>
+                <td>SSH access to the live server, host alias <code>tia-investor</code> in <code>~/.ssh/config</code></td>
+                <td><code>ssh tia-investor true</code> returns with no error</td>
+            </tr>
+        </table>
+
+        <div class="callout key">
+            <strong>Run every command on the host</strong>, in the repo root. The devcontainer workspace has no Docker socket, so
+            <code>bun run wp:seed</code> and the <code>wp</code> helper do not work there.
+        </div>
+
+        <h2>Set up from nothing</h2>
+
+        <figure>
+            <svg viewBox="0 0 860 120" role="img" aria-labelledby="steps-title">
+                <title id="steps-title">Set-up steps 1 to 6 in order</title>
+                <g font-size="12" text-anchor="middle">
+                    <rect x="5" y="20" width="130" height="80" rx="8" fill="#fff6e0" stroke="#8a5a00" />
+                    <text x="70" y="48" font-weight="600" font-size="13">1 · Plugins</text>
+                    <text x="70" y="70" class="mono" font-size="11">bun run</text>
+                    <text x="70" y="86" class="mono" font-size="11">wp:plugins</text>
+
+                    <rect x="150" y="20" width="130" height="80" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
+                    <text x="215" y="48" font-weight="600" font-size="13">2 · Start</text>
+                    <text x="215" y="70" font-size="11">devcontainer or</text>
+                    <text x="215" y="86" class="mono" font-size="11">compose up</text>
+
+                    <rect x="295" y="20" width="130" height="80" rx="8" fill="#f6f6f7" stroke="#555" />
+                    <text x="360" y="48" font-weight="600" font-size="13">3 · wp helper</text>
+                    <text x="360" y="70" font-size="11">shell function</text>
+                    <text x="360" y="86" class="mono" font-size="11">wordpress:cli</text>
+
+                    <rect x="440" y="20" width="130" height="80" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
+                    <text x="505" y="48" font-weight="600" font-size="13">4 · Install</text>
+                    <text x="505" y="70" font-size="11">core 7.0.7</text>
+                    <text x="505" y="86" class="mono" font-size="11">admin / admin</text>
+
+                    <rect x="585" y="20" width="130" height="80" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
+                    <text x="650" y="48" font-weight="600" font-size="13">5 · Activate</text>
+                    <text x="650" y="70" font-size="11">theme tia,</text>
+                    <text x="650" y="86" font-size="11">2 plugins</text>
+
+                    <rect x="730" y="20" width="125" height="80" rx="8" fill="#e8f5ec" stroke="#1e7b3c" />
+                    <text x="792" y="48" font-weight="600" font-size="13">6 · Seed</text>
+                    <text x="792" y="70" class="mono" font-size="11">bun run</text>
+                    <text x="792" y="86" class="mono" font-size="11">wp:seed</text>
+                </g>
+                <g stroke="#555" stroke-width="1.5">
+                    <line x1="135" y1="60" x2="148" y2="60" />
+                    <line x1="280" y1="60" x2="293" y2="60" />
+                    <line x1="425" y1="60" x2="438" y2="60" />
+                    <line x1="570" y1="60" x2="583" y2="60" />
+                    <line x1="715" y1="60" x2="728" y2="60" />
+                </g>
+            </svg>
+        </figure>
+
+        <h3>1. Copy the plugins from the live site</h3>
+        <pre><code>bun run wp:plugins</code></pre>
+        <p>
+            Expected output: <code>woocommerce 11.2.0</code> and <code>woocommerce-subscriptions 9.3.0</code>. Do this before the first
+            start. If you start the containers first, Docker mounts empty folders, and the theme then crashes.
+        </p>
+
+        <h3>2. Start the containers</h3>
+        <p>
+            Open the repo in VS Code and choose <strong>Reopen in Container</strong>. Or start only WordPress and its database from the
+            host:
+        </p>
+        <pre><code>docker compose -p tia-wordpress-elements_devcontainer -f .devcontainer/compose.yaml up -d wordpress</code></pre>
+        <p>
+            Keep the project name <code>tia-wordpress-elements_devcontainer</code>. The scripts find the container by its name,
+            <code>tia-wordpress-elements_devcontainer-wordpress-1</code>. The devcontainer gives the same name when the repo folder is
+            called <code>tia-wordpress-elements</code>.
+        </p>
+
+        <h3>3. Define the <code>wp</code> helper</h3>
+        <p>
+            The WordPress image has no wp-cli. This shell function runs the official <code>wordpress:cli</code> image with the same volumes
+            and network. Paste it into your shell, or into <code>~/.zshrc</code>:
+        </p>
+        <pre><code>wp() {
+    local c=tia-wordpress-elements_devcontainer-wordpress-1
+    docker run --rm --user 33:33 --volumes-from "$c" --network "container:$c" \
+        -e WORDPRESS_DB_HOST=database:3306 -e WORDPRESS_DB_USER=wordpress \
+        -e WORDPRESS_DB_PASSWORD=wordpress -e WORDPRESS_DB_NAME=wordpress \
+        wordpress:cli wp "$@"
+}</code></pre>
+
+        <h3>4. Install WordPress at the live version</h3>
+        <pre><code>wp core install --url=http://localhost:8000 --title="TIA Local" \
+    --admin_user=admin --admin_password=admin --admin_email=admin@example.test --skip-email
+wp core update --version=7.0.7
+wp core update-db</code></pre>
+        <p>The live site runs WordPress 7.0.7. The Docker image can ship an older version, so update it.</p>
+
+        <h3>5. Activate the theme and the plugins</h3>
+        <pre><code>wp theme activate tia
+wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
+
+        <h3>6. Seed the test data</h3>
+        <pre><code>bun run wp:seed</code></pre>
+        <p>
+            The last lines must read <code>ok</code> for each user, then <code>Success: Seeded 11 users.</code> Open
+            <a href="http://localhost:8000/">http://localhost:8000/</a> and log in as <code>admin</code> / <code>admin</code>, or as a test
+            user below.
+        </p>
+
+        <h2>What the seed makes</h2>
+
+        <figure>
+            <svg viewBox="0 0 860 150" role="img" aria-labelledby="seed-title seed-desc">
+                <title id="seed-title">One seed run</title>
+                <desc id="seed-desc">
+                    A run removes the previous seed data, adds the roles and products, adds the users and their subscriptions, then checks
+                    every user and fails on a mismatch.
+                </desc>
+                <defs>
+                    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#555" />
+                    </marker>
+                </defs>
+                <g font-size="12" text-anchor="middle">
+                    <rect x="5" y="30" width="150" height="90" rx="8" fill="#fbeaea" stroke="#b3261e" />
+                    <text x="80" y="58" font-weight="600" font-size="13">1 · Clean</text>
+                    <text x="80" y="80" font-size="11">removes only data</text>
+                    <text x="80" y="96" font-size="11">with the seed marker</text>
+
+                    <rect x="180" y="30" width="150" height="90" rx="8" fill="#f6f6f7" stroke="#555" />
+                    <text x="255" y="58" font-weight="600" font-size="13">2 · Roles</text>
+                    <text x="255" y="80" class="mono" font-size="10">tia_pro_-_annual</text>
+                    <text x="255" y="96" class="mono" font-size="10">tia_standard_-_annually</text>
+
+                    <rect x="355" y="30" width="150" height="90" rx="8" fill="#f6f6f7" stroke="#555" />
+                    <text x="430" y="58" font-weight="600" font-size="13">3 · Products</text>
+                    <text x="430" y="80" font-size="11">19339 TIA Pro</text>
+                    <text x="430" y="96" font-size="11">+ 1 other product</text>
+
+                    <rect x="530" y="30" width="150" height="90" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
+                    <text x="605" y="58" font-weight="600" font-size="13">4 · Users</text>
+                    <text x="605" y="80" font-size="11">11 users,</text>
+                    <text x="605" y="96" font-size="11">9 subscriptions</text>
+
+                    <rect x="705" y="30" width="150" height="90" rx="8" fill="#e8f5ec" stroke="#1e7b3c" />
+                    <text x="780" y="58" font-weight="600" font-size="13">5 · Self-check</text>
+                    <text x="780" y="80" font-size="11">reads each user back,</text>
+                    <text x="780" y="96" font-size="11">exits 1 on a mismatch</text>
+                </g>
+                <g stroke="#555" stroke-width="1.5">
+                    <line x1="155" y1="75" x2="178" y2="75" marker-end="url(#arr2)" />
+                    <line x1="330" y1="75" x2="353" y2="75" marker-end="url(#arr2)" />
+                    <line x1="505" y1="75" x2="528" y2="75" marker-end="url(#arr2)" />
+                    <line x1="680" y1="75" x2="703" y2="75" marker-end="url(#arr2)" />
+                </g>
+            </svg>
+            <figcaption>
+                Every run starts with a clean, so you can run it again at any time. Dates are relative to now: a new run refreshes the trial
+                and renewal dates.
+            </figcaption>
+        </figure>
+
+        <p>
+            All test users have the password <code>password</code> and the email <code>&lt;login&gt;@example.test</code>. TIA Pro is product
+            <code>19339</code>, the same ID as on the live site.
+        </p>
+
+        <table>
+            <tr>
+                <th>Login</th>
+                <th>Role</th>
+                <th>Subscriptions</th>
+                <th>Expected access</th>
+            </tr>
+            <tr>
+                <td><code>admin</code></td>
+                <td>administrator</td>
+                <td>—</td>
+                <td>Full, no cut-off (admin bypass)</td>
+            </tr>
+            <tr>
+                <td><code>fx-no-role</code></td>
+                <td>subscriber</td>
+                <td>—</td>
+                <td>Purchase card</td>
+            </tr>
+            <tr>
+                <td><code>fx-other-paid</code></td>
+                <td><code>tia_standard_-_annually</code></td>
+                <td>—</td>
+                <td>Upgrade card</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-active</code></td>
+                <td><code>tia_pro_-_annual</code></td>
+                <td>19339 <code>active</code>, renews in 9 months</td>
+                <td>Full</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-trial</code></td>
+                <td>TIA Pro</td>
+                <td>19339 <code>active</code>, trial ends in 5 days</td>
+                <td>Trial (limited)</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-pending-cancel</code></td>
+                <td>TIA Pro</td>
+                <td>19339 <code>pending-cancel</code>, ends in 2 months</td>
+                <td>Full until the end date</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-cancel-in-trial</code></td>
+                <td>TIA Pro</td>
+                <td>19339 <code>pending-cancel</code>, <code>trial_end_pre_cancellation</code> in 5 days</td>
+                <td>Trial (limited)</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-on-hold-overdue</code></td>
+                <td>TIA Pro</td>
+                <td>19339 <code>on-hold</code>, payment 1 month overdue</td>
+                <td>Full, cut-off in the past</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-no-subs</code></td>
+                <td>TIA Pro</td>
+                <td>— (manual grant)</td>
+                <td>Full, no cut-off</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-dead</code></td>
+                <td>TIA Pro</td>
+                <td>19339 <code>cancelled</code> + 19339 <code>pending</code></td>
+                <td>Purchase card</td>
+            </tr>
+            <tr>
+                <td><code>fx-pro-other-product</code></td>
+                <td>TIA Pro</td>
+                <td>Other product <code>active</code></td>
+                <td>Full, no cut-off</td>
+            </tr>
+            <tr>
+                <td><code>fx-sub-no-role</code></td>
+                <td>subscriber</td>
+                <td>19339 <code>active</code></td>
+                <td>Denied</td>
+            </tr>
+        </table>
+
+        <p>
+            The seed changes as little of the database as it can. It makes no orders, sends no email and leaves no scheduled actions, so
+            local cron cannot change a subscription later. It changes no option except the role list, plus one option that records the roles
+            it made.
+        </p>
+
+        <h2>Everyday tasks</h2>
+
+        <table>
+            <tr>
+                <th>Task</th>
+                <th>Command</th>
+            </tr>
+            <tr>
+                <td>Refresh the test data (for example, when the trial dates are old)</td>
+                <td><code>bun run wp:seed</code></td>
+            </tr>
+            <tr>
+                <td>Remove the test data only</td>
+                <td><code>bun run wp:seed clean</code></td>
+            </tr>
+            <tr>
+                <td>Live moved to a new plugin version</td>
+                <td>
+                    <code>bun run wp:plugins</code> stops with "live has X, pinned is Y". Change the pin in
+                    <code>scripts/wp-plugins.sh</code>, then run it again.
+                </td>
+            </tr>
+            <tr>
+                <td>Run any wp-cli command</td>
+                <td><code>wp &lt;command&gt;</code> with the helper from step 3</td>
+            </tr>
+        </table>
+
+        <div class="callout alert">
+            <strong>Full reset.</strong> This command deletes the WordPress and database volumes, so all local content is lost:
+            <pre><code>docker compose -p tia-wordpress-elements_devcontainer -f .devcontainer/compose.yaml down -v</code></pre>
+            Then start again at step 2.
+        </div>
+
+        <h2>Troubleshooting</h2>
+
+        <table>
+            <tr>
+                <th>Symptom</th>
+                <th>Cause</th>
+                <th>Fix</th>
+            </tr>
+            <tr>
+                <td>HTTP 500, log shows <code>Call to undefined function is_account_page()</code></td>
+                <td>WooCommerce is missing or inactive. The <code>tia</code> theme needs it.</td>
+                <td>Steps 1 and 5</td>
+            </tr>
+            <tr>
+                <td>Plugin folders in the container are empty</td>
+                <td>The containers started before step 1</td>
+                <td>Run step 1, then <code>docker compose … up -d --force-recreate wordpress</code></td>
+            </tr>
+            <tr>
+                <td><code>wp: executable file not found</code></td>
+                <td>You ran <code>docker exec … wp</code>. The WordPress image has no wp-cli.</td>
+                <td>Use the helper from step 3</td>
+            </tr>
+            <tr>
+                <td><code>No such container: tia-wordpress-elements_devcontainer-wordpress-1</code></td>
+                <td>The containers are stopped, or they run under another project name</td>
+                <td>Step 2, with the project name shown there</td>
+            </tr>
+            <tr>
+                <td>The seed stops with "exists and is not a seed user" or "is not a seed product"</td>
+                <td>A user or post without the seed marker has a fixture login or ID 19339</td>
+                <td>Remove or rename that user or post. The seed never deletes data it did not make.</td>
+            </tr>
+            <tr>
+                <td>A self-check line does not read <code>ok</code></td>
+                <td>WooCommerce Subscriptions changed a date or status rule</td>
+                <td>Compare with the table above, then fix <code>scripts/wp-seed.php</code></td>
+            </tr>
+        </table>
+    </body>
+</html>

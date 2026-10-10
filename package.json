@@ -14,7 +14,8 @@
         "typecheck": "bun run check && bun run lint",
         "test": "vitest run --project=server --project=client",
         "test:unit": "vitest run --project=server",
-        "wp:plugins": "bash scripts/wp-plugins.sh"
+        "wp:plugins": "bash scripts/wp-plugins.sh",
+        "wp:seed": "bash scripts/wp-seed.sh"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
