@@ -27,3 +27,33 @@ _Avoid_: Pro plan, premium
 **Access Cut-off**:
 The last moment of indicator data a Member may see; data after it stays hidden.
 _Avoid_: Access until, expiry, paywall date
+
+### Forward Returns
+
+**Holding Period**:
+How long a position is held in Forward Returns: one, three, six or twelve months. Every return the Block reports is the return over exactly one Holding Period. Older screens call it "Time Period" and name its values Monthly, Quarterly, Semiannually and Annually; these mean the same four Holding Periods.
+_Avoid_: Time Period, horizon
+
+**Entry Month**:
+The calendar month a Holding Period starts in, and the identity of a column in the Forward Returns table. A header such as "JAN - MAR" names the Entry Month January and the Holding Period that runs from it.
+_Avoid_: Start month, column month
+
+**Entry Offset**:
+Which family of Entry Months the Forward Returns table shows when the Holding Period is longer than one month. The families do not overlap, so each Entry Month belongs to exactly one.
+_Avoid_: Shift, phase
+
+**Return Cell**:
+One Year and one Entry Month for the asset and Holding Period on screen: the return over one Holding Period. It is the smallest unit a Member can exclude.
+_Avoid_: Cell value, observation
+
+**Excluded**:
+A Year or a Return Cell a Member has switched off, so it does not count toward the results. An Excluded Year holds at every Entry Offset and keeps the exclusions inside it; an Excluded Return Cell holds only at its own Entry Offset.
+_Avoid_: Deselected, hidden, disabled
+
+**Partial**:
+A Return Cell whose Holding Period has not ended yet, so its value covers only the months so far. It never counts toward the results.
+_Avoid_: Incomplete, provisional, open
+
+**Returns**:
+The share of counted Return Cells whose value is positive, as a percentage of all counted Return Cells that have a value. It measures how often a Holding Period ended up, not by how much.
+_Avoid_: Win rate, hit rate, average return
