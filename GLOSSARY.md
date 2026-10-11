@@ -57,3 +57,27 @@ _Avoid_: Incomplete, provisional, open
 **Returns**:
 The share of counted Return Cells whose value is positive, as a percentage of all counted Return Cells that have a value. It measures how often a Holding Period ended up, not by how much.
 _Avoid_: Win rate, hit rate, average return
+
+### Predictive Cycles
+
+**Base Year**:
+The year a Predictive Cycles chart forecasts. Its calendar sets the chart's days, its own path is Actual, and only years before it feed the other curves. Older screens call it "Cycle Year".
+_Avoid_: Cycle Year, forecast year, target year
+
+**Actual**:
+The Base Year's own path so far: the asset's cumulative return since the last close of the year before the Base Year, so its first day can already differ from 0. It ends at the latest data, or at the Access Cut-off.
+_Avoid_: Current year, live curve
+
+**Curve**:
+One averaged path on a Predictive Cycles chart: the mean cumulative return, day by day, of a set of years before the Base Year. A curve's role, such as All, Bear or Y2, names which years it averages.
+_Avoid_: Series, line, cycle
+
+### Decennial Cycles
+
+**Decade Year**:
+A year's last digit, 0–9: its place in its decade. Every year ending in 3 shares Decade Year 3. The UI says "Years ending in 3".
+_Avoid_: Decade, cycle year, year of the decade
+
+**10-Year Cycle**:
+The one path on a Decennial Cycles chart, across Decade Years 0–9. For each Decade Year, it is the mean year-to-date return of all past full years ending in that digit. Each Decade Year starts where the one before it ended; the returns are added, not compounded, so its end value is not a ten-year return.
+_Avoid_: Gain, curve, decade return, 10-year return
