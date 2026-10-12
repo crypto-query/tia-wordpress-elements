@@ -17,12 +17,28 @@ _Avoid_: Widget, component
 ### Access
 
 **Member**:
-A WordPress user who holds the TIA Pro role and either a live subscription (`active`, `on-hold`, `pending-cancel`) or no subscription at all (a manual grant). A user whose subscriptions have all ended is not a Member. The TIA Pro subscription, when there is one, sets the access level and the Access Cut-off.
+A WordPress user with access to the indicator Blocks, through TIA Pro, TIA Elite or the TIA Indicator Suite. Through TIA Pro or TIA Elite: the user holds the TIA Pro role, and either a live TIA Pro or TIA Elite subscription (`active`, `on-hold`, `pending-cancel`) or none at all (a manual grant); a user whose TIA Pro and TIA Elite subscriptions have all ended is not a Member. Other subscriptions, such as TIA Premium, do not count. Through the TIA Indicator Suite: the user has a Suite subscription that is active, past due or in a Trial. The granting subscription sets the access level and the Access Cut-off; when both apply, TIA Pro sets them.
 _Avoid_: Subscriber (a WordPress role name), customer, user
 
 **TIA Pro**:
-The TIA subscription product that gives a Member access to the indicator Blocks.
+The TIA subscription product sold on the WordPress site. It gives a Member access to the indicator Blocks.
 _Avoid_: Pro plan, premium
+
+**TIA Indicator Suite**:
+The TIA subscription product sold in the TIA apps. Like TIA Pro, it makes a WordPress user a Member.
+_Avoid_: Suite plan, Stripe subscription, Indicators plan
+
+**TIA Elite**:
+A TIA membership sold on the WordPress site that gives the same access as TIA Pro.
+_Avoid_: Premium (WooCommerce names it "Annual - Premium"), TIA Membership
+
+**TIA Premium**:
+A TIA membership sold on the WordPress site, separate from TIA Pro. It does not include the indicator Blocks; a TIA Premium holder is not a Member through it.
+_Avoid_: Membership, Elite, premium (for TIA Pro)
+
+**Trial**:
+The free first days of a subscription, before its first payment. A billing pause on a paid subscription is not a Trial, even when the payment system calls it one.
+_Avoid_: Trialing (the Stripe status), free period
 
 **Access Cut-off**:
 The last moment of indicator data a Member may see; data after it stays hidden.
