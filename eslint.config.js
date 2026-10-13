@@ -5,6 +5,7 @@ import typescriptParser from "@typescript-eslint/parser";
 import sveltePlugin from "eslint-plugin-svelte";
 import svelteParser from "svelte-eslint-parser";
 import betterTailwindcss from "eslint-plugin-better-tailwindcss";
+import svelteConfig from "./svelte.config.js";
 
 export default [
     // Base JavaScript configuration
@@ -34,19 +35,15 @@ export default [
     },
 
     // Svelte-specific configuration
+    ...sveltePlugin.configs.recommended,
     {
         files: ["**/*.svelte", "**/*.svelte.js", "**/*.svelte.ts"],
-        plugins: {
-            svelte: sveltePlugin
-        },
         languageOptions: {
             parser: svelteParser,
             parserOptions: {
-                parser: typescriptParser
+                parser: typescriptParser,
+                svelteConfig
             }
-        },
-        rules: {
-            ...sveltePlugin.configs.recommended.rules
         }
     },
 
