@@ -111,6 +111,7 @@ export default [
             "build",
             "dist",
             "package",
+            "packages",
             "vendor",
             "wordpress",
             "**/.env",

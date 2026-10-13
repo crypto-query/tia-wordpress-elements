@@ -76,3 +76,6 @@ playwright-report
 tmp
 temp
 .temp
+
+# PHPUnit result cache
+.phpunit.cache

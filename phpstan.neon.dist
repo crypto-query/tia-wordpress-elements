@@ -1,0 +1,11 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 8
+    phpVersion: 80300
+    paths:
+        - tia-wordpress-elements.php
+        - uninstall.php
+        - includes/
+        - src/

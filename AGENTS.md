@@ -2,19 +2,34 @@
 
 ## Project bootstrap
 
-- **Runtime / package manager**: `bun`. Don't reach for `npm`, `pnpm`, or `yarn`.
+- **What this repo is**: the WordPress plugin TIA WordPress Elements, at the repo root (`tia-wordpress-elements.php`, `uninstall.php`, `includes/`). It needs WordPress 7.0 and PHP 8.3. Blocks are written in Svelte 5 and TypeScript under `src/`. There is no SvelteKit app.
+- **Package managers**: `bun` for JavaScript, `composer` for the PHP dev tools. Don't reach for `npm`, `pnpm`, or `yarn`.
+- **Toolchain**:
+
+  | Command | Runs | Needs the Docker site |
+  |---|---|---|
+  | `bun run lint` | Prettier, ESLint, PHPCS (`phpcs.xml.dist`), PHPStan level 8 with the WordPress stubs (`phpstan.neon.dist`) | no |
+  | `bun run check` | svelte-check | no |
+  | `bun run test` | Vitest (`server` and `client` projects), then PHPUnit 12 (`phpunit.xml.dist`, `tests/php/`, no WordPress bootstrap) | no |
+  | `bun run test:e2e` | Playwright (`tests/e2e/`) against the Docker site at `http://localhost:8000`; run `bun run wp:seed` first | yes |
+  | `bun run wp:plugins` | Copies the third-party plugins from the live server into `wordpress/plugins/` | no |
+  | `bun run wp:seed` | Seeds the Docker site with test users, products and subscriptions | yes |
+  | `bun run wp:use` | Points the Docker site's plugin at the checkout you run it from (see worktrees below) | yes |
+
 - **Verification loop** — after each implementation slice, repeat until clean:
   1. Run `bun run lint` and `bun run check`. Manually fix every reported issue.
-  2. Run `bun run lint:fix` to let tooling resolve remaining formatting/lint issues.
+  2. Run `bun run lint:fix` (and `bun run lint:php:fix` for PHP) to let tooling resolve remaining formatting/lint issues.
   3. Re-run `bun run lint` and `bun run check` to confirm zero errors and zero warnings.
   4. Run `bun run test` once the loop is clean. A slice is not done while it fails.
-- **The browser pass** — a slice that touched a component or a route is done once it has been **seen rendered in a real browser, in both themes**. Every variant, size and state on its playground route, plus every route the change reaches. Lint, `check` and the test suite read markup and computed values; none of them can see that a control draws at half size, clips its own content, overflows its container, or disappears against the dark canvas. This holds for a new component and for an edit to an existing one alike. The `tia-design-system` skill carries the how — which server to run, the browser mode (headless unless explicitly asked otherwise), and the defect classes only a browser catches.
-- **Worktrees live at `.agents/worktrees/<branch>`**, gitignored, so they stay inside the project instead of scattering beside it. A new one holds only tracked files, so create and prepare it in one go — without `.env.local` and `node_modules` the server suite fails on absent config:
+  5. Run `bun run test:e2e` when the slice touches a Block, a REST route or entitlement.
+- **The browser pass** — a slice that touched a component, a Block or a page is done once it has been **seen rendered in a real browser**. Design-system components: every variant, size and state on the playground, in both themes. Plugin Blocks: every state on the Docker site with the TIA theme (light only). Lint, `check` and the test suite read markup and computed values; none of them can see that a control draws at half size, clips its own content, overflows its container, or disappears against the dark canvas. This holds for a new component and for an edit to an existing one alike. The `tia-design-system` skill carries the how — which server to run, the browser mode (headless unless explicitly asked otherwise), and the defect classes only a browser catches.
+- **Worktrees live at `.agents/worktrees/<branch>`**, gitignored, so they stay inside the project instead of scattering beside it. A new one holds only tracked files, so create and prepare it in one go — without `node_modules` and `vendor` no gate runs:
   ```bash
-  B=my-branch; git worktree add .agents/worktrees/$B -b $B && cp .env .env.local .agents/worktrees/$B/ && (cd .agents/worktrees/$B && bun install)
+  B=my-branch; git worktree add .agents/worktrees/$B -b $B && (cd .agents/worktrees/$B && bun install && composer install)
   ```
-  `.env` and `.env.local` are the gitignored files the app needs today; if `.gitignore` gains another, copy it too. Give every later command an explicit `cd` into it — the shell's cwd stays in the main checkout. `git worktree remove` once the branch merges.
-- **Dev server**: assume it is already running. Check `package.json` (`scripts.dev`) for its port. Never start, restart, or manage it — the browser pass runs its own server on its own port instead.
+  Give every later command an explicit `cd` into it — the shell's cwd stays in the main checkout. `git worktree remove` once the branch merges.
+- **Docker site and worktrees**: the Docker site mounts the main checkout, so every worktree is already inside the container. Before `bun run test:e2e` or a browser pass from a worktree, run `bun run wp:use` in that worktree. It deactivates the active copy and activates the worktree's copy through a symlink `wp-content/plugins/tia-wordpress-elements--<branch>`. Only one copy is active at a time. Run `bun run wp:use` in the main checkout to switch back. The e2e smoke test fails when the active copy is not the one of the checkout it runs from.
+- **Dev site**: assume the Docker site (`.devcontainer/compose.yaml`) is already running at `http://localhost:8000` (admin / admin). Never start, restart, or manage its containers. `bun run wp:use` and `bun run wp:seed` are the only changes you make to it.
 
 ## Operating rules
 
@@ -122,9 +137,23 @@ The five canonical triage labels are used with their default names. See `docs/ag
 
 Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
-## Svelte and SvelteKit
+## Skills that do not apply
 
-- **Skills before code.** The `svelte-sveltekit` skill is the decision layer for any `.svelte` / `.svelte.ts` code or SvelteKit config; the `sveltekit-architecture` skill owns server-side placement — read it before deciding where logic belongs under `$lib/server` or extracting it out of a fat route, load function or remote function. A new module under `$lib/server` copies the file and visibility template in `docs/adr/0019-module-public-surface.md`: four public names and an `internal/` ring for the rest.
+These skills came over from other projects. Do not load them here; do not remove them without confirmation.
+
+| Skill | Why it does not apply |
+|---|---|
+| `better-auth`, `drizzle`, `effect`, `sveltekit-architecture` | No SvelteKit server, no database, no Effect: server logic is PHP in WordPress |
+| `storybook-svelte` | No Storybook |
+| `shadcn-svelte-ui` | No shadcn-svelte CLI or `components.json`; components come from the TIA design system |
+| `gsap-svelte5`, `runed` | Not dependencies of this repo |
+| `connect-recommend`, `stripe-directory`, `stripe-projects`, `upgrade-stripe` | The plugin only reads Stripe customers and subscriptions; no Connect, no provisioning, no API version upgrade |
+
+The `svelte-sveltekit` skill applies only to its Svelte 5 parts.
+
+## Svelte and PHP
+
+- **Skills before code.** The `svelte-sveltekit` skill is the decision layer for any `.svelte` / `.svelte.ts` code. The `php-wordpress` skill is the decision layer for any PHP.
 - **Exact API details** come from the Svelte MCP server: `list-sections` first, then `get-documentation` for every section relevant to the task.
 - **Autofixer until clean.** Run `svelte-autofixer` on every Svelte component you write or edit, repeating until it returns no issues or suggestions.
 

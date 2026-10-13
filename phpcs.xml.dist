@@ -20,6 +20,11 @@
     <rule ref="PHPCompatibilityWP"/>
     <config name="testVersion" value="8.3-"/>
 
+    <!-- PHPUnit runs without WordPress, so the WordPress replacements for file functions do not exist there. -->
+    <rule ref="WordPress.WP.AlternativeFunctions">
+        <exclude-pattern>*/tests/php/*</exclude-pattern>
+    </rule>
+
     <rule ref="WordPress.WP.I18n">
         <properties>
             <property name="text_domain" type="array">
@@ -33,6 +38,7 @@
             <property name="prefixes" type="array">
                 <element value="tia_elements"/>
                 <element value="TIA_Elements"/>
+                <element value="tia_"/>
             </property>
         </properties>
     </rule>

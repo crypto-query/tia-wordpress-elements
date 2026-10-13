@@ -22,3 +22,5 @@ composer.lock
 dist
 # Third-party WordPress code (the live theme and plugins), kept as it is
 wordpress
+# The design-system submodule keeps its own formatting
+packages
