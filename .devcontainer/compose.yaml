@@ -37,6 +37,7 @@ services:
             WORDPRESS_DB_NAME: wordpress
             WORDPRESS_DB_PASSWORD: wordpress
             WORDPRESS_DB_HOST: database:3306
+            WORDPRESS_CONFIG_EXTRA: "define('SCRIPT_DEBUG', true);"
 
     database:
         image: mysql:8.4

@@ -5,11 +5,6 @@ import typescriptParser from "@typescript-eslint/parser";
 import sveltePlugin from "eslint-plugin-svelte";
 import svelteParser from "svelte-eslint-parser";
 import betterTailwindcss from "eslint-plugin-better-tailwindcss";
-import { existsSync } from "node:fs";
-
-// The design-system stylesheet is not in this repo yet. Until it lands, better-tailwindcss
-// falls back to Tailwind's default theme instead of failing on a missing entry file.
-const TAILWIND_ENTRY = "src/app.css";
 
 export default [
     // Base JavaScript configuration
@@ -61,7 +56,7 @@ export default [
         files: ["**/*.svelte", "**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx"],
         settings: {
             "better-tailwindcss": {
-                entryPoint: existsSync(TAILWIND_ENTRY) ? TAILWIND_ENTRY : undefined,
+                entryPoint: "src/shared/design-system.css",
                 // required for enforce-canonical-classes px→token autofix
                 // Removing this silently disables those rewrites.
                 rootFontSize: 16

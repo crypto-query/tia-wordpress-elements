@@ -1,0 +1,38 @@
+/* The one stylesheet every Block shares. Nothing global: preflight and the design-system base sit under
+   `:where(.tia-design-system)`, the utilities under `.tia-design-system`, and scripts/postcss-scope.js
+   rewrites the rest. No fonts: the theme's fonts win. */
+@import "tailwindcss/theme.css";
+
+:where(.tia-design-system) {
+    @import "tailwindcss/preflight.css";
+}
+
+/* The Block root. `all: initial` cuts every property the theme lets inherit into the Block. */
+.tia-design-system {
+    all: initial;
+    display: block;
+    font-family: var(--font-secondary), var(--font-system);
+    background-color: var(--background);
+    color: var(--foreground);
+    line-height: var(--leading-normal);
+    font-feature-settings:
+        "rlig" 1,
+        "calt" 1;
+    font-variation-settings: normal;
+    -webkit-text-size-adjust: 100%;
+    tab-size: 4;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.tia-design-system {
+    @tailwind utilities source(none);
+}
+
+@plugin "tailwindcss-animate";
+@plugin "@tailwindcss/forms";
+
+/* Its `:root` tokens and its base layer are global; the scope step moves both under the root. */
+@import "tia-design-system/theme.css";
+
+@source "../../packages/tia-design-system/src/lib/components";
+@source "..";

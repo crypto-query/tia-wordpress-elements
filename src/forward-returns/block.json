@@ -1,0 +1,20 @@
+{
+    "$schema": "https://schemas.wp.org/trunk/block.json",
+    "apiVersion": 3,
+    "name": "tia-elements/forward-returns",
+    "version": "0.1.0",
+    "title": "Forward Returns",
+    "category": "widgets",
+    "description": "Forward Returns of an asset, by Holding Period.",
+    "textdomain": "tia-wordpress-elements",
+    "attributes": {
+        "base": { "type": "string" },
+        "quote": { "type": "string" },
+        "period": { "type": "integer" }
+    },
+    "supports": { "html": false },
+    "editorScript": "file:./edit.ts",
+    "viewScript": "file:./view.ts",
+    "style": "tia-elements-design-system",
+    "render": "file:./render.php"
+}

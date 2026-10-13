@@ -30,6 +30,20 @@
         <exclude-pattern>*/tests/php/bootstrap.php</exclude-pattern>
     </rule>
 
+    <!-- Core escapes every attribute get_block_wrapper_attributes() returns. -->
+    <rule ref="WordPress.Security.EscapeOutput">
+        <properties>
+            <property name="customAutoEscapedFunctions" type="array">
+                <element value="get_block_wrapper_attributes"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- DONOTCACHEPAGE is the constant page-cache plugins share; it cannot carry a prefix. -->
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound">
+        <exclude-pattern>*/includes/class-tia-elements-blocks.php</exclude-pattern>
+    </rule>
+
     <rule ref="WordPress.WP.I18n">
         <properties>
             <property name="text_domain" type="array">

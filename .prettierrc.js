@@ -12,9 +12,8 @@ const config = {
     svelteAllowShorthand: true,
     svelteIndentScriptAndStyle: true,
     overrides: [{ files: "*.svelte", options: { parser: "svelte" } }],
-    plugins: ["prettier-plugin-svelte", "prettier-plugin-tailwindcss"]
-    // ponytail: add `tailwindStylesheet: "src/app.css"` once the design-system stylesheet lands.
-    // Without it the sorter does not know @theme- and @utility-defined classes.
+    plugins: ["prettier-plugin-svelte", "prettier-plugin-tailwindcss"],
+    tailwindStylesheet: "src/shared/design-system.css"
 };
 
 export default config;

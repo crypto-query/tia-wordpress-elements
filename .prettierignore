@@ -24,3 +24,5 @@ dist
 wordpress
 # The design-system submodule keeps its own formatting
 packages
+# Captured live-site markup and CSS, kept as served
+tests/fixtures/live-site

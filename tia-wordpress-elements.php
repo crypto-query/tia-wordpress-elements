@@ -16,5 +16,8 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/includes/class-tia-elements-settings.php';
 require_once __DIR__ . '/includes/class-tia-elements-settings-page.php';
+require_once __DIR__ . '/includes/class-tia-elements-card.php';
+require_once __DIR__ . '/includes/class-tia-elements-blocks.php';
 
 TIA_Elements_Settings_Page::register();
+TIA_Elements_Blocks::register();

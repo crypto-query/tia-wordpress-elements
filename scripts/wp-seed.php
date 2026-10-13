@@ -3,7 +3,7 @@
  * Entitlement test data for the LOCAL WordPress only. Never run it on a live site.
  *
  * Run through `bun run wp:seed` (add `clean` to only remove the data). Each run removes
- * what the previous run made: users, subscriptions and products that carry the seed marker,
+ * what the previous run made: users, subscriptions, products and pages that carry the seed marker,
  * then makes them again with dates relative to now (UTC), and checks the result.
  *
  * @package tia-wordpress-elements
@@ -15,6 +15,12 @@ const TIA_ELEMENTS_SEED_MARKER    = '_tia_elements_seed';
 const TIA_ELEMENTS_SEED_ROLES_OPT = 'tia_elements_seed_roles';
 const TIA_ELEMENTS_SEED_PRO_ID    = 19339;
 const TIA_ELEMENTS_SEED_OTHER_SKU = 'tia-seed-other-subscription';
+const TIA_ELEMENTS_SEED_PAGES     = array(
+	'forward-returns' => array(
+		'title'   => 'Forward Returns',
+		'content' => '<!-- wp:tia-elements/forward-returns /-->',
+	),
+);
 
 /**
  * The fixture table. `set` holds the dates the seed writes; `expect` the end state to check.
@@ -245,6 +251,44 @@ function tia_elements_seed_clean( $fixtures ) {
 }
 
 /**
+ * Removes the pages the previous run made. Fails on a foreign page at one of the seed slugs.
+ */
+function tia_elements_seed_clean_pages() {
+	foreach ( array_keys( TIA_ELEMENTS_SEED_PAGES ) as $slug ) {
+		$page = get_page_by_path( $slug );
+		if ( $page && ! get_post_meta( $page->ID, TIA_ELEMENTS_SEED_MARKER, true ) ) {
+			WP_CLI::error( sprintf( 'Page /%s/ exists and is not a seed page.', $slug ) );
+		}
+		if ( $page ) {
+			wp_delete_post( $page->ID, true );
+		}
+	}
+}
+
+/**
+ * Makes one published page per Block, for e2e tests and browser passes.
+ */
+function tia_elements_seed_pages() {
+	foreach ( TIA_ELEMENTS_SEED_PAGES as $slug => $page ) {
+		$id = wp_insert_post(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_name'    => $slug,
+				'post_title'   => $page['title'],
+				'post_content' => $page['content'],
+				'meta_input'   => array( TIA_ELEMENTS_SEED_MARKER => '1' ),
+			),
+			true
+		);
+		if ( is_wp_error( $id ) ) {
+			WP_CLI::error( $id->get_error_message() );
+		}
+		WP_CLI::log( sprintf( 'Page: %s', get_permalink( $id ) ) );
+	}
+}
+
+/**
  * Removes the roles the seed added, and the option that lists them.
  */
 function tia_elements_seed_remove_roles() {
@@ -433,6 +477,7 @@ function tia_elements_seed_run( $cli_args ) {
 	$now      = time();
 	$fixtures = tia_elements_seed_fixtures( $now );
 	tia_elements_seed_clean( $fixtures );
+	tia_elements_seed_clean_pages();
 	if ( in_array( 'clean', (array) $cli_args, true ) ) {
 		tia_elements_seed_remove_roles();
 		WP_CLI::success( 'Seed data removed.' );
@@ -467,6 +512,7 @@ function tia_elements_seed_run( $cli_args ) {
 		}
 	}
 
+	tia_elements_seed_pages();
 	WP_CLI::log( 'Currency: ' . get_woocommerce_currency() . ', TIA Pro price: ' . wp_strip_all_tags( $products['pro']->get_price_html() ) );
 	$errors = tia_elements_seed_check( $fixtures, $products );
 	if ( $errors ) {

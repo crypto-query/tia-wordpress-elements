@@ -4,6 +4,8 @@ includes:
 parameters:
     level: 8
     phpVersion: 80300
+    bootstrapFiles:
+        - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
     paths:
         - tia-wordpress-elements.php
         - uninstall.php
