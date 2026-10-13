@@ -3,6 +3,9 @@
     "version": "0.1.0",
     "type": "module",
     "private": true,
+    "workspaces": [
+        "packages/*"
+    ],
     "scripts": {
         "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
         "check:watch": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings --watch",
@@ -56,6 +59,7 @@
         "mode-watcher": "^1.1.0",
         "tailwind-merge": "^3.6.0",
         "tailwindcss-animate": "^1.0.7",
+        "tia-design-system": "workspace:*",
         "vimeo-video-element": "^1.7.3",
         "youtube-video-element": "^1.9.0"
     },

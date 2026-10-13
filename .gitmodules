@@ -1,0 +1,3 @@
+[submodule "packages/tia-design-system"]
+	path = packages/tia-design-system
+	url = git@github.com:crypto-query/tia-design-system.git
