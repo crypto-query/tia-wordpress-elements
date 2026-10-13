@@ -6,7 +6,8 @@ const SHIM = `const __svelteHot = import.meta.webpackHot && {
         const first = hot.data?.update ?? update;
         hot.dispose((data) => { data.update = first; });
         hot.accept();
-        if (hot.data?.update) first(__webpack_module__.exports);
+        // accept() runs above the default export, which is not yet initialised, so wait for the module to finish.
+        if (hot.data?.update) queueMicrotask(() => first(__webpack_module__.exports));
     }
 };
 `;
