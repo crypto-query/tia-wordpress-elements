@@ -1,0 +1,246 @@
+<?php
+/**
+ * The one settings reader: every connection value with its source.
+ *
+ * @package tia-wordpress-elements
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Resolves each setting from a wp-config constant, a saved option or a default.
+ */
+final class TIA_Elements_Settings {
+
+	/** Request timeout in seconds for Supabase. */
+	public const SUPABASE_TIMEOUT = 10;
+
+	/** Request timeout in seconds for the data server. */
+	public const DATA_SERVER_TIMEOUT = 10;
+
+	/** Request timeout in seconds per Stripe call. */
+	public const STRIPE_TIMEOUT = 5;
+
+	/**
+	 * Text fields keyed by short key.
+	 *
+	 * @var array<string, array{option: string, constant: string, secret: bool, default: string}>
+	 */
+	public const TEXT_FIELDS = array(
+		'supabase_url'         => array(
+			'option'   => 'tia_supabase_url',
+			'constant' => 'TIA_SUPABASE_URL',
+			'secret'   => false,
+			'default'  => '',
+		),
+		'supabase_key'         => array(
+			'option'   => 'tia_supabase_key',
+			'constant' => 'TIA_SUPABASE_KEY',
+			'secret'   => true,
+			'default'  => '',
+		),
+		'data_server_url'      => array(
+			'option'   => 'tia_data_server_url',
+			'constant' => 'TIA_DATA_SERVER_URL',
+			'secret'   => false,
+			'default'  => 'https://tia-data-server.cryptoquery.eu',
+		),
+		'stripe_key'           => array(
+			'option'   => 'tia_stripe_key',
+			'constant' => 'TIA_STRIPE_KEY',
+			'secret'   => true,
+			'default'  => '',
+		),
+		'stripe_suite_product' => array(
+			'option'   => 'tia_stripe_suite_product',
+			'constant' => 'TIA_STRIPE_SUITE_PRODUCT',
+			'secret'   => false,
+			'default'  => 'prod_QhxKPj5ay8NjPH',
+		),
+	);
+
+	public const MEMBER_ROLES_OPTION = 'tia_member_roles';
+
+	public const MEMBER_ROLES_DEFAULT = array( 'tia_pro_-_annual' );
+
+	/** Every option the plugin stores; uninstall deletes them all. */
+	public const OPTIONS = array(
+		'tia_supabase_url',
+		'tia_supabase_key',
+		'tia_data_server_url',
+		'tia_stripe_key',
+		'tia_stripe_suite_product',
+		self::MEMBER_ROLES_OPTION,
+		'tia_forward_returns_assets',
+		'tia_predictive_cycles_assets',
+		'tia_decennial_cycles_assets',
+	);
+
+	/**
+	 * Saved options, option name => stored value.
+	 *
+	 * @var array<string, mixed>
+	 */
+	private array $options;
+
+	/**
+	 * Defined constants, constant name => value.
+	 *
+	 * @var array<string, mixed>
+	 */
+	private array $constants;
+
+	/**
+	 * Takes the saved options and the defined constants.
+	 *
+	 * @param array<string, mixed> $options   Option name => stored value; a missing name was never saved.
+	 * @param array<string, mixed> $constants Constant name => value; a missing name is not defined.
+	 */
+	public function __construct( array $options, array $constants ) {
+		$this->options   = $options;
+		$this->constants = $constants;
+	}
+
+	/**
+	 * Reads the saved options and the defined constants from WordPress.
+	 */
+	public static function from_wordpress(): self {
+		$options   = array();
+		$constants = array();
+		foreach ( self::TEXT_FIELDS as $field ) {
+			$options[ $field['option'] ] = get_option( $field['option'], null );
+			if ( defined( $field['constant'] ) ) {
+				$constants[ $field['constant'] ] = constant( $field['constant'] );
+			}
+		}
+		$options[ self::MEMBER_ROLES_OPTION ] = get_option( self::MEMBER_ROLES_OPTION, null );
+
+		return new self( array_filter( $options, static fn( $value ) => null !== $value ), $constants );
+	}
+
+	/**
+	 * Resolves one text field.
+	 *
+	 * @param string $key A TEXT_FIELDS key.
+	 * @return array{value: string, source: 'constant'|'option'|'default'|'unset'}
+	 * @throws InvalidArgumentException When the key is not a TEXT_FIELDS key.
+	 */
+	public function get( string $key ): array {
+		if ( ! isset( self::TEXT_FIELDS[ $key ] ) ) {
+			throw new InvalidArgumentException( 'Unknown setting key.' );
+		}
+		$field = self::TEXT_FIELDS[ $key ];
+
+		$constant = $this->constants[ $field['constant'] ] ?? null;
+		if ( is_scalar( $constant ) && '' !== trim( (string) $constant ) ) {
+			return array(
+				'value'  => trim( (string) $constant ),
+				'source' => 'constant',
+			);
+		}
+
+		$option = $this->options[ $field['option'] ] ?? null;
+		if ( is_string( $option ) && '' !== $option ) {
+			return array(
+				'value'  => $option,
+				'source' => 'option',
+			);
+		}
+
+		if ( '' !== $field['default'] ) {
+			return array(
+				'value'  => $field['default'],
+				'source' => 'default',
+			);
+		}
+
+		return array(
+			'value'  => '',
+			'source' => 'unset',
+		);
+	}
+
+	/**
+	 * The member roles as saved, before the filter; the default only while never saved.
+	 *
+	 * @return array{value: list<string>, source: 'option'|'default'}
+	 */
+	public function stored_member_roles(): array {
+		$saved = $this->options[ self::MEMBER_ROLES_OPTION ] ?? null;
+		if ( ! is_array( $saved ) ) {
+			return array(
+				'value'  => self::MEMBER_ROLES_DEFAULT,
+				'source' => 'default',
+			);
+		}
+
+		return array(
+			'value'  => array_values( array_filter( $saved, 'is_string' ) ),
+			'source' => 'option',
+		);
+	}
+
+	/**
+	 * The roles that make a user a member, after the filter.
+	 *
+	 * @return list<string>
+	 */
+	public function member_roles(): array {
+		/**
+		 * Filters the roles that make a user a member.
+		 *
+		 * @param list<string> $roles Role slugs from the settings page.
+		 */
+		$roles = apply_filters( 'tia_member_roles', $this->stored_member_roles()['value'] );
+
+		// A misbehaving filter may return a non-array or non-string entries.
+		return array_values( array_filter( (array) $roles, 'is_string' ) );
+	}
+
+	/**
+	 * The value to save for a submitted text field.
+	 *
+	 * @param mixed  $input  The submitted value; not a string when the field was absent from the form.
+	 * @param string $stored The value stored now.
+	 * @param bool   $secret Whether the field is write-only.
+	 */
+	public static function submitted_text( mixed $input, string $stored, bool $secret ): string {
+		if ( ! is_string( $input ) ) {
+			return $stored;
+		}
+		$input = trim( $input );
+
+		return ( '' === $input && $secret ) ? $stored : $input;
+	}
+
+	/**
+	 * The member roles to save: submitted slugs that exist, once each.
+	 *
+	 * @param mixed         $input    The submitted value.
+	 * @param array<string> $existing The role slugs that exist.
+	 * @return list<string>
+	 */
+	public static function submitted_roles( mixed $input, array $existing ): array {
+		if ( ! is_array( $input ) ) {
+			return array();
+		}
+		$roles = array_filter( $input, static fn( $role ) => is_string( $role ) && in_array( $role, $existing, true ) );
+
+		return array_values( array_unique( $roles ) );
+	}
+
+	/**
+	 * Whether the roles equal, as a set, the default roles that exist.
+	 *
+	 * @param array<string> $roles    The role slugs to compare.
+	 * @param array<string> $existing The role slugs that exist.
+	 */
+	public static function matches_default_roles( array $roles, array $existing ): bool {
+		$default = array_values( array_intersect( self::MEMBER_ROLES_DEFAULT, $existing ) );
+		$roles   = array_values( array_unique( $roles ) );
+		sort( $default );
+		sort( $roles );
+
+		return $roles === $default;
+	}
+}

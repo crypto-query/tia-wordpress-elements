@@ -20,12 +20,7 @@ case "$root" in
 esac
 
 wp() {
-    docker run --rm --user 33:33 --volumes-from "$C" --network "container:$C" \
-        -e WORDPRESS_DB_HOST=database:3306 \
-        -e WORDPRESS_DB_USER=wordpress \
-        -e WORDPRESS_DB_PASSWORD=wordpress \
-        -e WORDPRESS_DB_NAME=wordpress \
-        wordpress:cli wp "$@"
+    bash "$root/scripts/wp-cli.sh" "$@"
 }
 
 active=$(wp plugin list --status=active --field=name | grep -E "^$MAIN(--|$)" || true)

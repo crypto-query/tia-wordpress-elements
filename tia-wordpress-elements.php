@@ -13,3 +13,8 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+
+require_once __DIR__ . '/includes/class-tia-elements-settings.php';
+require_once __DIR__ . '/includes/class-tia-elements-settings-page.php';
+
+TIA_Elements_Settings_Page::register();

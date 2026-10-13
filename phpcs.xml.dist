@@ -25,6 +25,11 @@
         <exclude-pattern>*/tests/php/*</exclude-pattern>
     </rule>
 
+    <!-- The PHPUnit bootstrap stands in for WordPress core, so it defines core's ABSPATH. -->
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound">
+        <exclude-pattern>*/tests/php/bootstrap.php</exclude-pattern>
+    </rule>
+
     <rule ref="WordPress.WP.I18n">
         <properties>
             <property name="text_domain" type="array">
