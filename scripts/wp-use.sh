@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Points the Docker site's plugin at the checkout this script runs from: a worktree under
-# .agents/worktrees/ or the main checkout. The site mounts the main checkout, so a worktree is
-# reachable through a symlink in wp-content/plugins. Only one copy of the plugin stays active.
+# Points the Docker site's plugin at the checkout this script runs from (main or a worktree).
+# A worktree copy is activated through a symlink in wp-content/plugins; one copy stays active.
 set -euo pipefail
 
 C=tia-wordpress-elements_devcontainer-wordpress-1

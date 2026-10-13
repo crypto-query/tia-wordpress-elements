@@ -22,6 +22,6 @@
     // warning, which --fail-on-warnings fails on while the repo has no .svelte file. It also hides a
     // real include mistake later; move vite.config.ts back to "include" once blocks exist.
     "files": ["vite.config.ts"],
-    "include": ["src/**/*.js", "src/**/*.ts", "src/**/*.svelte"],
+    "include": ["src/**/*.js", "src/**/*.ts", "src/**/*.svelte", "tests/**/*.ts", "playwright.config.ts"],
     "exclude": ["node_modules/**", "vendor/**", "build/**"]
 }

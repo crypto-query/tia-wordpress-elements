@@ -11,7 +11,7 @@
   | `bun run lint` | Prettier, ESLint, PHPCS (`phpcs.xml.dist`), PHPStan level 8 with the WordPress stubs (`phpstan.neon.dist`) | no |
   | `bun run check` | svelte-check | no |
   | `bun run test` | Vitest (`server` and `client` projects), then PHPUnit 12 (`phpunit.xml.dist`, `tests/php/`, no WordPress bootstrap) | no |
-  | `bun run test:e2e` | Playwright (`tests/e2e/`) against the Docker site at `http://localhost:8000`; run `bun run wp:seed` first | yes |
+  | `bun run test:e2e` | Playwright (`tests/e2e/`) against the Docker site at `http://localhost:8000`; run `bun run wp:use` and `bun run wp:seed` first | yes |
   | `bun run wp:plugins` | Copies the third-party plugins from the live server into `wordpress/plugins/` | no |
   | `bun run wp:seed` | Seeds the Docker site with test users, products and subscriptions | yes |
   | `bun run wp:use` | Points the Docker site's plugin at the checkout you run it from (see worktrees below) | yes |
@@ -22,13 +22,13 @@
   3. Re-run `bun run lint` and `bun run check` to confirm zero errors and zero warnings.
   4. Run `bun run test` once the loop is clean. A slice is not done while it fails.
   5. Run `bun run test:e2e` when the slice touches a Block, a REST route or entitlement.
-- **The browser pass** — a slice that touched a component, a Block or a page is done once it has been **seen rendered in a real browser**. Design-system components: every variant, size and state on the playground, in both themes. Plugin Blocks: every state on the Docker site with the TIA theme (light only). Lint, `check` and the test suite read markup and computed values; none of them can see that a control draws at half size, clips its own content, overflows its container, or disappears against the dark canvas. This holds for a new component and for an edit to an existing one alike. The `tia-design-system` skill carries the how — which server to run, the browser mode (headless unless explicitly asked otherwise), and the defect classes only a browser catches.
+- **The browser pass** — a slice that touched a component, a Block or a page is done once it has been **seen rendered in a real browser**. Check design-system components on the design-system playground: every variant, size and state, in both themes. Check plugin Blocks on the Docker site with the TIA theme: every state, light theme only. Lint, `check` and the test suite read markup and computed values; none of them can see that a control draws at half size, clips its own content, overflows its container, or disappears against the dark canvas. This holds for a new component and for an edit to an existing one alike. The `tia-design-system` skill carries the how — the browser mode (headless unless explicitly asked otherwise), and the defect classes only a browser catches.
 - **Worktrees live at `.agents/worktrees/<branch>`**, gitignored, so they stay inside the project instead of scattering beside it. A new one holds only tracked files, so create and prepare it in one go — without `node_modules` and `vendor` no gate runs:
   ```bash
   B=my-branch; git worktree add .agents/worktrees/$B -b $B && (cd .agents/worktrees/$B && bun install && composer install)
   ```
   Give every later command an explicit `cd` into it — the shell's cwd stays in the main checkout. `git worktree remove` once the branch merges.
-- **Docker site and worktrees**: the Docker site mounts the main checkout, so every worktree is already inside the container. Before `bun run test:e2e` or a browser pass from a worktree, run `bun run wp:use` in that worktree. It deactivates the active copy and activates the worktree's copy through a symlink `wp-content/plugins/tia-wordpress-elements--<branch>`. Only one copy is active at a time. Run `bun run wp:use` in the main checkout to switch back. The e2e smoke test fails when the active copy is not the one of the checkout it runs from.
+- **Docker site and worktrees**: the Docker site mounts the main checkout, so every worktree is already inside the container. Before `bun run test:e2e` or a browser pass from a worktree, run `bun run wp:use` in that worktree. It deactivates the active copy and activates the worktree's copy through a symlink `wp-content/plugins/tia-wordpress-elements--<branch>`. Only one copy is active at a time. Run `bun run wp:use` in the main checkout to switch back. Switch back before you remove a worktree, or the site keeps a broken symlink. The e2e smoke test fails when the active copy is not the one of the checkout it runs from.
 - **Dev site**: assume the Docker site (`.devcontainer/compose.yaml`) is already running at `http://localhost:8000` (admin / admin). Never start, restart, or manage its containers. `bun run wp:use` and `bun run wp:seed` are the only changes you make to it.
 
 ## Operating rules
@@ -38,7 +38,7 @@
 - **Publishing stays with the user.** Commits are local: `git push`, a pull request or a shared branch happens only when the user asks for it by name.
 - **No file deletion without confirmation.** Never delete source files, components, routes, or playground routes unsolicited.
 - **No new dependencies without approval.** Prefer existing deps, local utilities, and established patterns.
-- **No new design tokens without need.** `src/app.css` is the single token layer. When a design asks for a value sitting between two steps of an existing scale, snap to the nearer step — don't add the in-between step. A new token is justified only by a concept the scale has nothing close to, and then it must be defined in both themes.
+- **No new design tokens without need.** The design system's `theme.css` is the single token layer. When a design asks for a value sitting between two steps of an existing scale, snap to the nearer step — don't add the in-between step. A new token is justified only by a concept the scale has nothing close to, and then it must be defined in both themes.
 - **A green gate means fixed code, not silenced tools.** When `check` or `lint` goes red, fix the cause; `@ts-expect-error`, `eslint-disable`, `any` and `!` hide the defect instead. Report it as a blocker when the real fix is out of reach.
 - **Pre-existing failures.** Differentiate regressions you introduced from pre-existing errors. Do not fix unrelated failures; report them with the exact failing commands and note they are pre-existing. **Exception: dependency updates** — see below.
 - **Dependency updates.** When updating packages, fix *every* error the new versions surface, including pre-existing defects a stricter tool newly detects. The "pre-existing failures" rule does not apply: a bump that leaves the gate red is not done. Take each package as far as its latest version allows, and stop only where the bump would break configuration or leave it stale — a removed config option, a pinned contract that no longer type-checks, or a callback whose contract silently grew. Report every version deliberately held back, with the exact reason and what adopting it would cost.
@@ -139,7 +139,7 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 
 ## Skills that do not apply
 
-These skills came over from other projects. Do not load them here; do not remove them without confirmation.
+These skills came over from other projects. Do not load them here. Do not remove them without confirmation.
 
 | Skill | Why it does not apply |
 |---|---|
@@ -149,7 +149,7 @@ These skills came over from other projects. Do not load them here; do not remove
 | `gsap-svelte5`, `runed` | Not dependencies of this repo |
 | `connect-recommend`, `stripe-directory`, `stripe-projects`, `upgrade-stripe` | The plugin only reads Stripe customers and subscriptions; no Connect, no provisioning, no API version upgrade |
 
-The `svelte-sveltekit` skill applies only to its Svelte 5 parts.
+The `svelte-sveltekit` skill applies only to its Svelte 5 parts. The `tia-design-system` skill applies to design-system components; its `src/app.css` and playground routes now live in the design-system repo.
 
 ## Svelte and PHP
 
