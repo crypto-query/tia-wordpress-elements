@@ -26,7 +26,10 @@ const TIA_ELEMENTS_SEED_IDS   = array(
 const TIA_ELEMENTS_SEED_PAGES = array(
 	'forward-returns' => array(
 		'title'   => 'Forward Returns',
-		'content' => '<!-- wp:tia-elements/forward-returns /-->',
+		// Live pages pad their content in a container; a bare Block would sit flush on the viewport edge.
+		'content' => '<!-- wp:group {"style":{"spacing":{"padding":{"left":"20px","right":"20px"}}}} -->'
+			. '<div class="wp-block-group" style="padding-right:20px;padding-left:20px"><!-- wp:tia-elements/forward-returns /--></div>'
+			. '<!-- /wp:group -->',
 	),
 );
 
