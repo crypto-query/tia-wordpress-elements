@@ -28,6 +28,16 @@ describe("readBoot", () => {
         expect(readBoot(JSON.stringify(trial))).toEqual(trial);
     });
 
+    it("accepts an Upgrade card", () => {
+        const upgrade = { ...purchase, card: { case: "upgrade", priceHtml: purchase.card.priceHtml, ctaUrl: purchase.card.ctaUrl } };
+        expect(readBoot(JSON.stringify(upgrade))).toEqual(upgrade);
+    });
+
+    it("accepts an Unavailable card with no price and no CTA", () => {
+        const unavailable = { ...purchase, card: { case: "unavailable" } };
+        expect(readBoot(JSON.stringify(unavailable))).toEqual(unavailable);
+    });
+
     it.each([
         ["a missing attribute", undefined],
         ["JSON that does not parse", "{"],

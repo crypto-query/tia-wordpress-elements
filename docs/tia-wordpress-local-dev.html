@@ -389,7 +389,7 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
         <h3>6. Seed the test data</h3>
         <pre><code>bun run wp:seed</code></pre>
         <p>
-            The last lines must read <code>ok</code> for each user, then <code>Success: Seeded 11 users.</code> Open
+            The last lines must read <code>ok</code> for each user, then <code>Success: Seeded 16 users.</code> Open
             <a href="http://localhost:8000/">http://localhost:8000/</a> and log in as <code>admin</code> / <code>admin</code>, or as a test
             user below.
         </p>
@@ -414,20 +414,24 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
                     <text x="80" y="80" font-size="11">removes only data</text>
                     <text x="80" y="96" font-size="11">with the seed marker</text>
 
-                    <rect x="180" y="30" width="150" height="90" rx="8" fill="#f6f6f7" stroke="#555" />
+                    <rect x="180" y="30" width="150" height="100" rx="8" fill="#f6f6f7" stroke="#555" />
                     <text x="255" y="58" font-weight="600" font-size="13">2 · Roles</text>
-                    <text x="255" y="80" class="mono" font-size="10">tia_pro_-_annual</text>
-                    <text x="255" y="96" class="mono" font-size="10">tia_standard_-_annually</text>
+                    <text x="255" y="76" class="mono" font-size="10">tia_pro_-_annual</text>
+                    <text x="255" y="90" class="mono" font-size="10">tia_standard_-_annually</text>
+                    <text x="255" y="104" class="mono" font-size="10">tia_premium_-_annually</text>
+                    <text x="255" y="118" class="mono" font-size="10">active_membership</text>
 
-                    <rect x="355" y="30" width="150" height="90" rx="8" fill="#f6f6f7" stroke="#555" />
+                    <rect x="355" y="30" width="150" height="100" rx="8" fill="#f6f6f7" stroke="#555" />
                     <text x="430" y="58" font-weight="600" font-size="13">3 · Products</text>
-                    <text x="430" y="80" font-size="11">19339 TIA Pro</text>
-                    <text x="430" y="96" font-size="11">+ 1 other product</text>
+                    <text x="430" y="76" font-size="11">19339 TIA Pro</text>
+                    <text x="430" y="90" font-size="11">244 TIA Membership:</text>
+                    <text x="430" y="104" font-size="11">247 Premium, 19195 Elite</text>
+                    <text x="430" y="118" font-size="11">+ 1 other product</text>
 
                     <rect x="530" y="30" width="150" height="90" rx="8" fill="#e8f0fa" stroke="#1f5fa8" />
                     <text x="605" y="58" font-weight="600" font-size="13">4 · Users</text>
-                    <text x="605" y="80" font-size="11">11 users,</text>
-                    <text x="605" y="96" font-size="11">9 subscriptions</text>
+                    <text x="605" y="80" font-size="11">16 users,</text>
+                    <text x="605" y="96" font-size="11">15 subscriptions</text>
 
                     <rect x="705" y="30" width="150" height="90" rx="8" fill="#e8f5ec" stroke="#1e7b3c" />
                     <text x="780" y="58" font-weight="600" font-size="13">5 · Self-check</text>
@@ -451,8 +455,9 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
         <div class="callout">
             <strong>Two different things.</strong> The <em>TIA Pro role</em> is the WordPress role <code>tia_pro_-_annual</code> ("TIA Pro -
             Annual"). A <em>TIA Pro subscription</em> is a WooCommerce subscription to the product TIA Pro, ID <code>19339</code>, the same
-            ID as on the live site. The role is the gate: without it there is no access. The subscription then sets the access level and the
-            cut-off. A role with no subscription at all counts as a manual grant.
+            ID as on the live site. TIA Elite, variation <code>19195</code> of the variable product <code>244</code>, counts as a TIA Pro
+            subscription too. TIA Premium, variation <code>247</code>, never counts. The role is the gate: without it there is no access.
+            The subscription then sets the access level and the cut-off. A role with no subscription at all counts as a manual grant.
         </div>
         <p>
             Log in at <a href="http://localhost:8000/wp-login.php">http://localhost:8000/wp-login.php</a> with the login or the email.
@@ -531,6 +536,36 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
                 <td><code>password</code></td>
                 <td><code>fx-sub-no-role@example.test</code></td>
                 <td>Active TIA Pro subscription, no TIA Pro role: denied</td>
+            </tr>
+            <tr>
+                <td><code>fx-elite</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-elite@example.test</code></td>
+                <td>TIA Pro role + active TIA Elite subscription: full access (match on the variation)</td>
+            </tr>
+            <tr>
+                <td><code>fx-premium</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-premium@example.test</code></td>
+                <td>TIA Premium role + active TIA Premium subscription: Upgrade card</td>
+            </tr>
+            <tr>
+                <td><code>fx-stale-pro-role</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-stale-pro-role@example.test</code></td>
+                <td>TIA Pro role left over, dead TIA Pro + active TIA Premium subscription: Purchase card</td>
+            </tr>
+            <tr>
+                <td><code>fx-active-membership</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-active-membership@example.test</code></td>
+                <td>Another paid role, <code>active_membership</code>: Upgrade card</td>
+            </tr>
+            <tr>
+                <td><code>fx-two-member-subs</code></td>
+                <td><code>password</code></td>
+                <td><code>fx-two-member-subs@example.test</code></td>
+                <td>TIA Pro role + TIA Pro in trial + full TIA Elite: full access (full beats trial)</td>
             </tr>
         </table>
 
@@ -615,6 +650,36 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
                 <td>19339 <code>active</code></td>
                 <td>Denied</td>
             </tr>
+            <tr>
+                <td><code>fx-elite</code></td>
+                <td><code>tia_pro_-_annual</code></td>
+                <td>19195 <code>active</code>, renews every 3 years</td>
+                <td>Full</td>
+            </tr>
+            <tr>
+                <td><code>fx-premium</code></td>
+                <td><code>tia_premium_-_annually</code></td>
+                <td>247 <code>active</code>, renews in 10 months</td>
+                <td>Upgrade card</td>
+            </tr>
+            <tr>
+                <td><code>fx-stale-pro-role</code></td>
+                <td><code>tia_pro_-_annual</code></td>
+                <td>19339 <code>cancelled</code> + 247 <code>active</code></td>
+                <td>Purchase card</td>
+            </tr>
+            <tr>
+                <td><code>fx-active-membership</code></td>
+                <td><code>active_membership</code></td>
+                <td>—</td>
+                <td>Upgrade card</td>
+            </tr>
+            <tr>
+                <td><code>fx-two-member-subs</code></td>
+                <td><code>tia_pro_-_annual</code></td>
+                <td>19339 <code>active</code>, trial ends in 5 days + 19195 <code>active</code></td>
+                <td>Full</td>
+            </tr>
         </table>
 
         <p>
@@ -622,6 +687,28 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
             local cron cannot change a subscription later. The seed itself changes no option except the role list, plus one option that
             records the roles it made. WooCommerce adds a few cache transients on the side.
         </p>
+
+        <h3>Test switches</h3>
+        <p>
+            The seed also links the test mu-plugin, <code>tests/mu-plugins/tia-elements-test.php</code>, into
+            <code>wp-content/mu-plugins/</code>. The link points to the active copy of the plugin.
+            <code>bun run wp:seed clean</code> removes the link. <code>bun run wp:use</code> points it to the copy it activates. The
+            mu-plugin does nothing until a request turns a switch on, with the header <code>X-Tia-Elements-Test</code> or the cookie
+            <code>tia_elements_test</code>. Give a comma-separated list of switch names.
+        </p>
+
+        <table>
+            <tr>
+                <th>Switch</th>
+                <th>Effect</th>
+                <th>Example</th>
+            </tr>
+            <tr>
+                <td><code>wcs-unavailable</code></td>
+                <td>Every WooCommerce Subscriptions read of a user's subscriptions throws. A Member sees the Unavailable card.</td>
+                <td><code>curl -H 'X-Tia-Elements-Test: wcs-unavailable' http://localhost:8000/forward-returns/</code></td>
+            </tr>
+        </table>
 
         <h2>Everyday tasks</h2>
 
@@ -697,8 +784,21 @@ wp plugin activate woocommerce woocommerce-subscriptions</code></pre>
                     The seed stops with "exists and is not a seed user", "is not a seed product" or "belongs to a product the seed did not
                     make"
                 </td>
-                <td>A user, post or SKU without the seed marker uses a fixture login, ID 19339 or the test SKU</td>
+                <td>
+                    A user, post or SKU without the seed marker uses a fixture login, one of the IDs 19339, 244, 247 and 19195, or the test
+                    SKU
+                </td>
                 <td>Remove or rename that user or post. The seed never deletes data it did not make.</td>
+            </tr>
+            <tr>
+                <td>The seed stops with "exists and is not the seed link"</td>
+                <td>A real file sits at <code>wp-content/mu-plugins/tia-elements-test.php</code></td>
+                <td>Move that file away. The seed replaces only its own link.</td>
+            </tr>
+            <tr>
+                <td>The seed stops with "No copy of tia-wordpress-elements is active"</td>
+                <td>The plugin is inactive, so the seed cannot tell which copy to link</td>
+                <td><code>bun run wp:use</code>, then run the seed again</td>
             </tr>
             <tr>
                 <td>A self-check line does not read <code>ok</code></td>

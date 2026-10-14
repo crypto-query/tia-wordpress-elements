@@ -6,6 +6,7 @@ parameters:
     phpVersion: 80300
     bootstrapFiles:
         - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+        - tests/phpstan/woocommerce-subscriptions.stub
     paths:
         - tia-wordpress-elements.php
         - uninstall.php

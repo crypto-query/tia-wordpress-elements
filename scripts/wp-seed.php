@@ -4,7 +4,8 @@
  *
  * Run through `bun run wp:seed` (add `clean` to only remove the data). Each run removes
  * what the previous run made: users, subscriptions, products and pages that carry the seed marker,
- * then makes them again with dates relative to now (UTC), and checks the result.
+ * then makes them again with dates relative to now (UTC), and checks the result. It also links
+ * the test mu-plugin, tests/mu-plugins/tia-elements-test.php, into wp-content/mu-plugins/.
  *
  * @package tia-wordpress-elements
  */
@@ -13,9 +14,16 @@ defined( 'WP_CLI' ) || exit;
 
 const TIA_ELEMENTS_SEED_MARKER    = '_tia_elements_seed';
 const TIA_ELEMENTS_SEED_ROLES_OPT = 'tia_elements_seed_roles';
-const TIA_ELEMENTS_SEED_PRO_ID    = 19339;
 const TIA_ELEMENTS_SEED_OTHER_SKU = 'tia-seed-other-subscription';
-const TIA_ELEMENTS_SEED_PAGES     = array(
+const TIA_ELEMENTS_SEED_MU_FILE   = 'tia-elements-test.php';
+// The live IDs. Variations come before their parent, so `clean` deletes in this order.
+const TIA_ELEMENTS_SEED_IDS   = array(
+	'pro'        => 19339,
+	'premium'    => 247,
+	'elite'      => 19195,
+	'membership' => 244,
+);
+const TIA_ELEMENTS_SEED_PAGES = array(
 	'forward-returns' => array(
 		'title'   => 'Forward Returns',
 		'content' => '<!-- wp:tia-elements/forward-returns /-->',
@@ -174,6 +182,81 @@ function tia_elements_seed_fixtures( $now ) {
 				),
 			),
 		),
+		'fx-elite'               => array(
+			'role' => $pro,
+			'subs' => array(
+				array(
+					'product' => 'elite',
+					'status'  => 'active',
+					'start'   => $months( -6 ),
+					'set'     => array( 'next_payment' => $months( 30 ) ),
+					'expect'  => array_merge( $none, array( 'next_payment' => $months( 30 ) ) ),
+				),
+			),
+		),
+		'fx-premium'             => array(
+			'role' => 'tia_premium_-_annually',
+			'subs' => array(
+				array(
+					'product' => 'premium',
+					'status'  => 'active',
+					'start'   => $months( -2 ),
+					'set'     => array( 'next_payment' => $months( 10 ) ),
+					'expect'  => array_merge( $none, array( 'next_payment' => $months( 10 ) ) ),
+				),
+			),
+		),
+		'fx-stale-pro-role'      => array(
+			'role' => $pro,
+			'subs' => array(
+				array(
+					'product' => 'pro',
+					'status'  => 'cancelled',
+					'start'   => $months( -14 ),
+					'set'     => array(),
+					'expect'  => array(),
+				),
+				array(
+					'product' => 'premium',
+					'status'  => 'active',
+					'start'   => $months( -1 ),
+					'set'     => array( 'next_payment' => $months( 11 ) ),
+					'expect'  => array_merge( $none, array( 'next_payment' => $months( 11 ) ) ),
+				),
+			),
+		),
+		'fx-active-membership'   => array(
+			'role' => 'active_membership',
+			'subs' => array(),
+		),
+		'fx-two-member-subs'     => array(
+			'role' => $pro,
+			'subs' => array(
+				array(
+					'product' => 'pro',
+					'status'  => 'active',
+					'start'   => $days( -2 ),
+					'set'     => array(
+						'trial_end'    => $days( 5 ),
+						'next_payment' => $days( 5 ),
+					),
+					'expect'  => array_merge(
+						$none,
+						array(
+							'trial_end'    => $days( 5 ),
+							'next_payment' => $days( 5 ),
+						)
+					),
+				),
+				array(
+					'product' => 'elite',
+					'status'  => 'active',
+					'start'   => $months( -3 ),
+					'set'     => array( 'next_payment' => $months( 33 ) ),
+					'expect'  => array_merge( $none, array( 'next_payment' => $months( 33 ) ) ),
+				),
+			),
+		),
 	);
 }
 
@@ -190,19 +273,22 @@ function tia_elements_seed_is_ours( $thing ) {
 }
 
 /**
- * The seed products that exist now, keyed `pro` and `other`. Fails on a foreign post at 19339.
+ * The seed products that exist now, keyed as TIA_ELEMENTS_SEED_IDS plus `other`.
+ * Fails on a foreign post at one of the live IDs.
  *
  * @return array<string, WC_Product>
  */
 function tia_elements_seed_products() {
 	$found = array();
-	$pro   = get_post( TIA_ELEMENTS_SEED_PRO_ID );
-	if ( $pro ) {
-		$product = wc_get_product( $pro );
-		if ( ! tia_elements_seed_is_ours( $product ) ) {
-			WP_CLI::error( sprintf( 'Post %d exists and is not a seed product. Remove it or pick another site.', TIA_ELEMENTS_SEED_PRO_ID ) );
+	foreach ( TIA_ELEMENTS_SEED_IDS as $key => $id ) {
+		if ( ! get_post( $id ) ) {
+			continue;
 		}
-		$found['pro'] = $product;
+		$product = wc_get_product( $id );
+		if ( ! tia_elements_seed_is_ours( $product ) ) {
+			WP_CLI::error( sprintf( 'Post %d exists and is not a seed product. Remove it or pick another site.', $id ) );
+		}
+		$found[ $key ] = $product;
 	}
 	$other = wc_get_product( wc_get_product_id_by_sku( TIA_ELEMENTS_SEED_OTHER_SKU ) );
 	if ( $other ) {
@@ -299,7 +385,7 @@ function tia_elements_seed_remove_roles() {
 }
 
 /**
- * Adds the two paid roles if missing, with the `read` capability they carry on the live site.
+ * Adds the paid roles if missing, with the `read` capability they carry on the live site.
  * Records the ones it adds, so `clean` removes only those.
  */
 function tia_elements_seed_add_roles() {
@@ -307,6 +393,8 @@ function tia_elements_seed_add_roles() {
 	$roles = array(
 		'tia_pro_-_annual'        => 'TIA Pro - Annual',
 		'tia_standard_-_annually' => 'TIA Standard - Annually',
+		'tia_premium_-_annually'  => 'TIA Premium - Annually',
+		'active_membership'       => 'Active Membership',
 	);
 	foreach ( $roles as $slug => $name ) {
 		if ( ! get_role( $slug ) ) {
@@ -320,28 +408,130 @@ function tia_elements_seed_add_roles() {
 }
 
 /**
- * Makes one yearly subscription product.
+ * Saves a subscription product or variation that renews every `$years` years.
  *
- * @param string $name  Product name.
- * @param string $price Yearly price in the store currency.
- * @param string $sku   SKU, or empty.
+ * @param WC_Product $product  A new WC_Product_Subscription or WC_Product_Subscription_Variation.
+ * @param string     $name     Product name.
+ * @param string     $price    Price per period in the store currency.
+ * @param int        $years    Years per period.
  */
-function tia_elements_seed_product( $name, $price, $sku ) {
-	$product = new WC_Product_Subscription();
+function tia_elements_seed_product( $product, $name, $price, $years ) {
 	$product->set_name( $name );
 	$product->set_status( 'publish' );
 	$product->set_regular_price( $price );
 	$product->set_virtual( true );
-	$product->set_sku( $sku );
 	$product->update_meta_data( '_subscription_price', $price );
 	$product->update_meta_data( '_subscription_period', 'year' );
-	$product->update_meta_data( '_subscription_period_interval', '1' );
+	$product->update_meta_data( '_subscription_period_interval', (string) $years );
 	$product->update_meta_data( '_subscription_length', '0' );
 	$product->update_meta_data( '_subscription_trial_length', '0' );
 	$product->update_meta_data( '_subscription_sign_up_fee', '0' );
 	$product->update_meta_data( TIA_ELEMENTS_SEED_MARKER, '1' );
 	$product->save();
 	return $product;
+}
+
+/**
+ * Makes the variable subscription with its TIA Premium and TIA Elite variations, at their live IDs.
+ *
+ * @return array<string, WC_Product>
+ */
+function tia_elements_seed_membership() {
+	$plan = new WC_Product_Attribute();
+	$plan->set_name( 'Plan' );
+	$plan->set_options( array( 'TIA Premium', 'TIA Elite' ) );
+	$plan->set_visible( true );
+	$plan->set_variation( true );
+
+	$parent = tia_elements_seed_with_id(
+		'membership',
+		function () use ( $plan ) {
+			$parent = new WC_Product_Variable_Subscription();
+			$parent->set_name( 'TIA Membership - Annual' );
+			$parent->set_status( 'publish' );
+			$parent->set_virtual( true );
+			$parent->set_attributes( array( $plan ) );
+			$parent->update_meta_data( TIA_ELEMENTS_SEED_MARKER, '1' );
+			$parent->save();
+			return $parent;
+		}
+	);
+
+	$variations = array(
+		'premium' => array( 'TIA Premium', '1497', 1 ),
+		'elite'   => array( 'TIA Elite', '6999', 3 ),
+	);
+	$made       = array( 'membership' => $parent );
+	foreach ( $variations as $key => list( $label, $price, $years ) ) {
+		$made[ $key ] = tia_elements_seed_with_id(
+			$key,
+			function () use ( $parent, $label, $price, $years ) {
+				$variation = new WC_Product_Subscription_Variation();
+				$variation->set_parent_id( $parent->get_id() );
+				$variation->set_attributes( array( 'plan' => $label ) );
+				return tia_elements_seed_product( $variation, 'TIA Membership - Annual - ' . $label, $price, $years );
+			}
+		);
+	}
+	WC_Product_Variable::sync( $parent->get_id() );
+	return $made;
+}
+
+/**
+ * Runs `$make` with the next new product or variation forced to its live ID. Fails if it gets another.
+ *
+ * @param string                 $key  A key of TIA_ELEMENTS_SEED_IDS.
+ * @param callable(): WC_Product $make Makes and saves the product.
+ */
+function tia_elements_seed_with_id( $key, $make ) {
+	$id    = TIA_ELEMENTS_SEED_IDS[ $key ];
+	$force = function ( $data ) use ( $id ) {
+		$data['import_id'] = $id;
+		return $data;
+	};
+	add_filter( 'woocommerce_new_product_data', $force );
+	add_filter( 'woocommerce_new_product_variation_data', $force );
+	$product = $make();
+	remove_filter( 'woocommerce_new_product_data', $force );
+	remove_filter( 'woocommerce_new_product_variation_data', $force );
+	if ( $id !== $product->get_id() ) {
+		WP_CLI::error( sprintf( 'Product %s got ID %d, not %d.', $key, $product->get_id(), $id ) );
+	}
+	return $product;
+}
+
+/**
+ * Removes the test mu-plugin link. Fails if a real file sits at its path.
+ */
+function tia_elements_seed_unlink_mu_plugin() {
+	$link = WPMU_PLUGIN_DIR . '/' . TIA_ELEMENTS_SEED_MU_FILE;
+	if ( is_link( $link ) ) {
+		wp_delete_file( $link );
+	} elseif ( file_exists( $link ) ) {
+		WP_CLI::error( sprintf( '%s exists and is not the seed link.', $link ) );
+	}
+}
+
+/**
+ * Links the test mu-plugin of the active copy of this plugin (main checkout or a worktree)
+ * into wp-content/mu-plugins/, relative, so `bun run wp:use` can re-point it.
+ */
+function tia_elements_seed_link_mu_plugin() {
+	$slug = '';
+	foreach ( (array) get_option( 'active_plugins', array() ) as $plugin ) {
+		if ( preg_match( '#^(tia-wordpress-elements(?:--[^/]+)?)/tia-wordpress-elements\.php$#', $plugin, $m ) ) {
+			$slug = $m[1];
+		}
+	}
+	if ( ! $slug ) {
+		WP_CLI::error( 'No copy of tia-wordpress-elements is active. Run `bun run wp:use` first.' );
+	}
+	$link   = WPMU_PLUGIN_DIR . '/' . TIA_ELEMENTS_SEED_MU_FILE;
+	$target = '../plugins/' . $slug . '/tests/mu-plugins/' . TIA_ELEMENTS_SEED_MU_FILE;
+	if ( ! wp_mkdir_p( WPMU_PLUGIN_DIR ) || ! symlink( $target, $link ) ) {
+		WP_CLI::error( sprintf( 'Could not link %s.', $link ) );
+	}
+	WP_CLI::log( sprintf( 'Mu-plugin: %s -> %s', $link, $target ) );
 }
 
 /**
@@ -357,8 +547,8 @@ function tia_elements_seed_subscription( $user_id, $product, $spec ) {
 			'customer_id'      => $user_id,
 			'start_date'       => $spec['start'],
 			'date_created'     => $spec['start'],
-			'billing_period'   => 'year',
-			'billing_interval' => 1,
+			'billing_period'   => WC_Subscriptions_Product::get_period( $product ),
+			'billing_interval' => (int) WC_Subscriptions_Product::get_interval( $product ),
 		)
 	);
 	if ( is_wp_error( $sub ) ) {
@@ -398,8 +588,19 @@ function tia_elements_seed_subscription( $user_id, $product, $spec ) {
  * @return int Number of mismatches.
  */
 function tia_elements_seed_check( $fixtures, $products ) {
-	$errors = 0;
-	$fmt    = fn( $date ) => $date ? str_replace( ' ', 'T', $date ) . 'Z' : '-';
+	$errors   = 0;
+	$fmt      = fn( $date ) => $date ? str_replace( ' ', 'T', $date ) . 'Z' : '-';
+	$spec_key = fn( $spec ) => $products[ $spec['product'] ]->get_id() . ':' . $spec['status'];
+	// A variation subscription matches on its variation ID.
+	$sub_key = function ( $sub ) {
+		$items = $sub->get_items();
+		$item  = $items ? reset( $items ) : null;
+		$id    = 0;
+		if ( $item ) {
+			$id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+		}
+		return $id . ':' . $sub->get_status();
+	};
 	foreach ( $fixtures as $login => $fixture ) {
 		$user = get_user_by( 'login', $login );
 		WCS_Customer_Store::instance()->delete_cache_for_user( $user->ID );
@@ -410,12 +611,8 @@ function tia_elements_seed_check( $fixtures, $products ) {
 		if ( array( $fixture['role'] ) !== array_values( $user->roles ) ) {
 			$bad[] = 'role';
 		}
-		$want = array_map( fn( $s ) => $products[ $s['product'] ]->get_id() . ':' . $s['status'], $fixture['subs'] );
-		$have = array();
-		foreach ( $subs as $sub ) {
-			$items  = $sub->get_items();
-			$have[] = ( $items ? reset( $items )->get_product_id() : 0 ) . ':' . $sub->get_status();
-		}
+		$want = array_map( $spec_key, $fixture['subs'] );
+		$have = array_map( $sub_key, $subs );
 		sort( $want );
 		sort( $have );
 		if ( $want !== $have ) {
@@ -423,9 +620,9 @@ function tia_elements_seed_check( $fixtures, $products ) {
 		}
 
 		foreach ( $fixture['subs'] as $spec ) {
-			$match = array_filter( $subs, fn( $s ) => $s->get_status() === $spec['status'] );
+			$match = array_filter( $subs, fn( $s ) => $sub_key( $s ) === $spec_key( $spec ) );
 			$sub   = reset( $match );
-			$line  = $spec['status'];
+			$line  = $spec_key( $spec );
 			foreach ( array( 'trial_end', 'next_payment', 'end' ) as $type ) {
 				$value = $sub && $sub->get_date( $type ) ? $sub->get_date( $type ) : '';
 				$line .= ' ' . $type . '=' . $fmt( $value );
@@ -478,6 +675,7 @@ function tia_elements_seed_run( $cli_args ) {
 	$fixtures = tia_elements_seed_fixtures( $now );
 	tia_elements_seed_clean( $fixtures );
 	tia_elements_seed_clean_pages();
+	tia_elements_seed_unlink_mu_plugin();
 	if ( in_array( 'clean', (array) $cli_args, true ) ) {
 		tia_elements_seed_remove_roles();
 		WP_CLI::success( 'Seed data removed.' );
@@ -486,13 +684,16 @@ function tia_elements_seed_run( $cli_args ) {
 
 	tia_elements_seed_add_roles();
 
-	add_filter( 'woocommerce_new_product_data', 'tia_elements_seed_force_pro_id' );
-	$products = array( 'pro' => tia_elements_seed_product( 'TIA Pro', '2999', '' ) );
-	remove_filter( 'woocommerce_new_product_data', 'tia_elements_seed_force_pro_id' );
-	if ( TIA_ELEMENTS_SEED_PRO_ID !== $products['pro']->get_id() ) {
-		WP_CLI::error( sprintf( 'TIA Pro got ID %d, not %d.', $products['pro']->get_id(), TIA_ELEMENTS_SEED_PRO_ID ) );
-	}
-	$products['other'] = tia_elements_seed_product( 'Test: other subscription', '99', TIA_ELEMENTS_SEED_OTHER_SKU );
+	$products = array(
+		'pro' => tia_elements_seed_with_id(
+			'pro',
+			fn() => tia_elements_seed_product( new WC_Product_Subscription(), 'TIA Pro', '2999', 1 )
+		),
+	);
+	$products = array_merge( $products, tia_elements_seed_membership() );
+	$other    = new WC_Product_Subscription();
+	$other->set_sku( TIA_ELEMENTS_SEED_OTHER_SKU );
+	$products['other'] = tia_elements_seed_product( $other, 'Test: other subscription', '99', 1 );
 
 	foreach ( $fixtures as $login => $fixture ) {
 		$user_id = wp_insert_user(
@@ -513,22 +714,13 @@ function tia_elements_seed_run( $cli_args ) {
 	}
 
 	tia_elements_seed_pages();
+	tia_elements_seed_link_mu_plugin();
 	WP_CLI::log( 'Currency: ' . get_woocommerce_currency() . ', TIA Pro price: ' . wp_strip_all_tags( $products['pro']->get_price_html() ) );
 	$errors = tia_elements_seed_check( $fixtures, $products );
 	if ( $errors ) {
 		WP_CLI::error( sprintf( '%d mismatches against the fixture table.', $errors ) );
 	}
 	WP_CLI::success( sprintf( 'Seeded %d users.', count( $fixtures ) ) );
-}
-
-/**
- * Makes WordPress give the TIA Pro product its live ID.
- *
- * @param array<string, mixed> $data Post data for wp_insert_post().
- */
-function tia_elements_seed_force_pro_id( $data ) {
-	$data['import_id'] = TIA_ELEMENTS_SEED_PRO_ID;
-	return $data;
 }
 
 tia_elements_seed_run( $args ?? array() );

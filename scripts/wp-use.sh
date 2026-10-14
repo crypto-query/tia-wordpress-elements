@@ -35,3 +35,9 @@ if [[ -n "$worktree" ]]; then
 fi
 
 wp plugin activate "$slug"
+
+# `bun run wp:seed` makes the test mu-plugin link; keep it on the copy that is now active.
+MU=/var/www/html/wp-content/mu-plugins/tia-elements-test.php
+if docker exec "$C" test -L "$MU"; then
+    docker exec "$C" ln -sfn "../plugins/$slug/tests/mu-plugins/tia-elements-test.php" "$MU"
+fi

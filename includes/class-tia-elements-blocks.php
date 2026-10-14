@@ -97,9 +97,11 @@ final class TIA_Elements_Blocks {
 				'root'  => esc_url_raw( rest_url() ),
 				'nonce' => wp_create_nonce( 'wp_rest' ),
 			),
-			'card'       => TIA_Elements_Card::for_visitor(
-				current_user_can( 'manage_options' ),
+			'card'       => TIA_Elements_Card::for_access(
+				TIA_Elements_Entitlement::current(),
 				$logged_in,
+				wp_get_current_user()->roles,
+				TIA_Elements_Settings::from_wordpress()->member_roles(),
 				$product ? $product->get_price_html() : '',
 				$product ? $product->get_permalink() : '',
 				wp_login_url( $permalink ? $permalink : '' )

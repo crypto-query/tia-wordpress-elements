@@ -1,0 +1,51 @@
+<?php
+/**
+ * The WooCommerce Subscriptions symbols the plugin calls. No stub package exists for WCS.
+ *
+ * @package tia-wordpress-elements
+ */
+
+/**
+ * @param int $user_id The user; 0 for the current user.
+ * @return array<int, mixed> Subscriptions keyed by ID.
+ */
+function wcs_get_users_subscriptions( $user_id = 0 ) {}
+
+abstract class WCS_Customer_Store {
+
+	/**
+	 * @return WCS_Customer_Store
+	 */
+	final public static function instance() {}
+
+	/**
+	 * @param int $user_id The user.
+	 * @return array<int, int>
+	 */
+	abstract public function get_users_subscription_ids( $user_id );
+}
+
+class WCS_Customer_Store_Cached_CPT extends WCS_Customer_Store {
+
+	/**
+	 * @param int $user_id The user.
+	 * @return array<int, int>
+	 */
+	public function get_users_subscription_ids( $user_id ) {}
+
+	/**
+	 * @param int $user_id The user.
+	 * @return void
+	 */
+	public function delete_cache_for_user( $user_id ) {}
+}
+
+class WC_Subscription extends WC_Order {
+
+	/**
+	 * @param string $date_type     'start', 'trial_end', 'next_payment', 'end', ...
+	 * @param string $timezone      'gmt' or 'site'.
+	 * @return int UTC epoch; 0 when the date is unset.
+	 */
+	public function get_time( $date_type, $timezone = 'gmt' ) {}
+}

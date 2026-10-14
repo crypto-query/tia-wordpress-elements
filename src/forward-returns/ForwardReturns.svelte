@@ -1,10 +1,10 @@
 <script lang="ts">
+    import AccessCard from "../shared/AccessCard.svelte";
     import type { Boot } from "../shared/boot";
-    import PurchaseCard from "../shared/PurchaseCard.svelte";
 
     let { boot }: { boot: Boot } = $props();
 </script>
 
-{#if boot.card?.case === "purchase"}
-    <PurchaseCard feature="Forward Returns" priceHtml={boot.card.priceHtml} ctaUrl={boot.card.ctaUrl} loginUrl={boot.card.loginUrl} />
+{#if boot.card}
+    <AccessCard feature="Forward Returns" card={boot.card} />
 {/if}
