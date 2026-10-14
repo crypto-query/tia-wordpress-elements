@@ -146,4 +146,23 @@ describe("ForwardReturns", () => {
         await userEvent.click(await screen.findByRole("option", { name: "Gold" }));
         expect(getForwardReturns).toHaveBeenLastCalledWith({ base: "xau", quote: "usd", period: 1 }, expect.any(AbortSignal));
     });
+
+    it("typing in the asset search filters the list, and picking the filtered row changes the asset", async () => {
+        vi.mocked(getAssets).mockResolvedValue([
+            asset,
+            { title: "ETH", base: "eth", quote: "usd", group: "Crypto", periods: [3, 6] },
+            { title: "Gold", base: "xau", quote: "usd", group: "Metals", periods: [1, 12] }
+        ]);
+        vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
+        render(ForwardReturns, { boot });
+        await screen.findByRole("table");
+
+        await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
+        await userEvent.type(await screen.findByRole("combobox", { name: "Search assets…" }), "eth");
+
+        await waitFor(() => expect(screen.getAllByRole("option").map((option) => option.textContent?.trim())).toEqual(["ETH"]));
+        expect(screen.queryByRole("group", { name: "Metals" })).toBeNull();
+        await userEvent.click(screen.getByRole("option", { name: "ETH" }));
+        expect(getForwardReturns).toHaveBeenLastCalledWith({ base: "eth", quote: "usd", period: 6 }, expect.any(AbortSignal));
+    });
 });

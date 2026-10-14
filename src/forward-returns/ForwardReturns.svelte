@@ -2,8 +2,8 @@
     import { onMount } from "svelte";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
+    import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
     import RadioGroup from "tia-design-system/ui/radio-group/RadioGroup.svelte";
-    import Select from "tia-design-system/ui/select/Select.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
@@ -141,9 +141,10 @@
         {/if}
     {:else}
         <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end">
-            <Select
+            <Combobox
                 label="Asset"
                 class="sm:w-64"
+                searchPlaceholder="Search assets…"
                 items={assets.map((asset) => ({ value: assetKey(asset), label: asset.title, group: asset.group }))}
                 portalTarget={root}
                 value={assetKey(selection)}

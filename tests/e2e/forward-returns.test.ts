@@ -104,6 +104,8 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
 
     await block(page).getByRole("combobox", { name: "Asset" }).click();
     await expect(block(page).getByRole("group", { name: "Crypto" }).getByRole("option")).toHaveText(["Bitcoin - BTC", "Ethereum - ETH"]);
+    await block(page).getByRole("combobox", { name: "Search assets…" }).fill("eth");
+    await expect(block(page).getByRole("option")).toHaveText(["Ethereum - ETH"]);
     await block(page).getByRole("option", { name: "Ethereum - ETH" }).click();
     await expect(block(page).getByRole("radio", { name: "Quarterly" })).toBeChecked();
     await expect(block(page).getByRole("radio")).toHaveCount(2);
