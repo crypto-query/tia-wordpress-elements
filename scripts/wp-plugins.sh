@@ -9,6 +9,7 @@ PLUGINS=(
     "woocommerce 11.2.1"
     "woocommerce-subscriptions 9.3.0"
     "block-visibility 3.8.1"
+    "spectra-pro 1.3.2"
 )
 
 cd "$(dirname "$0")/.."
