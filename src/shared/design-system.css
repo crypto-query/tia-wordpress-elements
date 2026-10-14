@@ -7,10 +7,12 @@
     @import "tailwindcss/preflight.css";
 }
 
-/* The Block root. `all: initial` cuts every property the theme lets inherit into the Block. */
+/* The Block root. `all: initial` cuts every property the theme lets inherit into the Block, except the
+   font size: the Block's typography setting scales its text. Design-system tokens are px, so controls keep theirs. */
 .tia-design-system {
     all: initial;
     display: block;
+    font-size: inherit;
     font-family: var(--font-secondary), var(--font-system);
     background-color: var(--background);
     color: var(--foreground);

@@ -28,11 +28,15 @@ export function entryMonths(period: number, offset = 0): number[] {
 export const cellValue = (year: YearReturns, month: number): number | null =>
     year.months.find((entry) => entry.month === month)?.value ?? null;
 
+// Sign and tone follow the shown 2 decimals, so a value that shows as 0.00% is a 0.
+const shown = (value: number) => Number(value.toFixed(2));
+
 /** "+3.21%", "−2.10%" with U+2212, "0.00%" for a real 0, "" for null. */
 export function formatReturn(value: number | null): string {
     if (value === null) {
         return "";
     }
+    value = shown(value);
     const sign = value > 0 ? "+" : value < 0 ? "\u2212" : "";
     return `${sign}${Math.abs(value).toFixed(2)}%`;
 }
@@ -41,5 +45,6 @@ export function toneOf(value: number | null): Tone {
     if (value === null) {
         return "none";
     }
+    value = shown(value);
     return value > 0 ? "positive" : value < 0 ? "negative" : "zero";
 }

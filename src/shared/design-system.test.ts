@@ -91,6 +91,10 @@ describe("the shared Block stylesheet", () => {
         expect(css).not.toMatch(/@font-face|@import/);
     });
 
+    it("lets the Block root inherit its font size", () => {
+        expect(css).toMatch(/\.tia-design-system\s*\{\s*all:\s*initial;[^}]*font-size:\s*inherit/);
+    });
+
     it("includes the classes the design-system components use", () => {
         expect(css).toContain(".tia-design-system.tia-design-system .rounded-full");
         expect(css).toContain(".tia-design-system input:where([type='text'])");

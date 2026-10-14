@@ -84,7 +84,9 @@ describe("formatReturn", () => {
         [0, "0.00%"],
         [-0, "0.00%"],
         [12.345678, "+12.35%"],
-        [-0.001, "\u22120.00%"],
+        [-0.001, "0.00%"],
+        [0.004, "0.00%"],
+        [-0.005, "\u22120.01%"],
         [null, ""]
     ])("formats %s as %j", (value, text) => {
         expect(formatReturn(value)).toBe(text);
@@ -96,6 +98,8 @@ describe("toneOf", () => {
         [3.21, "positive"],
         [-2.1, "negative"],
         [0, "zero"],
+        [-0.001, "zero"],
+        [0.004, "zero"],
         [null, "none"]
     ] as const)("tones %s as %s", (value, tone) => {
         expect(toneOf(value)).toBe(tone);
