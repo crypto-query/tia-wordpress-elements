@@ -164,6 +164,46 @@ final class SettingsTest extends TestCase {
 	}
 
 	/**
+	 * Without a saved list, the Forward Returns assets are the ten reference assets with their groups.
+	 */
+	public function test_forward_returns_assets_default(): void {
+		$expected = array(
+			array( 'btc', 'usd', 'Crypto' ),
+			array( 'eth', 'usd', 'Crypto' ),
+			array( 'sol', 'usd', 'Crypto' ),
+			array( 'xauusd', 'usd', 'Metals' ),
+			array( 'xagusd', 'usd', 'Metals' ),
+			array( '^dji', 'usd', 'Indices' ),
+			array( '^ndx', 'usd', 'Indices' ),
+			array( '^spx', 'usd', 'Indices' ),
+			array( 'xjo.indx', 'aud', 'Indices' ),
+			array( 'xao.indx', 'aud', 'Indices' ),
+		);
+
+		foreach ( array( array(), array( 'tia_forward_returns_assets' => '' ) ) as $options ) {
+			$assets = ( new TIA_Elements_Settings( $options, array() ) )->forward_returns_assets();
+
+			$this->assertSame( $expected, array_map( static fn( $asset ) => array( $asset['base'], $asset['quote'], $asset['group'] ), $assets ) );
+		}
+	}
+
+	/**
+	 * A saved list replaces the default, even when empty.
+	 */
+	public function test_forward_returns_assets_saved(): void {
+		$saved = array(
+			array(
+				'base'  => 'aapl',
+				'quote' => 'usd',
+				'group' => 'Stocks',
+			),
+		);
+
+		$this->assertSame( $saved, ( new TIA_Elements_Settings( array( 'tia_forward_returns_assets' => $saved ), array() ) )->forward_returns_assets() );
+		$this->assertSame( array(), ( new TIA_Elements_Settings( array( 'tia_forward_returns_assets' => array() ), array() ) )->forward_returns_assets() );
+	}
+
+	/**
 	 * A field absent from the form keeps the stored value, secret or not.
 	 */
 	public function test_absent_input_keeps_stored(): void {

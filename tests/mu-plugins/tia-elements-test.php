@@ -10,6 +10,7 @@
  *
  * Switches:
  * - `wcs-unavailable`: every WooCommerce Subscriptions read of a user's subscriptions throws.
+ * - `supabase-stub`: Supabase is configured with fake values, and month_returns reads answer with fixture rows.
  *
  * @package tia-wordpress-elements
  */
@@ -43,6 +44,67 @@ function tia_elements_test_wcs_store_class() {
 }
 
 /**
+ * Answers a month_returns read with fixture rows: the asset list, one asset's data, or one row for `limit`.
+ *
+ * @param string $url Request URL.
+ * @return false|array<string, mixed>
+ */
+function tia_elements_test_supabase( $url ) {
+	if ( ! str_ends_with( (string) wp_parse_url( $url, PHP_URL_PATH ), '/rest/v1/month_returns' ) ) {
+		return false;
+	}
+	// parse_str() decodes the query, so `%5Edji` reads as `^dji`.
+	parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+
+	$assets = array(
+		array( 'Bitcoin - BTC', 'btc', 'usd', array( 1, 3, 6, 12 ) ),
+		array( 'Bitcoin - BTC/EUR', 'btc', 'eur', array( 1 ) ),
+		array( 'Ethereum - ETH', 'eth', 'usd', array( 1, 3 ) ),
+		array( 'ASX 200 - XJO', 'xjo.indx', 'aud', array( 1, 12 ) ),
+		array( 'Dow Jones - DJI', '^dji', 'usd', array( 12 ) ),
+	);
+	$rows   = array();
+	foreach ( $assets as list( $title, $base, $quote, $periods ) ) {
+		foreach ( $periods as $period ) {
+			$rows[] = compact( 'title', 'base', 'quote', 'period' );
+		}
+	}
+
+	if ( isset( $query['limit'] ) ) {
+		$rows = array( array( 'base' => 'btc' ) );
+	} elseif ( isset( $query['base'] ) ) {
+		// Only btc/usd has data; any other asset reads no row.
+		$period = (int) substr( (string) ( $query['period'] ?? '' ), 3 );
+		$rows   = array();
+		if ( 'eq.btc' === $query['base'] && 'eq.usd' === ( $query['quote'] ?? '' ) && in_array( $period, array( 1, 3, 6, 12 ), true ) ) {
+			$rows[] = array(
+				'title'  => 'Bitcoin - BTC',
+				'base'   => 'btc',
+				'quote'  => 'usd',
+				'period' => $period,
+				// Years and months arrive unsorted; 2026 is all null; 2024 holds a real 0.
+				'data'   => array(
+					2024 => array_combine( range( 1, 12 ), array( 0.5, -3.2, 0, 4.75, -1.1, 2.4, 3.21, -2.1, 1.05, 6.3, -0.4, 2.2 ) ),
+					2026 => array_fill_keys( range( 1, 12 ), null ),
+					2025 => array_combine( range( 12, 1 ), array( null, null, null, null, null, null, null, -4.4, 1.9, 0.3, -2.75, 5.5 ) ),
+				),
+			);
+		}
+	}
+
+	return array(
+		'headers'  => array( 'content-type' => 'application/json' ),
+		'body'     => wp_json_encode( $rows ),
+		'response' => array(
+			'code'    => 200,
+			'message' => 'OK',
+		),
+		'cookies'  => array(),
+		'filename' => null,
+	);
+}
+
+/**
  * Answers outbound HTTP for the switches that stub it.
  *
  * @param false|array<string, mixed> $response The response so far; false sends the request.
@@ -52,7 +114,9 @@ function tia_elements_test_wcs_store_class() {
  */
 function tia_elements_test_http( $response, $args, $url ) {
 	// Switch name => callable( $url, $args ) returning a response array, or false to pass.
-	$stubs = array();
+	$stubs = array(
+		'supabase-stub' => 'tia_elements_test_supabase',
+	);
 	foreach ( array_intersect_key( $stubs, array_flip( tia_elements_test_switches() ) ) as $stub ) {
 		$stubbed = $stub( $url, $args );
 		if ( false !== $stubbed ) {
@@ -64,5 +128,9 @@ function tia_elements_test_http( $response, $args, $url ) {
 
 if ( in_array( 'wcs-unavailable', tia_elements_test_switches(), true ) ) {
 	add_filter( 'wcs_customer_store_class', 'tia_elements_test_wcs_store_class' );
+}
+if ( in_array( 'supabase-stub', tia_elements_test_switches(), true ) ) {
+	add_filter( 'pre_option_tia_supabase_url', static fn() => 'https://supabase.test' );
+	add_filter( 'pre_option_tia_supabase_key', static fn() => 'test-key' );
 }
 add_filter( 'pre_http_request', 'tia_elements_test_http', 10, 3 );

@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 
 /** Runs wp-cli on the Docker site and returns its trimmed output. */
@@ -23,4 +24,13 @@ export function restoreOption({ name, json }: OptionSnapshot): void {
     } else {
         wp("option", "update", name, json, "--format=json");
     }
+}
+
+/** Logs a seeded user (`bun run wp:seed`, password `password`) in through the login form. */
+export async function logIn(page: Page, login: string) {
+    await page.goto("/wp-login.php");
+    await page.getByLabel("Username or Email Address").fill(login);
+    await page.getByLabel("Password", { exact: true }).fill("password");
+    await page.getByRole("button", { name: "Log In" }).click();
+    await page.waitForURL((url) => !url.pathname.endsWith("/wp-login.php"));
 }

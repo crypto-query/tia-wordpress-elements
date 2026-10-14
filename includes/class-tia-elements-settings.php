@@ -63,6 +63,22 @@ final class TIA_Elements_Settings {
 
 	public const MEMBER_ROLES_DEFAULT = array( 'tia_pro_-_annual' );
 
+	public const FORWARD_RETURNS_ASSETS_OPTION = 'tia_forward_returns_assets';
+
+	/** Base, quote and group of each default Forward Returns asset. */
+	private const FORWARD_RETURNS_ASSETS_DEFAULT = array(
+		array( 'btc', 'usd', 'Crypto' ),
+		array( 'eth', 'usd', 'Crypto' ),
+		array( 'sol', 'usd', 'Crypto' ),
+		array( 'xauusd', 'usd', 'Metals' ),
+		array( 'xagusd', 'usd', 'Metals' ),
+		array( '^dji', 'usd', 'Indices' ),
+		array( '^ndx', 'usd', 'Indices' ),
+		array( '^spx', 'usd', 'Indices' ),
+		array( 'xjo.indx', 'aud', 'Indices' ),
+		array( 'xao.indx', 'aud', 'Indices' ),
+	);
+
 	/** Every option the plugin stores; uninstall deletes them all. */
 	public const OPTIONS = array(
 		'tia_supabase_url',
@@ -71,7 +87,7 @@ final class TIA_Elements_Settings {
 		'tia_stripe_key',
 		'tia_stripe_suite_product',
 		self::MEMBER_ROLES_OPTION,
-		'tia_forward_returns_assets',
+		self::FORWARD_RETURNS_ASSETS_OPTION,
 		'tia_predictive_cycles_assets',
 		'tia_decennial_cycles_assets',
 	);
@@ -113,7 +129,8 @@ final class TIA_Elements_Settings {
 				$constants[ $field['constant'] ] = constant( $field['constant'] );
 			}
 		}
-		$options[ self::MEMBER_ROLES_OPTION ] = get_option( self::MEMBER_ROLES_OPTION, null );
+		$options[ self::MEMBER_ROLES_OPTION ]           = get_option( self::MEMBER_ROLES_OPTION, null );
+		$options[ self::FORWARD_RETURNS_ASSETS_OPTION ] = get_option( self::FORWARD_RETURNS_ASSETS_OPTION, null );
 
 		return new self( array_filter( $options, static fn( $value ) => null !== $value ), $constants );
 	}
@@ -177,6 +194,32 @@ final class TIA_Elements_Settings {
 		return array(
 			'value'  => array_values( array_filter( $saved, 'is_string' ) ),
 			'source' => 'option',
+		);
+	}
+
+	/**
+	 * The enabled Forward Returns assets: the saved list, or the default while none is saved.
+	 *
+	 * @return list<array{base: string, quote: string, group: string}>
+	 */
+	public function forward_returns_assets(): array {
+		$saved = $this->options[ self::FORWARD_RETURNS_ASSETS_OPTION ] ?? null;
+		if ( is_array( $saved ) ) {
+			return array_values(
+				array_filter(
+					$saved,
+					static fn( $asset ) => is_array( $asset ) && is_string( $asset['base'] ?? null ) && is_string( $asset['quote'] ?? null ) && is_string( $asset['group'] ?? null )
+				)
+			);
+		}
+
+		return array_map(
+			static fn( array $asset ) => array(
+				'base'  => $asset[0],
+				'quote' => $asset[1],
+				'group' => $asset[2],
+			),
+			self::FORWARD_RETURNS_ASSETS_DEFAULT
 		);
 	}
 

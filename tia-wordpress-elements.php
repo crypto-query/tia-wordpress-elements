@@ -22,6 +22,11 @@ require_once __DIR__ . '/includes/class-tia-elements-wcs-reader.php';
 require_once __DIR__ . '/includes/class-tia-elements-entitlement.php';
 require_once __DIR__ . '/includes/class-tia-elements-card.php';
 require_once __DIR__ . '/includes/class-tia-elements-blocks.php';
+require_once __DIR__ . '/includes/class-tia-elements-supabase.php';
+require_once __DIR__ . '/includes/class-tia-elements-forward-returns.php';
+require_once __DIR__ . '/includes/class-tia-elements-forward-returns-service.php';
+require_once __DIR__ . '/includes/class-tia-elements-rest.php';
 
 TIA_Elements_Settings_Page::register();
 TIA_Elements_Blocks::register();
+TIA_Elements_Rest::register();

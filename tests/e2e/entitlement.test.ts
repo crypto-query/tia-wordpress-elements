@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { wp } from "./wp";
+import { logIn, wp } from "./wp";
 
 const bootCard = `echo wp_json_encode( TIA_Elements_Blocks::boot( 'tia-elements/forward-returns', array() )['card'] );`;
 
@@ -28,14 +28,6 @@ for (const [login, card] of users) {
         const boot = JSON.parse(wp("eval", bootCard, `--user=${login}`)) as { case: string } | null;
         expect(boot?.case ?? null).toBe(card);
     });
-}
-
-async function logIn(page: Page, login: string) {
-    await page.goto("/wp-login.php");
-    await page.getByLabel("Username or Email Address").fill(login);
-    await page.getByLabel("Password", { exact: true }).fill("password");
-    await page.getByRole("button", { name: "Log In" }).click();
-    await page.waitForURL((url) => !url.pathname.endsWith("/wp-login.php"));
 }
 
 function block(page: Page) {

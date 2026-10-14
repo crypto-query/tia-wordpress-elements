@@ -78,6 +78,13 @@ export default [
             "no-console": "error"
         }
     },
+    // A rejected (400) REST request is a client bug; the reader sees "not available", so the console carries it.
+    {
+        files: ["src/shared/api.ts"],
+        rules: {
+            "no-console": ["error", { allow: ["error"] }]
+        }
+    },
 
     // Global settings
     {

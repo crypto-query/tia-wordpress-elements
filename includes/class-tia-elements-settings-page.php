@@ -18,6 +18,8 @@ final class TIA_Elements_Settings_Page {
 
 	private const SECTION = 'tia_elements_settings_main';
 
+	private const TEST_ACTION = 'tia_elements_test_connection';
+
 	/**
 	 * Hooks the page into the admin.
 	 */
@@ -205,8 +207,73 @@ final class TIA_Elements_Settings_Page {
 				submit_button();
 				?>
 			</form>
+			<h2><?php esc_html_e( 'Test connection', 'tia-wordpress-elements' ); ?></h2>
+			<?php self::render_connection_checks(); ?>
+			<form method="post">
+				<?php
+				wp_nonce_field( self::TEST_ACTION, self::TEST_ACTION . '_nonce' );
+				submit_button( __( 'Test connection', 'tia-wordpress-elements' ), 'secondary', self::TEST_ACTION );
+				?>
+			</form>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Runs the connection checks after a Test connection submit and renders one line per check.
+	 */
+	private static function render_connection_checks(): void {
+		if ( ! isset( $_POST[ self::TEST_ACTION ] ) ) {
+			return;
+		}
+		check_admin_referer( self::TEST_ACTION, self::TEST_ACTION . '_nonce' );
+
+		foreach ( array( self::supabase_check() ) as $check ) {
+			printf(
+				'<div class="notice notice-%1$s inline"><p>%2$s</p></div>',
+				esc_attr( $check['ok'] ? 'success' : 'error' ),
+				esc_html( $check['message'] )
+			);
+		}
+	}
+
+	/**
+	 * Reads one month_returns row; no row is a failure, because a wrong key or RLS reads none.
+	 *
+	 * @return array{ok: bool, message: string}
+	 */
+	private static function supabase_check(): array {
+		$status = 0;
+		$rows   = TIA_Elements_Supabase::read(
+			array(
+				'select' => 'base',
+				'limit'  => 1,
+			),
+			$status
+		);
+
+		if ( is_wp_error( $rows ) ) {
+			$data = $rows->get_error_data();
+
+			return array(
+				'ok'      => false,
+				/* translators: %s: what went wrong, e.g. "HTTP 401" or the transport error. */
+				'message' => sprintf( __( 'Supabase: %s.', 'tia-wordpress-elements' ), is_array( $data ) && is_string( $data['detail'] ?? null ) ? $data['detail'] : $rows->get_error_message() ),
+			);
+		}
+
+		if ( array() === $rows ) {
+			return array(
+				'ok'      => false,
+				'message' => __( 'Supabase: connected, but no rows: check the key and RLS.', 'tia-wordpress-elements' ),
+			);
+		}
+
+		return array(
+			'ok'      => true,
+			/* translators: %d: the HTTP status. */
+			'message' => sprintf( __( 'Supabase: connected (HTTP %d).', 'tia-wordpress-elements' ), $status ),
+		);
 	}
 
 	/**
