@@ -67,6 +67,7 @@ final class ForwardReturnsTest extends TestCase {
 					'title'   => 'Bitcoin - BTC',
 					'base'    => 'btc',
 					'quote'   => 'usd',
+					'group'   => 'Crypto',
 					'periods' => array( 1 ),
 				),
 			),

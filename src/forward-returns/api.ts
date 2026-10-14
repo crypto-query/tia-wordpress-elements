@@ -1,7 +1,8 @@
 import { get } from "../shared/api";
+import { memoize } from "../shared/memo";
 
-/** One `base/quote` pair with the Holding Periods it has data for, ascending. */
-export type Asset = { title: string; base: string; quote: string; periods: number[] };
+/** One `base/quote` pair, its group in the asset select, and the Holding Periods it has data for, ascending. */
+export type Asset = { title: string; base: string; quote: string; group: string; periods: number[] };
 
 export type MonthReturn = { month: number; value: number | null };
 
@@ -17,7 +18,11 @@ export type Selection = { base: string; quote: string; period: number };
 
 export const getAssets = (signal?: AbortSignal) => get<Asset[]>("/tia-data/v1/forward-returns/assets", signal);
 
-export function getForwardReturns({ base, quote, period }: Selection, signal?: AbortSignal) {
-    const query = new URLSearchParams({ base, quote, period: String(period) });
-    return get<ForwardReturns>(`/tia-data/v1/forward-returns/data?${query}`, signal);
-}
+/** One asset's returns for one Holding Period, memoized by `base/quote/period` for every Block on the page. */
+export const getForwardReturns = memoize(
+    ({ base, quote, period }: Selection, signal?: AbortSignal) => {
+        const query = new URLSearchParams({ base, quote, period: String(period) });
+        return get<ForwardReturns>(`/tia-data/v1/forward-returns/data?${query}`, signal);
+    },
+    ({ base, quote, period }) => `${base}/${quote}/${period}`
+);

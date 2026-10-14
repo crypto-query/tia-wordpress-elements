@@ -10,7 +10,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Pure functions from month_returns rows to the asset list and one asset's data.
  *
- * @phpstan-type Asset array{title: string, base: string, quote: string, periods: list<int>}
+ * @phpstan-type Asset array{title: string, base: string, quote: string, group: string, periods: list<int>}
  * @phpstan-type Month array{month: int, value: int|float|null}
  * @phpstan-type Data array{title: string, base: string, quote: string, periods: list<array{period: int, returns: list<array{year: int, months: list<Month>}>}>}
  */
@@ -27,10 +27,13 @@ final class TIA_Elements_Forward_Returns {
 	 * @return list<Asset>
 	 */
 	public static function assets( array $rows, array $enabled ): array {
-		$ranks = array();
+		$ranks  = array();
+		$groups = array();
 		foreach ( $enabled as $asset ) {
-			$rank = array_search( $asset['group'], self::GROUPS, true );
-			$ranks[ $asset['base'] . "\0" . $asset['quote'] ] = false === $rank ? count( self::GROUPS ) : $rank;
+			$key            = $asset['base'] . "\0" . $asset['quote'];
+			$rank           = array_search( $asset['group'], self::GROUPS, true );
+			$ranks[ $key ]  = false === $rank ? count( self::GROUPS ) : $rank;
+			$groups[ $key ] = $asset['group'];
 		}
 
 		$assets = array();
@@ -46,6 +49,7 @@ final class TIA_Elements_Forward_Returns {
 				'title'   => is_string( $title ) ? $title : '',
 				'base'    => $base,
 				'quote'   => $quote,
+				'group'   => $groups[ $key ],
 				'periods' => array(),
 			);
 

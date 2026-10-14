@@ -4,16 +4,35 @@ export const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Au
 
 export type Tone = "positive" | "negative" | "zero" | "none";
 
+/** The Holding Periods a Member can pick, by length in months: the ones the data route accepts. */
+const HOLDING_PERIODS = new Map([
+    [1, "Monthly"],
+    [3, "Quarterly"],
+    [6, "Semiannually"],
+    [12, "Annually"]
+]);
+
+export const assetKey = ({ base, quote }: { base: string; quote: string }) => `${base}/${quote}`;
+
+/** The asset's Holding Periods as radio options. */
+export function periodOptions(asset: Asset): { value: string; label: string }[] {
+    return asset.periods.flatMap((period) => {
+        const label = HOLDING_PERIODS.get(period);
+        return label ? [{ value: String(period), label }] : [];
+    });
+}
+
+/** The asset with `period` if it has that Holding Period, else with its smallest one. */
+export function selectAsset({ base, quote, periods }: Asset, period?: number): Selection | null {
+    const kept = period !== undefined && periods.includes(period) ? period : periods[0];
+    return kept === undefined ? null : { base, quote, period: kept };
+}
+
 /** The Block's attributes if the asset list still has them, else the first asset and its smallest period. */
 export function pickSelection(attributes: Record<string, unknown>, assets: Asset[]): Selection | null {
     const match = assets.find(({ base, quote }) => base === attributes.base && quote === attributes.quote);
     const asset = match ?? assets[0];
-    if (!asset) {
-        return null;
-    }
-    const period =
-        match && typeof attributes.period === "number" && asset.periods.includes(attributes.period) ? attributes.period : asset.periods[0];
-    return period === undefined ? null : { base: asset.base, quote: asset.quote, period };
+    return asset ? selectAsset(asset, match && typeof attributes.period === "number" ? attributes.period : undefined) : null;
 }
 
 /** The Entry Months (1–12) of a Holding Period, from the calendar rather than the data. */

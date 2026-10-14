@@ -1,12 +1,43 @@
 import { describe, expect, it } from "vitest";
 import type { Asset, YearReturns } from "./api";
-import { cellValue, entryMonths, formatReturn, pickSelection, toneOf } from "./transforms";
+import { assetKey, cellValue, entryMonths, formatReturn, periodOptions, pickSelection, selectAsset, toneOf } from "./transforms";
 
 const assets: Asset[] = [
-    { title: "BTC", base: "btc", quote: "usd", periods: [1, 3, 6, 12] },
-    { title: "Gold", base: "xauusd", quote: "usd", periods: [3, 12] },
-    { title: "Dow Jones", base: "^dji", quote: "usd", periods: [6, 12] }
+    { title: "BTC", base: "btc", quote: "usd", group: "Crypto", periods: [1, 3, 6, 12] },
+    { title: "Gold", base: "xauusd", quote: "usd", group: "Metals", periods: [3, 12] },
+    { title: "Dow Jones", base: "^dji", quote: "usd", group: "Indices", periods: [6, 12] }
 ];
+
+describe("selectAsset", () => {
+    it("keeps the Holding Period when the new asset has it", () => {
+        expect(selectAsset(assets[1], 12)).toEqual({ base: "xauusd", quote: "usd", period: 12 });
+    });
+
+    it("takes the smallest Holding Period when the new asset lacks it", () => {
+        expect(selectAsset(assets[2], 3)).toEqual({ base: "^dji", quote: "usd", period: 6 });
+    });
+
+    it("has no selection for an asset without periods", () => {
+        expect(selectAsset({ ...assets[0], periods: [] }, 1)).toBeNull();
+    });
+});
+
+describe("periodOptions", () => {
+    it("names the asset's Holding Periods and leaves out 24", () => {
+        expect(periodOptions({ ...assets[0], periods: [1, 3, 6, 12, 24] })).toEqual([
+            { value: "1", label: "Monthly" },
+            { value: "3", label: "Quarterly" },
+            { value: "6", label: "Semiannually" },
+            { value: "12", label: "Annually" }
+        ]);
+    });
+});
+
+describe("assetKey", () => {
+    it("keys an asset by base and quote", () => {
+        expect(assetKey({ base: "btc", quote: "eur" })).toBe("btc/eur");
+    });
+});
 
 describe("pickSelection", () => {
     it("keeps the attributes when the asset has that Holding Period", () => {

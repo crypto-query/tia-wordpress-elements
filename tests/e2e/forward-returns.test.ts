@@ -27,6 +27,8 @@ test("the Block keeps a logged-out page cacheable and opts a logged-in page out"
 
 const assetsRoute = "/wp-json/tia-data/v1/forward-returns/assets";
 
+const block = (page: Page) => page.locator(".wp-block-tia-elements-forward-returns");
+
 /** GETs a REST route as the logged-in user: cookie auth needs the `wp_rest` nonce. */
 async function restGet(page: Page, path: string, switches?: string) {
     const nonce = await (await page.request.get("/wp-admin/admin-ajax.php?action=rest-nonce")).text();
@@ -96,4 +98,13 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
         "\u22120.40%",
         "+2.20%"
     ]);
+
+    await block(page).getByRole("radio", { name: "Quarterly" }).click();
+    await expect(table.getByRole("columnheader")).toHaveText(["Year", "Jan", "Apr", "Jul", "Oct"]);
+
+    await block(page).getByRole("combobox", { name: "Asset" }).click();
+    await expect(block(page).getByRole("group", { name: "Crypto" }).getByRole("option")).toHaveText(["Bitcoin - BTC", "Ethereum - ETH"]);
+    await block(page).getByRole("option", { name: "Ethereum - ETH" }).click();
+    await expect(block(page).getByRole("radio", { name: "Quarterly" })).toBeChecked();
+    await expect(block(page).getByRole("radio")).toHaveCount(2);
 });
