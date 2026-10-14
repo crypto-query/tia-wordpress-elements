@@ -16,11 +16,15 @@ export type ForwardReturns = { title: string; base: string; quote: string; perio
 
 export type Selection = { base: string; quote: string; period: number };
 
-export const getAssets = (signal?: AbortSignal) => get<Asset[]>("/tia-data/v1/forward-returns/assets", signal);
+/** The asset list, loaded once for every Block on the page. */
+export const getAssets = memoize(
+    (_: void, signal) => get<Asset[]>("/tia-data/v1/forward-returns/assets", signal),
+    () => "assets"
+);
 
 /** One asset's returns for one Holding Period, memoized by `base/quote/period` for every Block on the page. */
 export const getForwardReturns = memoize(
-    ({ base, quote, period }: Selection, signal?: AbortSignal) => {
+    ({ base, quote, period }: Selection, signal: AbortSignal) => {
         const query = new URLSearchParams({ base, quote, period: String(period) });
         return get<ForwardReturns>(`/tia-data/v1/forward-returns/data?${query}`, signal);
     },
