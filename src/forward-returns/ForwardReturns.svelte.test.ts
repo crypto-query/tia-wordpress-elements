@@ -138,6 +138,38 @@ describe("ForwardReturns", () => {
         expect(headers()).toEqual(["Year", "Jan"]);
     });
 
+    it("the Holding Period toggle picks with arrow keys and keeps its pick on a second click", async () => {
+        vi.mocked(getAssets).mockResolvedValue([{ ...asset, periods: [3, 6, 12] }]);
+        vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
+        render(ForwardReturns, props);
+        await screen.findByRole("grid");
+        const group = screen.getByRole("radiogroup", { name: "Holding Period" });
+        const quarterly = within(group).getByRole("radio", { name: "Quarterly" });
+
+        await userEvent.click(quarterly);
+        await userEvent.click(quarterly);
+        expect(quarterly).toHaveAttribute("aria-checked", "true");
+        expect(getForwardReturns).toHaveBeenCalledTimes(1);
+
+        await userEvent.keyboard("{ArrowRight}");
+        const semiannually = within(group).getByRole("radio", { name: "Semiannually" });
+        expect(semiannually).toHaveFocus();
+        expect(semiannually).toHaveAttribute("aria-checked", "true");
+        expect(getForwardReturns).toHaveBeenLastCalledWith({ base: "btc", quote: "usd", period: 6 }, expect.any(AbortSignal));
+        await waitFor(() => expect(headers()).toEqual(["Year", "Jan", "Jul"]));
+    });
+
+    it("Tab from Asset lands on the picked Holding Period", async () => {
+        vi.mocked(getAssets).mockResolvedValue([{ ...asset, periods: [3, 6, 12] }]);
+        vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
+        render(ForwardReturns, { ...props, attributes: { base: "btc", quote: "usd", period: 12 } });
+        await screen.findByRole("grid");
+
+        screen.getByRole("combobox", { name: "Asset" }).focus();
+        await userEvent.tab();
+        expect(screen.getByRole("radio", { name: "Annually" })).toHaveFocus();
+    });
+
     it("changing asset keeps the Holding Period when the new asset has it, else takes its smallest", async () => {
         vi.mocked(getAssets).mockResolvedValue([
             asset,
@@ -214,7 +246,7 @@ describe("ForwardReturns", () => {
         render(ForwardReturns, props);
         await screen.findByRole("grid");
 
-        expect(part(2).getByRole("columnheader", { name: "Forward Return results" })).toHaveAttribute("colspan", "3");
+        expect(part(2).queryByRole("columnheader")).toBeNull();
         expect(result("Totals")).toEqual(["1", "1"]);
         expect(result("Wins")).toEqual(["1", "0"]);
         expect(result("Losses")).toEqual(["0", "1"]);

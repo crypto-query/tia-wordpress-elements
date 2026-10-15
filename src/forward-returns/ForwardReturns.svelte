@@ -14,14 +14,16 @@
     import { onMount } from "svelte";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
+    import Card from "tia-design-system/ui/card/Card.svelte";
     import Checkbox from "tia-design-system/ui/checkbox/Checkbox.svelte";
     import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
-    import RadioGroup from "tia-design-system/ui/radio-group/RadioGroup.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
+    import Toggle from "tia-design-system/ui/toggle/Toggle.svelte";
+    import ToggleGroup from "tia-design-system/ui/toggle/ToggleGroup.svelte";
     import Tooltip from "tia-design-system/ui/tooltip/Tooltip.svelte";
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
-    import type { Card } from "../shared/boot";
+    import type { Card as BootCard } from "../shared/boot";
     import { clamp, normalise, storedPick } from "../shared/load-rules";
     import { getAssets, getForwardReturns, type Asset, type ForwardReturns, type Selection } from "./api";
     import {
@@ -51,8 +53,9 @@
     } from "./transforms";
 
     // `instance` is null in the editor preview, which neither restores nor stores a pick.
-    let { attributes, card, instance }: { attributes: Record<string, unknown>; card: Card | null; instance: string | null } = $props();
+    let { attributes, card, instance }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
 
+    const uid = $props.id();
     let root = $state<HTMLDivElement>();
     let assets = $state.raw<Asset[]>([]);
     let selection = $state.raw<Selection | null>(null);
@@ -262,14 +265,27 @@
         loadData();
     }
 
-    function pickPeriod(value: string) {
+    // A click on the picked period hands back null; the pick stays.
+    function pickPeriod(value: string | null) {
         const period = Number(value);
-        if (!selection || period === selection.period) {
+        if (!selection || value === null || period === selection.period) {
             return;
         }
         selection = { ...selection, period };
         remember();
         loadData();
+    }
+
+    /** The toggle's arrow keys only move focus; picking the focused period makes them work as a radio group. */
+    function pickFocused(event: KeyboardEvent & { currentTarget: HTMLDivElement }) {
+        const focused = document.activeElement;
+        if (
+            ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key) &&
+            focused instanceof HTMLElement &&
+            event.currentTarget.contains(focused)
+        ) {
+            pickPeriod(focused.dataset.value ?? null);
+        }
     }
 
     onMount(() => {
@@ -330,7 +346,7 @@
         aria-label={cellName(year, month, value, period, state)}
         aria-disabled={locked ? "true" : undefined}
         class={[
-            "grid w-full min-w-20 items-center rounded-md border text-right whitespace-nowrap pointer-coarse:min-h-11",
+            "grid w-full min-w-20 items-center rounded-md border text-center whitespace-nowrap pointer-coarse:min-h-11",
             state === "partial" ? "border-dotted border-foreground-muted" : "border-transparent",
             state === "counted" || (state === "partial" && !exclusions.years.includes(year))
                 ? tones[toneOf(value)]
@@ -380,134 +396,150 @@
 <div bind:this={root} class="relative">
     {#if card}
         <AccessCard feature="Forward Returns" {card} />
-    {:else if !selection}
-        {#if failure}
-            {@render problem(failure)}
-        {:else}
-            {@render loading()}
-        {/if}
     {:else}
-        <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end">
-            <Combobox
-                label="Asset"
-                class="sm:w-64"
-                searchPlaceholder="Search assets…"
-                items={assets.map((asset) => ({ value: assetKey(asset), label: asset.title, group: asset.group }))}
-                portalTarget={root}
-                value={assetKey(selection)}
-                onValueChange={pickAsset} />
-            <div class="flex flex-col gap-4 sm:ml-auto sm:flex-row sm:items-end">
-                <RadioGroup
-                    label="Holding Period"
-                    orientation="horizontal"
-                    size="sm"
-                    items={currentAsset ? periodOptions(currentAsset) : []}
-                    value={String(selection.period)}
-                    onValueChange={pickPeriod} />
-                <Button variant="outline" size="sm" class="self-start sm:self-auto" aria-disabled={!changed} onclick={reset}>
-                    {#snippet leadingIcon()}
-                        <RotateCcw class="size-4" aria-hidden="true" />
-                    {/snippet}
-                    Reset
-                </Button>
-            </div>
-        </div>
-        {#if failure}
-            {@render problem(failure)}
-        {:else if !shown}
-            {@render loading()}
-        {:else}
-            <div class="relative" aria-busy={request ? "true" : undefined}>
-                <div class={["overflow-x-auto transition-opacity duration-150", request && "opacity-50"]}>
-                    <table
-                        role="grid"
-                        aria-label="Forward Returns"
-                        class="w-full table-fixed border-collapse text-right tabular-nums"
-                        style:min-width="calc(8rem + {months.length} * 6.25rem)"
-                        onkeydown={navigate}
-                        onfocusin={(event) => {
-                            const key = event.target instanceof HTMLElement ? event.target.dataset.nav : undefined;
-                            if (key) {
-                                lastFocused = key;
-                            }
-                        }}>
-                        <thead>
-                            <tr>
-                                <th scope="col" class="sticky left-0 w-32 bg-background px-3 py-2 text-left font-semibold">
-                                    {#if period > 1}
-                                        <span class="sr-only">Year</span>
-                                        <span class="flex gap-1">
-                                            {@render arrow(-1)}
-                                            {@render arrow(1)}
-                                        </span>
-                                    {:else}
-                                        Year
-                                    {/if}
-                                </th>
-                                {#each months as month, index (month)}
-                                    <!-- Inset ring: outside it the scroll box clips the top and the sticky Year column covers the left. -->
-                                    <th
-                                        scope="col"
-                                        class="px-3 py-2 text-center font-semibold uppercase focus-visible:-outline-offset-2"
-                                        {...navItem(`month-${month}`, index + 1)}>
-                                        {MONTH_NAMES[month - 1]}
-                                    </th>
+        <!-- A container: the Block may sit in a narrow column on a wide screen, so the layout follows the card's width. -->
+        <Card padding="none" class="@container">
+            {#if selection}
+                {@const picked = selection}
+                <div class="flex flex-col gap-4 border-b border-border-muted px-4 py-5 @lg:px-6 @3xl:flex-row @3xl:items-end">
+                    <Combobox
+                        label="Asset"
+                        class="@lg:w-64"
+                        searchPlaceholder="Search assets…"
+                        items={assets.map((asset) => ({ value: assetKey(asset), label: asset.title, group: asset.group }))}
+                        portalTarget={root}
+                        value={assetKey(selection)}
+                        onValueChange={pickAsset} />
+                    <div class="flex flex-col items-start gap-4 @lg:flex-row @lg:items-end @3xl:ml-auto">
+                        <!-- On a narrow card the toggle fills the row with smaller labels; narrower than those, it scrolls sideways. -->
+                        <div class="flex w-full flex-col gap-1.5 @max-lg:overflow-x-auto @lg:w-auto">
+                            <span id="{uid}-period" class="text-sm font-medium text-foreground">Holding Period</span>
+                            <ToggleGroup
+                                type="single"
+                                variant="solid"
+                                size="sm"
+                                indicator="sliding"
+                                class="min-w-max rounded-full"
+                                aria-labelledby="{uid}-period"
+                                bind:value={() => String(picked.period), pickPeriod}
+                                onkeydown={pickFocused}>
+                                {#each currentAsset ? periodOptions(currentAsset) : [] as option (option.value)}
+                                    <Toggle
+                                        value={option.value}
+                                        class="rounded-full whitespace-nowrap @max-lg:flex-auto @max-lg:px-1 @max-lg:text-xs"
+                                        >{option.label}</Toggle>
                                 {/each}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each years as row (row.year)}
-                                <tr class="border-t border-border-muted">
-                                    <th scope="row" class="sticky left-0 bg-background px-3 py-1 text-left font-semibold">
-                                        <Checkbox
-                                            {...navItem(`year-${row.year}`, 0)}
-                                            size="sm"
-                                            label={String(row.year)}
-                                            checked={!exclusions.years.includes(row.year)}
-                                            onCheckedChange={() => exclude({ years: toggle(exclusions.years, row.year) })} />
-                                    </th>
-                                    {#each months as month, index (month)}
-                                        <!-- `{@const}`, not the `{const}` declaration tag: that one runs once and misses exclusion changes. -->
-                                        {@const value = cellValue(row, month)}
-                                        {@const state = cellState(row.year, month, value, period, exclusions, now)}
-                                        <td class="p-1">
-                                            {#if state !== "empty"}
-                                                {@render cell(row.year, month, index + 1, value, state)}
-                                            {/if}
-                                        </td>
-                                    {/each}
-                                </tr>
-                            {/each}
-                        </tbody>
-                        <tfoot>
-                            <tr class="border-t border-border">
-                                <th scope="colgroup" colspan={months.length + 1} class="px-3 pt-4 pb-1 text-left font-semibold">
-                                    <span class="sticky left-3">Forward Return results</span>
-                                </th>
-                            </tr>
-                            {#each resultRows as { label, hint, value } (label)}
-                                <tr>
-                                    <th scope="row" class="sticky left-0 bg-background px-3 py-1 text-left font-semibold">
-                                        <Tooltip content={hint} portalTarget={root}>
-                                            {#snippet trigger({ props })}
-                                                <span {...withoutFocusStop(props)}>{label}</span>
-                                            {/snippet}
-                                        </Tooltip>
-                                    </th>
-                                    {#each results as column, index (months[index])}
-                                        <td class="px-3 py-1">{value(column)}</td>
-                                    {/each}
-                                </tr>
-                            {/each}
-                        </tfoot>
-                    </table>
+                            </ToggleGroup>
+                        </div>
+                        <Button variant="outline-fill" size="sm" aria-disabled={!changed} onclick={reset}>
+                            {#snippet leadingIcon()}
+                                <RotateCcw class="size-4" aria-hidden="true" />
+                            {/snippet}
+                            Reset
+                        </Button>
+                    </div>
                 </div>
-                {#if request}
-                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <Spinner size="lg" tone="muted" label="Loading Forward Returns" />
+            {/if}
+            <div class="px-4 pt-4 pb-5 @lg:px-5">
+                {#if failure}
+                    {@render problem(failure)}
+                {:else if !shown}
+                    {@render loading()}
+                {:else}
+                    <div class="relative" aria-busy={request ? "true" : undefined}>
+                        <div class={["overflow-x-auto transition-opacity duration-150", request && "opacity-50"]}>
+                            <table
+                                role="grid"
+                                aria-label="Forward Returns"
+                                class="w-full table-fixed border-collapse text-right tabular-nums"
+                                style:min-width="calc(8rem + {months.length} * 6.25rem)"
+                                onkeydown={navigate}
+                                onfocusin={(event) => {
+                                    const key = event.target instanceof HTMLElement ? event.target.dataset.nav : undefined;
+                                    if (key) {
+                                        lastFocused = key;
+                                    }
+                                }}>
+                                <thead>
+                                    <tr>
+                                        <th scope="col" class="sticky left-0 w-32 bg-card-background px-3 py-2 text-left font-semibold">
+                                            {#if period > 1}
+                                                <span class="sr-only">Year</span>
+                                                <span class="flex gap-1">
+                                                    {@render arrow(-1)}
+                                                    {@render arrow(1)}
+                                                </span>
+                                            {:else}
+                                                Year
+                                            {/if}
+                                        </th>
+                                        {#each months as month, index (month)}
+                                            <!-- Inset ring: outside it the scroll box clips the top and the sticky Year column covers the left. -->
+                                            <th
+                                                scope="col"
+                                                class="px-3 py-2 text-center font-semibold uppercase focus-visible:-outline-offset-2"
+                                                {...navItem(`month-${month}`, index + 1)}>
+                                                {MONTH_NAMES[month - 1]}
+                                            </th>
+                                        {/each}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#each years as row (row.year)}
+                                        <tr class="border-t border-border-muted">
+                                            <th scope="row" class="sticky left-0 bg-card-background px-3 py-1 text-left font-semibold">
+                                                <Checkbox
+                                                    {...navItem(`year-${row.year}`, 0)}
+                                                    size="sm"
+                                                    label={String(row.year)}
+                                                    checked={!exclusions.years.includes(row.year)}
+                                                    onCheckedChange={() => exclude({ years: toggle(exclusions.years, row.year) })} />
+                                            </th>
+                                            {#each months as month, index (month)}
+                                                <!-- `{@const}`, not the `{const}` declaration tag: that one runs once and misses exclusion changes. -->
+                                                {@const value = cellValue(row, month)}
+                                                {@const state = cellState(row.year, month, value, period, exclusions, now)}
+                                                <td class="p-1">
+                                                    {#if state !== "empty"}
+                                                        {@render cell(row.year, month, index + 1, value, state)}
+                                                    {/if}
+                                                </td>
+                                            {/each}
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                                <tfoot>
+                                    {#each resultRows as { label, hint, value }, row (label)}
+                                        {@const first = row === 0}
+                                        <tr class={[first && "border-t border-border"]}>
+                                            <th
+                                                scope="row"
+                                                class={[
+                                                    "sticky left-0 bg-card-background px-3 pb-1 text-left font-semibold",
+                                                    first ? "pt-4" : "pt-1"
+                                                ]}>
+                                                <Tooltip content={hint} portalTarget={root}>
+                                                    {#snippet trigger({ props })}
+                                                        <span {...withoutFocusStop(props)}>{label}</span>
+                                                    {/snippet}
+                                                </Tooltip>
+                                            </th>
+                                            {#each results as column, index (months[index])}
+                                                <td class={["px-3 pb-1 text-center", first ? "pt-4" : "pt-1"]}>{value(column)}</td>
+                                            {/each}
+                                        </tr>
+                                    {/each}
+                                </tfoot>
+                            </table>
+                        </div>
+                        {#if request}
+                            <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                <Spinner size="lg" tone="muted" label="Loading Forward Returns" />
+                            </div>
+                        {/if}
                     </div>
                 {/if}
             </div>
-        {/if}
+        </Card>
     {/if}
 </div>

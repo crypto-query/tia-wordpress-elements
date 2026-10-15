@@ -111,6 +111,24 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
     await expect(block(page).getByRole("radio")).toHaveCount(2);
 });
 
+test("the Holding Period options stay on one line and inside the card in a narrow column", async ({ page, context }) => {
+    await logIn(page, "fx-pro-on-hold-overdue");
+    await context.addCookies([{ name: "tia_elements_test", value: "supabase-stub", url: "http://localhost:8000" }]);
+    await page.goto("/forward-returns/");
+    // A wide screen with the Block in a 340 px column: the layout must follow the Block, not the screen.
+    await page.addStyleTag({ content: ".wp-block-tia-elements-forward-returns { max-width: 340px !important; }" });
+    const group = block(page).getByRole("radiogroup", { name: "Holding Period" });
+    await expect(group.getByRole("radio")).toHaveCount(4);
+
+    const layout = await group.evaluate((track) => {
+        const card = track.closest(".rounded-xl")?.getBoundingClientRect();
+        const items = [...track.querySelectorAll("[role=radio]")].map((item) => item.getBoundingClientRect());
+        return { tops: new Set(items.map(({ top }) => top)).size, right: track.getBoundingClientRect().right, cardRight: card?.right };
+    });
+    expect(layout.tops).toBe(1);
+    expect(layout.right).toBeLessThanOrEqual(layout.cardRight ?? 0);
+});
+
 test("a Return Cell's tooltip touches the cell under the admin bar's html margin", async ({ page, context }) => {
     await logIn(page, "admin", "admin");
     await context.addCookies([{ name: "tia_elements_test", value: "supabase-stub", url: "http://localhost:8000" }]);
@@ -234,7 +252,7 @@ test.describe("one Block on its own page", () => {
         const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-forward-returns");
 
         await expect(preview.getByRole("grid").locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
-        await preview.getByText("Forward Return results").click();
+        await preview.getByRole("rowheader", { name: "Totals" }).click();
         const inspector = page.getByRole("region", { name: "Editor settings" });
         await expect(inspector.getByRole("combobox", { name: "Asset" })).toBeVisible();
         await inspector.getByRole("radio", { name: "Quarterly" }).check();
