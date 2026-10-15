@@ -259,7 +259,8 @@
     </div>
 {/snippet}
 
-<div bind:this={root}>
+<!-- Positioned, so panels portalled here are placed from it; floating-ui misplaces them by the admin bar's html margin otherwise. -->
+<div bind:this={root} class="relative">
     {#if boot.card}
         <AccessCard feature="Forward Returns" card={boot.card} />
     {:else if !selection}
