@@ -4,6 +4,9 @@
 
     /** Shared by every instance in this bundle, so exclusions update live across them. */
     export const memory = new Stored("tia-elements:forward-returns", isMemory, EMPTY_MEMORY);
+
+    /** The editor previews' own exclusions, kept apart from the site's and gone on reload. */
+    export const previewMemory = new Stored(null, isMemory, EMPTY_MEMORY);
 </script>
 
 <script lang="ts">
@@ -66,7 +69,8 @@
     const period = $derived(shown?.period ?? 1);
     const months = $derived(shown ? entryMonths(period, entryOffset) : []);
     const tableKey = $derived(shown ? `${assetKey(shown.data)}/${period}` : "");
-    const exclusions = $derived(memory.current.excluded[tableKey] ?? { years: [], cells: [] });
+    const exclusionStore = $derived(instance === null ? previewMemory : memory);
+    const exclusions = $derived(exclusionStore.current.excluded[tableKey] ?? { years: [], cells: [] });
     const results = $derived(months.map((month) => columnResults(years, month, period, exclusions, now)));
     const changed = $derived(entryOffset > 0 || exclusions.years.length > 0 || exclusions.cells.length > 0);
 
@@ -85,7 +89,10 @@
     };
 
     function exclude(change: Partial<Exclusions>) {
-        memory.set({ ...memory.current, excluded: withExclusions(memory.current.excluded, tableKey, { ...exclusions, ...change }) });
+        exclusionStore.set({
+            ...exclusionStore.current,
+            excluded: withExclusions(exclusionStore.current.excluded, tableKey, { ...exclusions, ...change })
+        });
     }
 
     /** Stores this instance's pick; called on user actions only, so a load never overwrites it. */

@@ -33,6 +33,14 @@ describe("Stored", () => {
         expect(localStorage.getItem(key)).toBe(JSON.stringify({ count: 1 }));
     });
 
+    it("keeps the value in memory only with a null key", () => {
+        const setItem = vi.spyOn(Storage.prototype, "setItem");
+        const stored = new Stored(null, isCount, empty);
+        stored.set({ count: 4 });
+        expect(stored.current).toEqual({ count: 4 });
+        expect(setItem).not.toHaveBeenCalled();
+    });
+
     it("runs from memory with no error when storage fails", () => {
         vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
             throw new DOMException("denied", "SecurityError");

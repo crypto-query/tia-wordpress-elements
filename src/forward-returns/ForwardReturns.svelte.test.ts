@@ -4,7 +4,7 @@ import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../shared/api";
 import { getAssets, getForwardReturns, type ForwardReturns as Data, type Selection } from "./api";
-import ForwardReturns, { memory } from "./ForwardReturns.svelte";
+import ForwardReturns, { memory, previewMemory } from "./ForwardReturns.svelte";
 import { EMPTY_MEMORY } from "./transforms";
 
 vi.mock("./api", () => ({ getAssets: vi.fn(), getForwardReturns: vi.fn() }));
@@ -14,6 +14,7 @@ afterEach(() => {
     vi.mocked(getAssets).mockReset();
     vi.mocked(getForwardReturns).mockReset();
     memory.set(EMPTY_MEMORY);
+    previewMemory.set(EMPTY_MEMORY);
     localStorage.clear();
 });
 
@@ -411,6 +412,21 @@ describe("ForwardReturns", () => {
             await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
             await userEvent.click(screen.getByRole("radio", { name: "Annually" }));
             expect(memory.current).toEqual(stored(unset));
+        });
+
+        it("keeps the editor preview's exclusions apart from the site's", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockResolvedValue(data);
+            const site = { excluded: { "btc/usd/6": { years: [], cells: ["2024-7"] } }, instances: {} };
+            memory.set(site);
+            render(ForwardReturns, { ...props, instance: null });
+            await screen.findByRole("table");
+            expect(screen.getByRole("checkbox", { name: "\u22122.10%" })).toHaveAttribute("aria-checked", "true");
+
+            await userEvent.click(screen.getByRole("checkbox", { name: "+3.21%" }));
+            expect(screen.getByRole("checkbox", { name: "+3.21%" })).toHaveAttribute("aria-checked", "false");
+            expect(memory.current).toEqual(site);
+            expect(localStorage.getItem("tia-elements:forward-returns")).toBe(JSON.stringify(site));
         });
     });
 });
