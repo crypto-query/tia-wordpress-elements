@@ -225,7 +225,9 @@
         class={[
             "grid w-full min-w-20 items-center rounded-md border text-right whitespace-nowrap pointer-coarse:min-h-11",
             state === "partial" ? "border-dotted border-foreground-muted" : "border-transparent",
-            state === "counted" || state === "partial" ? tones[toneOf(value)] : "text-foreground-muted",
+            state === "counted" || (state === "partial" && !exclusions.years.includes(year))
+                ? tones[toneOf(value)]
+                : "text-foreground-muted",
             locked ? "cursor-not-allowed" : "cursor-pointer"
         ]}
         onpointerenter={() => (hinted = key)}

@@ -277,6 +277,10 @@ describe("ForwardReturns", () => {
         await fireEvent.click(partial);
         expect(partial).toHaveAttribute("aria-checked", "false");
         expect(result("Totals")).toEqual(["1", "1"]);
+
+        expect(partial).not.toHaveClass("text-foreground-muted");
+        await userEvent.click(screen.getByRole("checkbox", { name: String(next) }));
+        expect(partial).toHaveClass("text-foreground-muted");
     });
 
     it("Reset includes everything and sets the Entry Offset to 0", async () => {
