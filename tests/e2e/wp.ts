@@ -26,11 +26,11 @@ export function restoreOption({ name, json }: OptionSnapshot): void {
     }
 }
 
-/** Logs a seeded user (`bun run wp:seed`, password `password`) in through the login form. */
-export async function logIn(page: Page, login: string) {
+/** Logs a user in through the login form; seeded users (`bun run wp:seed`) have the password `password`. */
+export async function logIn(page: Page, login: string, password = "password") {
     await page.goto("/wp-login.php");
     await page.getByLabel("Username or Email Address").fill(login);
-    await page.getByLabel("Password", { exact: true }).fill("password");
+    await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Log In" }).click();
     await page.waitForURL((url) => !url.pathname.endsWith("/wp-login.php"));
 }

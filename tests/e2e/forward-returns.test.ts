@@ -110,3 +110,24 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
     await expect(block(page).getByRole("radio", { name: "Quarterly" })).toBeChecked();
     await expect(block(page).getByRole("radio")).toHaveCount(2);
 });
+
+test("a Return Cell's tooltip touches the cell under the admin bar's html margin", async ({ page, context }) => {
+    await logIn(page, "admin", "admin");
+    await context.addCookies([{ name: "tia_elements_test", value: "supabase-stub", url: "http://localhost:8000" }]);
+    await page.goto("/forward-returns/");
+    await expect(page.locator("#wpadminbar")).toBeVisible();
+    const cell = block(page).getByRole("checkbox", { name: "+3.21%" });
+
+    await cell.hover();
+    const box = await cell.boundingBox();
+    if (box === null) throw new Error("the Return Cell has no box");
+    await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2, { steps: 3 });
+    const gap = async () => {
+        const panel = await block(page).getByRole("tooltip").boundingBox();
+        return panel === null ? null : box.y - (panel.y + panel.height);
+    };
+
+    // The arrow fills the gap; the bug left the panel 32 px higher, over the row or header above.
+    await expect.poll(gap).toBeGreaterThanOrEqual(0);
+    await expect.poll(gap).toBeLessThan(10);
+});
