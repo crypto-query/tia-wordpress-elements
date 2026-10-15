@@ -479,14 +479,15 @@
 {/snippet}
 
 {#snippet scrollThumb(axis: "x" | "y", span: { size: number; offset: number; ratio: number })}
-    <!-- No layout space; wheel, touch and the keyboard grid scroll too, so screen readers skip it. -->
+    <!-- No layout space: both thumbs sit in the card's padding, beside the rows and under the results, so no tile
+         lies under them. Wheel, touch and the keyboard grid scroll too, so screen readers skip it. -->
     <div
         data-thumb={axis === "y" ? "rows" : "columns"}
         aria-hidden="true"
         class={[
             "absolute z-3 touch-none rounded-full transition-[opacity,background-color] duration-200 before:absolute",
             axis === "y"
-                ? "right-px w-1.5 before:-inset-x-1.5 before:inset-y-0"
+                ? "-right-2.5 w-1.5 before:-inset-x-1.5 before:inset-y-0"
                 : "top-full mt-1 h-1.5 before:inset-x-0 before:-inset-y-1.5",
             // Hidden, it lets clicks through to the tiles under it.
             thumbsShown ? "opacity-100" : "pointer-events-none opacity-0",

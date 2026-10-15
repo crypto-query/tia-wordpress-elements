@@ -348,10 +348,18 @@ test.describe("a card taller than the viewport", () => {
         await block(page).getByRole("rowheader", { name: "2024" }).hover();
         await expect(thumb).toHaveCSS("opacity", "1");
         const rest = await thumb.boundingBox();
-        if (!rest || !box.head || !box.foot || !box.scroller) throw new Error("no layout");
+        if (!rest || !box.head || !box.foot || !box.scroller || !box.card) throw new Error("no layout");
         expect(rest.y).toBeCloseTo(box.head.bottom, 0);
-        expect(rest.x + rest.width).toBeLessThanOrEqual(box.scroller.right);
+        // In the card's padding beside the rows, so the last column's tiles stay clickable to their edge.
+        expect(rest.x).toBeGreaterThanOrEqual(box.scroller.right);
+        expect(rest.x + rest.width).toBeLessThan(box.card.right);
         expect(rest.height).toBeGreaterThanOrEqual(24);
+        const december = block(page).getByRole("checkbox", { name: /^December 2024/ });
+        const tile = await december.boundingBox();
+        if (!tile) throw new Error("no tile");
+        await page.mouse.click(tile.x + tile.width - 2, tile.y + tile.height / 2);
+        await expect(december).not.toBeChecked();
+        await december.click();
 
         // A drag on the thumb scrolls the rows; the header and the results stay.
         await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2);
