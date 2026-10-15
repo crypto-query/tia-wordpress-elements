@@ -242,7 +242,8 @@
 
 {#snippet hint(key: string, year: number, month: number, value: number | null, state: CellState)}
     {#if hinted === key}
-        <Tooltip content={cellHint(year, month, value, state)} class="whitespace-pre-line" portalTarget={root}>
+        <!-- No offset beyond the arrow: rows sit closer than the default gap, so its tip would touch the row above. -->
+        <Tooltip content={cellHint(year, month, value, state)} class="whitespace-pre-line" offset={0} portalTarget={root}>
             {#snippet trigger({ props })}
                 <span {...withoutFocusStop(props)} class="block px-2 py-1.5">{formatReturn(value)}</span>
             {/snippet}

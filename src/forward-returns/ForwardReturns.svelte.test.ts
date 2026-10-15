@@ -332,7 +332,7 @@ describe("ForwardReturns", () => {
         const tooltip = await screen.findByRole("tooltip");
         expect(tooltip).toHaveTextContent("Jan 2024 \u2013 Jun 2024 \u00b7 +3.21% Click to exclude");
         // Placed against the cell, not left at the panel's unplaced off-screen start.
-        await waitFor(() => expect(tooltip.getBoundingClientRect().bottom).toBeCloseTo(cell.getBoundingClientRect().top - 8, -1));
+        await waitFor(() => expect(tooltip.getBoundingClientRect().bottom).toBeCloseTo(cell.getBoundingClientRect().top, -1));
         expect(within(cell).getByText("+3.21%")).not.toHaveAttribute("tabindex");
     });
 });
