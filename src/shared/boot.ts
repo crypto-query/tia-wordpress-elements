@@ -23,7 +23,8 @@ export class BootError extends Error {
 const CASES: readonly unknown[] = ["purchase", "upgrade", "trial", "unavailable"];
 const SOURCES: readonly unknown[] = ["tia-pro", "indicator-suite"];
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+export const isObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isOptionalString = (value: unknown) => value === undefined || typeof value === "string";
 

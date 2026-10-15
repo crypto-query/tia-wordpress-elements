@@ -3,9 +3,9 @@ import { userEvent } from "@vitest/browser/context";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../shared/api";
-import type { Boot } from "../shared/boot";
 import { getAssets, getForwardReturns, type ForwardReturns as Data, type Selection } from "./api";
-import ForwardReturns from "./ForwardReturns.svelte";
+import ForwardReturns, { memory } from "./ForwardReturns.svelte";
+import { EMPTY_MEMORY } from "./transforms";
 
 vi.mock("./api", () => ({ getAssets: vi.fn(), getForwardReturns: vi.fn() }));
 
@@ -13,9 +13,11 @@ afterEach(() => {
     cleanup();
     vi.mocked(getAssets).mockReset();
     vi.mocked(getForwardReturns).mockReset();
+    memory.set(EMPTY_MEMORY);
+    localStorage.clear();
 });
 
-const boot: Boot = { attributes: {}, rest: { root: "/wp-json/", nonce: "n" }, card: null, instance: "1:0" };
+const props = { attributes: {}, card: null, instance: "1:0" };
 const asset = { title: "BTC", base: "btc", quote: "usd", group: "Crypto", periods: [6, 12] };
 const data = {
     title: "BTC",
@@ -61,7 +63,7 @@ describe("ForwardReturns", () => {
     it("shows the spinner, then Years as rows and Entry Months as columns", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
 
         expect(screen.getByRole("status", { name: "Loading Forward Returns" })).toBeInTheDocument();
         await screen.findByRole("table");
@@ -75,7 +77,7 @@ describe("ForwardReturns", () => {
     it("offers Try again on an unavailable step and reruns only that step", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockRejectedValueOnce(new ApiError("unavailable")).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
 
         expect(await screen.findByRole("alert")).toHaveTextContent("This data is not available right now.");
         await fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -87,7 +89,7 @@ describe("ForwardReturns", () => {
 
     it("asks for a reload when access has changed", async () => {
         vi.mocked(getAssets).mockRejectedValue(new ApiError("access"));
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
 
         expect(await screen.findByRole("alert")).toHaveTextContent("Your access has changed. Reload the page.");
         expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -97,7 +99,7 @@ describe("ForwardReturns", () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         const pending = Promise.withResolvers<Data>();
         vi.mocked(getForwardReturns).mockResolvedValueOnce(data).mockReturnValueOnce(pending.promise);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
 
         await userEvent.click(screen.getByRole("radio", { name: "Annually" }));
@@ -120,7 +122,7 @@ describe("ForwardReturns", () => {
             .mockResolvedValueOnce(answer({ base: "btc", quote: "usd", period: 3 }))
             .mockReturnValueOnce(first.promise)
             .mockReturnValueOnce(second.promise);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
 
         await userEvent.click(screen.getByRole("radio", { name: "Semiannually" }));
@@ -142,7 +144,7 @@ describe("ForwardReturns", () => {
             { title: "Gold", base: "xau", quote: "usd", group: "Metals", periods: [1, 12] }
         ]);
         vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
         const select = () => screen.getByRole("combobox", { name: "Asset" });
 
@@ -164,7 +166,7 @@ describe("ForwardReturns", () => {
             { title: "Gold", base: "xau", quote: "usd", group: "Metals", periods: [1, 12] }
         ]);
         vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
 
         await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
@@ -179,7 +181,7 @@ describe("ForwardReturns", () => {
     it("steps the Entry Offset within its bounds and shows that Entry Month family", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
         const previous = screen.getByRole("button", { name: "Previous Entry Offset" });
         const next = screen.getByRole("button", { name: "Next Entry Offset" });
@@ -198,7 +200,7 @@ describe("ForwardReturns", () => {
     it("hides the Entry Offset arrows for a Monthly Holding Period", async () => {
         vi.mocked(getAssets).mockResolvedValue([{ ...asset, periods: [1] }]);
         vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
 
         expect(screen.queryByRole("button", { name: "Next Entry Offset" })).toBeNull();
@@ -208,7 +210,7 @@ describe("ForwardReturns", () => {
     it("shows Totals, Wins, Losses and Returns per Entry Month", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
 
         expect(part(2).getByRole("columnheader", { name: "Forward Return results" })).toHaveAttribute("colspan", "3");
@@ -221,7 +223,7 @@ describe("ForwardReturns", () => {
     it("a cell click excludes that cell at its own Entry Offset and keeps its value", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
         const cell = screen.getByRole("checkbox", { name: "+3.21%" });
 
@@ -243,7 +245,7 @@ describe("ForwardReturns", () => {
     it("the Year checkbox excludes the Year and keeps its cell exclusions for when it comes back", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
         await userEvent.click(screen.getByRole("checkbox", { name: "+3.21%" }));
 
@@ -268,7 +270,7 @@ describe("ForwardReturns", () => {
             ...data,
             periods: [{ period: 6, returns: [{ year: next, months: [{ month: 1, value: 5 }] }, ...data.periods[0].returns] }]
         });
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
 
         const partial = screen.getByRole("checkbox", { name: "+5.00%" });
@@ -286,7 +288,7 @@ describe("ForwardReturns", () => {
     it("Reset includes everything and sets the Entry Offset to 0", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
         const reset = screen.getByRole("button", { name: "Reset" });
         expect(reset).toHaveAttribute("aria-disabled", "true");
@@ -306,7 +308,7 @@ describe("ForwardReturns", () => {
     it("clamps the Entry Offset when the Holding Period gets shorter", async () => {
         vi.mocked(getAssets).mockResolvedValue([{ ...asset, periods: [3, 6] }]);
         vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
-        render(ForwardReturns, { boot: { ...boot, attributes: { base: "btc", quote: "usd", period: 6 } } });
+        render(ForwardReturns, { ...props, attributes: { base: "btc", quote: "usd", period: 6 } });
         await screen.findByRole("table");
         for (let step = 0; step < 5; step++) {
             await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
@@ -321,7 +323,7 @@ describe("ForwardReturns", () => {
     it("a hovered Return Cell names its months, its value and what a click does", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
-        render(ForwardReturns, { boot });
+        render(ForwardReturns, props);
         await screen.findByRole("table");
         const cell = screen.getByRole("checkbox", { name: "+3.21%" });
 
@@ -334,5 +336,81 @@ describe("ForwardReturns", () => {
         // Placed against the cell, not left at the panel's unplaced off-screen start.
         await waitFor(() => expect(tooltip.getBoundingClientRect().bottom).toBeCloseTo(cell.getBoundingClientRect().top, -1));
         expect(within(cell).getByText("+3.21%")).not.toHaveAttribute("tabindex");
+    });
+
+    describe("memory", () => {
+        const unset = { base: null, quote: null, period: null };
+        const stored = (attributes: Record<string, unknown>) => ({
+            excluded: {},
+            instances: { "1:0": { attributes, pick: { base: "btc", quote: "usd", period: 12, entryOffset: 2 } } }
+        });
+
+        it("restores the stored asset, Holding Period and Entry Offset", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
+            memory.set(stored(unset));
+            render(ForwardReturns, props);
+            await screen.findByRole("table");
+
+            expect(getForwardReturns).toHaveBeenCalledWith({ base: "btc", quote: "usd", period: 12 }, expect.any(AbortSignal));
+            expect(headers()).toEqual(["Year", "Mar"]);
+        });
+
+        it("drops the stored pick when an attribute changed since it was stored", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
+            memory.set(stored(unset));
+            render(ForwardReturns, { ...props, attributes: { base: "btc", quote: "usd", period: 6 } });
+            await screen.findByRole("table");
+
+            expect(getForwardReturns).toHaveBeenCalledWith({ base: "btc", quote: "usd", period: 6 }, expect.any(AbortSignal));
+            expect(headers()).toEqual(["Year", "Jan", "Jul"]);
+            expect(memory.current.instances).toEqual({});
+        });
+
+        it("stores a user pick with the attribute values it was made under", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockResolvedValue(data);
+            render(ForwardReturns, { ...props, attributes: { base: "btc", quote: "usd" } });
+            await screen.findByRole("table");
+            expect(memory.current.instances).toEqual({});
+
+            await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
+            expect(memory.current.instances["1:0"]).toEqual({
+                attributes: { base: "btc", quote: "usd", period: null },
+                pick: { base: "btc", quote: "usd", period: 6, entryOffset: 1 }
+            });
+            expect(JSON.parse(localStorage.getItem("tia-elements:forward-returns") ?? "null")).toEqual(memory.current);
+        });
+
+        it("shows exclusions live in a second instance and stores them", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockResolvedValue(data);
+            const first = within(render(ForwardReturns, props).container);
+            const second = within(render(ForwardReturns, { ...props, instance: "1:1" }).container);
+            await first.findByRole("table");
+            await second.findByRole("table");
+
+            await userEvent.click(first.getByRole("checkbox", { name: "+3.21%" }));
+            expect(second.getByRole("checkbox", { name: "+3.21%" })).toHaveAttribute("aria-checked", "false");
+            expect(memory.current.excluded).toEqual({ "btc/usd/6": { years: [], cells: ["2024-1"] } });
+
+            await userEvent.click(second.getByRole("checkbox", { name: "+3.21%" }));
+            expect(first.getByRole("checkbox", { name: "+3.21%" })).toHaveAttribute("aria-checked", "true");
+            expect(memory.current.excluded).toEqual({});
+        });
+
+        it("neither reads nor writes a pick in the editor preview", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockResolvedValue(data);
+            memory.set(stored(unset));
+            render(ForwardReturns, { ...props, instance: null });
+            await screen.findByRole("table");
+            expect(headers()).toEqual(["Year", "Jan", "Jul"]);
+
+            await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
+            await userEvent.click(screen.getByRole("radio", { name: "Annually" }));
+            expect(memory.current).toEqual(stored(unset));
+        });
     });
 });

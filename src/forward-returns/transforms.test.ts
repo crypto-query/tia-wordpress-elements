@@ -9,13 +9,16 @@ import {
     entryMonths,
     formatRate,
     formatReturn,
+    isMemory,
     isPartial,
     periodOptions,
     periodLabel,
     pickSelection,
+    restore,
     selectAsset,
     toggle,
     toneOf,
+    withExclusions,
     type Exclusions
 } from "./transforms";
 
@@ -272,5 +275,100 @@ describe("periodLabel", () => {
         [2026, 3, 1, "Mar 2026 \u2013 today"]
     ])("names %i-%i over %i months %j", (year, month, period, label) => {
         expect(periodLabel(year, month, period, now)).toBe(label);
+    });
+});
+
+describe("isMemory", () => {
+    const good = {
+        excluded: { "btc/usd/6": { years: [2024], cells: ["2023-1"] } },
+        instances: {
+            "1:0": {
+                attributes: { base: "btc", quote: "usd", period: null },
+                pick: { base: "btc", quote: "usd", period: 6, entryOffset: 2 }
+            }
+        }
+    };
+
+    it("accepts the stored shape", () => {
+        expect(isMemory(good)).toBe(true);
+        expect(isMemory({ excluded: {}, instances: {} })).toBe(true);
+    });
+
+    it.each([
+        ["null", null],
+        ["an array", []],
+        ["no instances", { excluded: {} }],
+        ["a fractional Year", { ...good, excluded: { "btc/usd/6": { years: [2024.5], cells: [] } } }],
+        ["a numeric cell", { ...good, excluded: { "btc/usd/6": { years: [], cells: [1] } } }],
+        ["an object attribute", { ...good, instances: { "1:0": { ...good.instances["1:0"], attributes: { base: {} } } } }],
+        [
+            "a fractional Entry Offset",
+            {
+                ...good,
+                instances: { "1:0": { ...good.instances["1:0"], pick: { base: "btc", quote: "usd", period: 6, entryOffset: 0.5 } } }
+            }
+        ]
+    ])("rejects %s", (_, value) => {
+        expect(isMemory(value)).toBe(false);
+    });
+});
+
+describe("withExclusions", () => {
+    it("sets the exclusions of one table", () => {
+        expect(withExclusions({}, "btc/usd/6", { years: [2024], cells: [] })).toEqual({ "btc/usd/6": { years: [2024], cells: [] } });
+    });
+
+    it("drops a table whose exclusions are empty", () => {
+        expect(
+            withExclusions({ "btc/usd/6": { years: [2024], cells: [] }, "a/b/1": { years: [1], cells: [] } }, "btc/usd/6", {
+                years: [],
+                cells: []
+            })
+        ).toEqual({
+            "a/b/1": { years: [1], cells: [] }
+        });
+    });
+});
+
+describe("restore", () => {
+    const attributes = { base: "xauusd", quote: "usd", period: 12 };
+    const stored = (pick: { base: string; quote: string; period: number; entryOffset: number }) => ({
+        attributes: { base: "xauusd", quote: "usd", period: 12 },
+        pick
+    });
+
+    it("takes the attribute rule with Entry Offset 0 without a stored entry", () => {
+        expect(restore(attributes, undefined, assets)).toEqual({ base: "xauusd", quote: "usd", period: 12, entryOffset: 0 });
+    });
+
+    it("drops the stored pick when an attribute changed", () => {
+        const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 1 });
+        expect(restore({ ...attributes, period: 3 }, entry, assets)).toEqual({ base: "xauusd", quote: "usd", period: 3, entryOffset: 0 });
+    });
+
+    it("lets the stored pick win over the attributes", () => {
+        const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 1 });
+        expect(restore(attributes, entry, assets)).toEqual({ base: "btc", quote: "usd", period: 3, entryOffset: 1 });
+    });
+
+    it("falls back to the attribute rule when the stored asset is gone", () => {
+        const entry = stored({ base: "eth", quote: "usd", period: 3, entryOffset: 1 });
+        expect(restore(attributes, entry, assets)).toEqual({ base: "xauusd", quote: "usd", period: 12, entryOffset: 0 });
+    });
+
+    it("keeps the stored asset with the attribute period and Entry Offset 0 when the stored period is gone", () => {
+        const own = { base: "^dji", quote: "usd", period: 12 };
+        const entry = { attributes: own, pick: { base: "^dji", quote: "usd", period: 3, entryOffset: 1 } };
+        expect(restore(own, entry, assets)).toEqual({ base: "^dji", quote: "usd", period: 12, entryOffset: 0 });
+    });
+
+    it("keeps the stored asset with its smallest period when the attribute period belongs to another asset", () => {
+        const entry = stored({ base: "^dji", quote: "usd", period: 3, entryOffset: 1 });
+        expect(restore(attributes, entry, assets)).toEqual({ base: "^dji", quote: "usd", period: 6, entryOffset: 0 });
+    });
+
+    it("clamps the stored Entry Offset to the Holding Period", () => {
+        const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 7 });
+        expect(restore(attributes, entry, assets)).toEqual({ base: "btc", quote: "usd", period: 3, entryOffset: 2 });
     });
 });

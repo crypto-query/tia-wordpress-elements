@@ -10,9 +10,21 @@
     "attributes": {
         "base": { "type": "string" },
         "quote": { "type": "string" },
-        "period": { "type": "integer" }
+        "period": { "type": "integer" },
+        "align": { "type": "string", "default": "wide" }
     },
-    "supports": { "html": false },
+    "supports": {
+        "html": false,
+        "align": ["wide", "full"],
+        "anchor": true,
+        "className": true,
+        "color": { "text": true, "background": true, "link": true },
+        "typography": { "fontSize": true, "lineHeight": true, "__experimentalFontFamily": true },
+        "spacing": { "margin": true, "padding": true },
+        "__experimentalBorder": { "color": true, "radius": true, "style": true, "width": true },
+        "shadow": true,
+        "dimensions": { "minHeight": true }
+    },
     "editorScript": "file:./edit.ts",
     "viewScript": "file:./view.ts",
     "style": "tia-elements-design-system",

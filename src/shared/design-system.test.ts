@@ -91,8 +91,12 @@ describe("the shared Block stylesheet", () => {
         expect(css).not.toMatch(/@font-face|@import/);
     });
 
-    it("lets the Block root inherit its font size", () => {
-        expect(css).toMatch(/\.tia-design-system\s*\{\s*all:\s*initial;[^}]*font-size:\s*inherit/);
+    it("lets the Block root inherit font size, font, colour and line height, and draw no background", () => {
+        const root = css.match(/\.tia-design-system\s*\{\s*all:\s*initial;[^}]*\}/)?.[0] ?? "";
+        for (const property of ["font-size", "font-family", "color", "line-height"]) {
+            expect(root).toMatch(new RegExp(`[\\s;]${property}:\\s*inherit`));
+        }
+        expect(root).not.toMatch(/background/);
     });
 
     it("includes the classes the design-system components use", () => {

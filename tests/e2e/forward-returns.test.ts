@@ -131,3 +131,140 @@ test("a Return Cell's tooltip touches the cell under the admin bar's html margin
     await expect.poll(gap).toBeGreaterThanOrEqual(0);
     await expect.poll(gap).toBeLessThan(10);
 });
+
+const storageKey = "tia-elements:forward-returns";
+const stub = { name: "tia_elements_test", value: "supabase-stub", url: "http://localhost:8000" };
+const oneBlock = "<!-- wp:tia-elements/forward-returns /-->";
+
+/** Publishes a page with `content` and returns its ID; delete it with `deletePage`. */
+const createPage = (content: string) =>
+    wp(
+        "post",
+        "create",
+        "--post_type=page",
+        "--post_status=publish",
+        "--post_title=Forward Returns e2e",
+        `--post_content=${content}`,
+        "--porcelain"
+    );
+
+const deletePage = (id: string) => wp("post", "delete", id, "--force");
+
+const headers = (scope: Page | ReturnType<typeof block>) => scope.locator("thead").getByRole("columnheader");
+
+test("a Member's exclusion, Holding Period and Entry Offset survive a reload", async ({ page, context }) => {
+    await logIn(page, "fx-pro-on-hold-overdue");
+    await context.addCookies([stub]);
+    await page.goto("/forward-returns/");
+
+    await block(page).getByRole("radio", { name: "Quarterly" }).click();
+    await block(page).getByRole("button", { name: "Next Entry Offset" }).click();
+    await expect(headers(block(page))).toHaveText(["Year", "Feb", "May", "Aug", "Nov"]);
+    await block(page).getByRole("checkbox", { name: "\u22123.20%" }).click();
+    await expect(block(page).getByRole("checkbox", { name: "\u22123.20%" })).not.toBeChecked();
+
+    await page.reload();
+    await expect(block(page).getByRole("radio", { name: "Quarterly" })).toBeChecked();
+    await expect(headers(block(page))).toHaveText(["Year", "Feb", "May", "Aug", "Nov"]);
+    await expect(block(page).getByRole("checkbox", { name: "\u22123.20%" })).not.toBeChecked();
+    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toContain('"btc/usd/3"');
+});
+
+test("storage that holds bad JSON is ignored and overwritten", async ({ page, context }) => {
+    await logIn(page, "fx-pro-on-hold-overdue");
+    await context.addCookies([stub]);
+    await page.evaluate((key) => localStorage.setItem(key, "{not json"), storageKey);
+    await page.goto("/forward-returns/");
+
+    await expect(block(page).getByRole("table").locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
+    await block(page).getByRole("checkbox", { name: "+3.21%" }).click();
+    await expect
+        .poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null") as unknown, storageKey))
+        .toMatchObject({ excluded: { "btc/usd/1": { years: [], cells: ["2024-7"] } } });
+});
+
+test.describe("two Blocks on one page", () => {
+    let id = "";
+    test.beforeEach(() => {
+        id = createPage(oneBlock + oneBlock);
+    });
+    test.afterEach(() => deletePage(id));
+
+    test("share exclusions live and keep their own Holding Period", async ({ page, context }) => {
+        await logIn(page, "fx-pro-on-hold-overdue");
+        await context.addCookies([stub]);
+        await page.goto(`/?page_id=${id}`);
+        const [first, second] = [block(page).first(), block(page).nth(1)];
+
+        await first.getByRole("checkbox", { name: "+3.21%" }).click();
+        await expect(second.getByRole("checkbox", { name: "+3.21%" })).not.toBeChecked();
+
+        await first.getByRole("radio", { name: "Quarterly" }).click();
+        await page.reload();
+        await expect(first.getByRole("radio", { name: "Quarterly" })).toBeChecked();
+        await expect(second.getByRole("radio", { name: "Monthly" })).toBeChecked();
+        await expect(second.getByRole("checkbox", { name: "+3.21%" })).not.toBeChecked();
+    });
+});
+
+test.describe("one Block on its own page", () => {
+    let id = "";
+    test.beforeEach(() => {
+        id = createPage(oneBlock);
+    });
+    test.afterEach(() => deletePage(id));
+
+    test("a changed default in the attributes beats the stored pick", async ({ page, context }) => {
+        await logIn(page, "fx-pro-on-hold-overdue");
+        await context.addCookies([stub]);
+        await page.goto(`/?page_id=${id}`);
+        await block(page).getByRole("radio", { name: "Quarterly" }).click();
+        await page.reload();
+        await expect(block(page).getByRole("radio", { name: "Quarterly" })).toBeChecked();
+
+        wp("post", "update", id, `--post_content=<!-- wp:tia-elements/forward-returns {"base":"btc","quote":"usd","period":12} /-->`);
+        await page.reload();
+        await expect(block(page).getByRole("radio", { name: "Annually", exact: true })).toBeChecked();
+    });
+
+    test("an admin sees the live preview in the editor and the inspector defaults", async ({ page, context }) => {
+        await logIn(page, "admin", "admin");
+        await context.addCookies([stub]);
+        await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
+        const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-forward-returns");
+
+        await expect(preview.getByRole("table").locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
+        await preview.getByText("Forward Return results").click();
+        const inspector = page.getByRole("region", { name: "Editor settings" });
+        await expect(inspector.getByRole("combobox", { name: "Asset" })).toBeVisible();
+        await inspector.getByRole("radio", { name: "Quarterly" }).check();
+        await expect(headers(preview)).toHaveText(["Year", "Jan", "Apr", "Jul", "Oct"]);
+    });
+
+    test("an editor who is not a Member sees the placeholder and read-only defaults", async ({ page, context }) => {
+        const user = wp(
+            "user",
+            "create",
+            "fx-e2e-editor",
+            "fx-e2e-editor@example.test",
+            "--role=editor",
+            "--user_pass=password",
+            "--porcelain"
+        );
+        try {
+            wp("user", "meta", "update", user, "wp_persisted_preferences", '{"core/edit-post":{"welcomeGuide":false}}', "--format=json");
+            await logIn(page, "fx-e2e-editor");
+            await context.addCookies([stub]);
+            await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
+            const canvas = page.frameLocator('iframe[name="editor-canvas"]');
+
+            await canvas.getByText("Preview needs TIA Pro access").click();
+            const inspector = page.getByRole("region", { name: "Editor settings" });
+            await expect(inspector.getByText("Asset: First asset")).toBeVisible();
+            await expect(inspector.getByText("Holding Period: Smallest")).toBeVisible();
+            await expect(inspector.getByRole("combobox", { name: "Asset" })).toHaveCount(0);
+        } finally {
+            wp("user", "delete", user, "--yes");
+        }
+    });
+});

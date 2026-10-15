@@ -1,3 +1,5 @@
+import { isObject } from "../shared/boot";
+import { clamp, storedPick, type InstanceEntry } from "../shared/load-rules";
 import type { Asset, Selection, YearReturns } from "./api";
 
 export const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
@@ -5,7 +7,7 @@ export const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Au
 export type Tone = "positive" | "negative" | "zero" | "none";
 
 /** The Holding Periods a Member can pick, by length in months: the ones the data route accepts. */
-const HOLDING_PERIODS = new Map([
+export const HOLDING_PERIODS = new Map([
     [1, "Monthly"],
     [3, "Quarterly"],
     [6, "Semiannually"],
@@ -78,6 +80,15 @@ export const isPartial = (year: number, month: number, period: number, now: Date
 /** What a Member left out for one asset and Holding Period. A cell is keyed by Year and Entry Month, so it belongs to one Entry Offset. */
 export type Exclusions = { years: number[]; cells: string[] };
 
+/** `exclusions` set for one `base/quote/period` table; a table with nothing excluded is dropped. */
+export function withExclusions(excluded: Record<string, Exclusions>, table: string, exclusions: Exclusions): Record<string, Exclusions> {
+    const rest = withoutKey(excluded, table);
+    return exclusions.years.length > 0 || exclusions.cells.length > 0 ? { ...rest, [table]: exclusions } : rest;
+}
+
+export const withoutKey = <T>(record: Record<string, T>, key: string): Record<string, T> =>
+    Object.fromEntries(Object.entries(record).filter(([entry]) => entry !== key));
+
 export const cellKey = (year: number, month: number) => `${year}-${month}`;
 
 export const toggle = <T>(list: readonly T[], item: T): T[] =>
@@ -131,4 +142,62 @@ export function periodLabel(year: number, month: number, period: number, now: Da
         return `${monthName(start)} \u2013 today`;
     }
     return period === 1 ? monthName(start) : `${monthName(start)} \u2013 ${monthName(start + period - 1)}`;
+}
+
+/** The Block attributes a stored pick is tied to. */
+export const ATTRIBUTE_KEYS = ["base", "quote", "period"] as const;
+
+export type InstancePick = Selection & { entryOffset: number };
+
+/** What `localStorage` keeps: exclusions per `base/quote/period` for every instance, and each instance's last pick. */
+export type Memory = { excluded: Record<string, Exclusions>; instances: Record<string, InstanceEntry<InstancePick>> };
+
+export const EMPTY_MEMORY: Memory = { excluded: {}, instances: {} };
+
+const isInteger = (value: unknown) => Number.isInteger(value);
+
+const isRecordOf = (value: unknown, check: (entry: unknown) => boolean) => isObject(value) && Object.values(value).every(check);
+
+const isExclusions = (value: unknown) =>
+    isObject(value) &&
+    Array.isArray(value.years) &&
+    value.years.every(isInteger) &&
+    Array.isArray(value.cells) &&
+    value.cells.every((cell) => typeof cell === "string");
+
+const isPick = (value: unknown) =>
+    isObject(value) &&
+    typeof value.base === "string" &&
+    typeof value.quote === "string" &&
+    isInteger(value.period) &&
+    isInteger(value.entryOffset);
+
+const isEntry = (value: unknown) =>
+    isObject(value) &&
+    isRecordOf(value.attributes, (attribute) => attribute === null || typeof attribute === "string" || typeof attribute === "number") &&
+    isPick(value.pick);
+
+export const isMemory = (value: unknown): value is Memory =>
+    isObject(value) && isRecordOf(value.excluded, isExclusions) && isRecordOf(value.instances, isEntry);
+
+/**
+ * The pick to start with: the stored one unless the attributes changed. A stored asset that is gone falls back
+ * to the attribute rule; a stored period that is gone, to the attribute rule for that asset alone.
+ */
+export function restore(
+    attributes: Record<string, unknown>,
+    entry: InstanceEntry<InstancePick> | undefined,
+    assets: Asset[]
+): InstancePick | null {
+    const pick = storedPick(entry, attributes, ATTRIBUTE_KEYS);
+    const asset = pick && assets.find((candidate) => assetKey(candidate) === assetKey(pick));
+    if (!pick || !asset) {
+        const selection = pickSelection(attributes, assets);
+        return selection && { ...selection, entryOffset: 0 };
+    }
+    const fallback = pickSelection(attributes, [asset])?.period;
+    const selection = selectAsset(asset, asset.periods.includes(pick.period) ? pick.period : fallback);
+    // An Entry Offset means other Entry Months under another Holding Period.
+    const entryOffset = selection?.period === pick.period ? clamp(pick.entryOffset, 0, pick.period - 1) : 0;
+    return selection && { ...selection, entryOffset };
 }

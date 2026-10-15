@@ -1,3 +1,11 @@
+<script lang="ts" module>
+    import { Stored } from "../shared/storage.svelte";
+    import { EMPTY_MEMORY, isMemory } from "./transforms";
+
+    /** Shared by every instance in this bundle, so exclusions update live across them. */
+    export const memory = new Stored("tia-elements:forward-returns", isMemory, EMPTY_MEMORY);
+</script>
+
 <script lang="ts">
     import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-svelte";
     import { onMount } from "svelte";
@@ -10,9 +18,11 @@
     import Tooltip from "tia-design-system/ui/tooltip/Tooltip.svelte";
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
-    import type { Boot } from "../shared/boot";
+    import type { Card } from "../shared/boot";
+    import { clamp, normalise, storedPick } from "../shared/load-rules";
     import { getAssets, getForwardReturns, type Asset, type ForwardReturns, type Selection } from "./api";
     import {
+        ATTRIBUTE_KEYS,
         MONTH_NAMES,
         assetKey,
         cellKey,
@@ -24,17 +34,20 @@
         formatReturn,
         periodLabel,
         periodOptions,
-        pickSelection,
+        restore,
         selectAsset,
         toggle,
         toneOf,
+        withExclusions,
+        withoutKey,
         type CellState,
         type Exclusions,
         type Results,
         type Tone
     } from "./transforms";
 
-    let { boot }: { boot: Boot } = $props();
+    // `instance` is null in the editor preview, which neither restores nor stores a pick.
+    let { attributes, card, instance }: { attributes: Record<string, unknown>; card: Card | null; instance: string | null } = $props();
 
     let root = $state<HTMLDivElement>();
     let assets = $state.raw<Asset[]>([]);
@@ -44,8 +57,6 @@
     let request = $state.raw<AbortController | null>(null);
     let failure = $state.raw<{ kind: ErrorKind; retry: () => void } | null>(null);
     let entryOffset = $state(0);
-    // Keyed by the shown table's `base/quote/period`.
-    let excluded = $state.raw<Record<string, Exclusions>>({});
     // The one Return Cell under the pointer mounts a Tooltip; one per cell blocks the page for seconds on long histories.
     let hinted = $state<string | null>(null);
 
@@ -55,7 +66,7 @@
     const period = $derived(shown?.period ?? 1);
     const months = $derived(shown ? entryMonths(period, entryOffset) : []);
     const tableKey = $derived(shown ? `${assetKey(shown.data)}/${period}` : "");
-    const exclusions = $derived(excluded[tableKey] ?? { years: [], cells: [] });
+    const exclusions = $derived(memory.current.excluded[tableKey] ?? { years: [], cells: [] });
     const results = $derived(months.map((month) => columnResults(years, month, period, exclusions, now)));
     const changed = $derived(entryOffset > 0 || exclusions.years.length > 0 || exclusions.cells.length > 0);
 
@@ -74,7 +85,19 @@
     };
 
     function exclude(change: Partial<Exclusions>) {
-        excluded = { ...excluded, [tableKey]: { ...exclusions, ...change } };
+        memory.set({ ...memory.current, excluded: withExclusions(memory.current.excluded, tableKey, { ...exclusions, ...change }) });
+    }
+
+    /** Stores this instance's pick; called on user actions only, so a load never overwrites it. */
+    function remember() {
+        if (instance === null || !selection) {
+            return;
+        }
+        const entry = {
+            attributes: normalise(attributes, ATTRIBUTE_KEYS),
+            pick: { ...selection, entryOffset: clamp(entryOffset, 0, selection.period - 1) }
+        };
+        memory.set({ ...memory.current, instances: { ...memory.current.instances, [instance]: entry } });
     }
 
     function reset() {
@@ -83,6 +106,7 @@
         }
         entryOffset = 0;
         exclude({ years: [], cells: [] });
+        remember();
     }
 
     function cellHint(year: number, month: number, value: number | null, state: CellState): string {
@@ -113,7 +137,14 @@
         failure = null;
         try {
             assets = await getAssets();
-            selection = pickSelection(boot.attributes, assets);
+            const entry = instance === null ? undefined : memory.current.instances[instance];
+            if (instance !== null && entry && !storedPick(entry, attributes, ATTRIBUTE_KEYS)) {
+                // Changed defaults drop the pick, so reverting them later does not bring it back.
+                memory.set({ ...memory.current, instances: withoutKey(memory.current.instances, instance) });
+            }
+            const restored = restore(attributes, entry, assets);
+            selection = restored && { base: restored.base, quote: restored.quote, period: restored.period };
+            entryOffset = restored?.entryOffset ?? 0;
         } catch (error) {
             fail(error, loadAssets);
             return;
@@ -157,6 +188,7 @@
             return;
         }
         selection = selectAsset(asset, selection.period);
+        remember();
         loadData();
     }
 
@@ -166,11 +198,12 @@
             return;
         }
         selection = { ...selection, period };
+        remember();
         loadData();
     }
 
     onMount(() => {
-        if (!boot.card) {
+        if (!card) {
             loadAssets();
         }
     });
@@ -202,6 +235,7 @@
                 onclick={() => {
                     if (!bound) {
                         entryOffset = target;
+                        remember();
                     }
                 }}>
                 {#if step < 0}
@@ -261,8 +295,8 @@
 
 <!-- Positioned, so panels portalled here are placed from it; floating-ui misplaces them by the admin bar's html margin otherwise. -->
 <div bind:this={root} class="relative">
-    {#if boot.card}
-        <AccessCard feature="Forward Returns" card={boot.card} />
+    {#if card}
+        <AccessCard feature="Forward Returns" {card} />
     {:else if !selection}
         {#if failure}
             {@render problem(failure)}

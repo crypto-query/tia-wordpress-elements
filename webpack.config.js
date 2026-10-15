@@ -43,6 +43,8 @@ export default {
                 test: /\.svelte(\.js)?$/,
                 use: hot ? [fileURLToPath(new URL("./scripts/svelte-hmr-loader.js", import.meta.url)), svelteLoader] : [svelteLoader]
             },
+            // Our own `.svelte.ts` rune modules: the default rule strips the types, then Svelte compiles the runes.
+            { test: /\.svelte\.ts$/, enforce: "post", use: [svelteLoader] },
             { test: /\.m?js$/, include: /node_modules/, resolve: { fullySpecified: false } }
         ]
     }
