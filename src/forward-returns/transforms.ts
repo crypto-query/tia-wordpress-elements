@@ -67,3 +67,68 @@ export function toneOf(value: number | null): Tone {
     value = shown(value);
     return value > 0 ? "positive" : value < 0 ? "negative" : "zero";
 }
+
+/** Months since year 0, so month arithmetic crosses year ends. */
+const monthIndex = (year: number, month: number) => year * 12 + month - 1;
+
+/** A cell whose last month is the current UTC month or later: its period has not ended yet. */
+export const isPartial = (year: number, month: number, period: number, now: Date): boolean =>
+    monthIndex(year, month) + period - 1 >= monthIndex(now.getUTCFullYear(), now.getUTCMonth() + 1);
+
+/** What a Member left out for one asset and Holding Period. A cell is keyed by Year and Entry Month, so it belongs to one Entry Offset. */
+export type Exclusions = { years: number[]; cells: string[] };
+
+export const cellKey = (year: number, month: number) => `${year}-${month}`;
+
+export const toggle = <T>(list: readonly T[], item: T): T[] =>
+    list.includes(item) ? list.filter((entry) => entry !== item) : [...list, item];
+
+export type CellState = "empty" | "partial" | "year-excluded" | "excluded" | "counted";
+
+export function cellState(year: number, month: number, value: number | null, period: number, exclusions: Exclusions, now: Date): CellState {
+    if (value === null) {
+        return "empty";
+    }
+    if (isPartial(year, month, period, now)) {
+        return "partial";
+    }
+    if (exclusions.years.includes(year)) {
+        return "year-excluded";
+    }
+    return exclusions.cells.includes(cellKey(year, month)) ? "excluded" : "counted";
+}
+
+/** Returns is Wins ÷ Totals in percent to 2 decimals, null when nothing counts. */
+export type Results = { totals: number; wins: number; losses: number; returns: number | null };
+
+/** The results of one Entry Month column. A cell counts when it is not Excluded, not Partial and not null. */
+export function columnResults(years: YearReturns[], month: number, period: number, exclusions: Exclusions, now: Date): Results {
+    const results: Results = { totals: 0, wins: 0, losses: 0, returns: null };
+    for (const row of years) {
+        const value = cellValue(row, month);
+        if (cellState(row.year, month, value, period, exclusions, now) !== "counted") {
+            continue;
+        }
+        results.totals++;
+        const tone = toneOf(value);
+        results.wins += Number(tone === "positive");
+        results.losses += Number(tone === "negative");
+    }
+    if (results.totals > 0) {
+        results.returns = Math.round((results.wins / results.totals) * 10000) / 100;
+    }
+    return results;
+}
+
+export const formatRate = (rate: number | null) => (rate === null ? "\u2014" : `${rate.toFixed(2)}%`);
+
+const monthName = (index: number) => `${MONTH_NAMES[index % 12]} ${Math.floor(index / 12)}`;
+
+/** "Jan 2024 – Mar 2024", "May 2024" for one month, "Jan 2026 – today" for a Partial cell. */
+export function periodLabel(year: number, month: number, period: number, now: Date): string {
+    const start = monthIndex(year, month);
+    if (isPartial(year, month, period, now)) {
+        return `${monthName(start)} \u2013 today`;
+    }
+    return period === 1 ? monthName(start) : `${monthName(start)} \u2013 ${monthName(start + period - 1)}`;
+}

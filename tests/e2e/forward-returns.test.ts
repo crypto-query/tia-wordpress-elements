@@ -61,7 +61,7 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
     await page.goto("/forward-returns/");
     const table = page.locator(".wp-block-tia-elements-forward-returns").getByRole("table");
 
-    await expect(table.getByRole("columnheader")).toHaveText([
+    await expect(table.locator("thead").getByRole("columnheader")).toHaveText([
         "Year",
         "Jan",
         "Feb",
@@ -76,7 +76,7 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
         "Nov",
         "Dec"
     ]);
-    await expect(table.getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
+    await expect(table.locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
     const cells = (year: string) =>
         table
             .getByRole("row")
@@ -100,7 +100,7 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
     ]);
 
     await block(page).getByRole("radio", { name: "Quarterly" }).click();
-    await expect(table.getByRole("columnheader")).toHaveText(["Year", "Jan", "Apr", "Jul", "Oct"]);
+    await expect(table.locator("thead").getByRole("columnheader")).toHaveText(["Year", "Jan", "Apr", "Jul", "Oct"]);
 
     await block(page).getByRole("combobox", { name: "Asset" }).click();
     await expect(block(page).getByRole("group", { name: "Crypto" }).getByRole("option")).toHaveText(["Bitcoin - BTC", "Ethereum - ETH"]);
