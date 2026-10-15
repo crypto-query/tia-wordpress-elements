@@ -246,7 +246,7 @@ describe("ForwardReturns", () => {
         render(ForwardReturns, props);
         await screen.findByRole("grid");
 
-        expect(part(2).queryByRole("columnheader")).toBeNull();
+        expect(part(2).getByRole("columnheader", { name: "Forward Return results" })).toHaveAttribute("colspan", "3");
         expect(result("Totals")).toEqual(["1", "1"]);
         expect(result("Wins")).toEqual(["1", "0"]);
         expect(result("Losses")).toEqual(["0", "1"]);

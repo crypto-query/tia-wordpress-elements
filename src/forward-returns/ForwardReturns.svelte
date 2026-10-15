@@ -40,6 +40,7 @@
         formatReturn,
         periodLabel,
         periodOptions,
+        rateTone,
         restore,
         selectAsset,
         toggle,
@@ -102,6 +103,16 @@
         negative: "bg-error-light text-error-strong",
         zero: "bg-muted text-foreground-muted",
         none: ""
+    };
+
+    // The Checkbox sets its own label type; the years take the month headers' instead.
+    const yearStyle = "**:text-xs **:font-semibold";
+
+    const rateTones: Record<Tone, string> = {
+        positive: "text-success-strong",
+        negative: "text-error-strong",
+        zero: "text-foreground",
+        none: "text-foreground"
     };
 
     function exclude(change: Partial<Exclusions>) {
@@ -346,12 +357,12 @@
         aria-label={cellName(year, month, value, period, state)}
         aria-disabled={locked ? "true" : undefined}
         class={[
-            "grid w-full min-w-20 items-center rounded-md border text-center whitespace-nowrap pointer-coarse:min-h-11",
+            "grid w-full min-w-20 items-center rounded-md border text-center text-md font-medium whitespace-nowrap pointer-coarse:min-h-11",
             state === "partial" ? "border-dotted border-foreground-muted" : "border-transparent",
             state === "counted" || (state === "partial" && !exclusions.years.includes(year))
                 ? tones[toneOf(value)]
                 : "text-foreground-muted",
-            locked ? "cursor-not-allowed" : "cursor-pointer"
+            locked ? "cursor-not-allowed" : "cursor-pointer hover:border-current"
         ]}
         onpointerenter={() => (hinted = key)}
         onfocus={(event) => {
@@ -448,11 +459,12 @@
                 {:else}
                     <div class="relative" aria-busy={request ? "true" : undefined}>
                         <div class={["overflow-x-auto transition-opacity duration-150", request && "opacity-50"]}>
+                            <!-- On a touch screen the Year column widens to fit both 44 px Entry Offset arrows. -->
                             <table
                                 role="grid"
                                 aria-label="Forward Returns"
-                                class="w-full table-fixed border-collapse text-right tabular-nums"
-                                style:min-width="calc(8rem + {months.length} * 6.25rem)"
+                                class="w-full table-fixed border-separate border-spacing-0 text-right tabular-nums [--year:--spacing(21)] pointer-coarse:[--year:--spacing(22)]"
+                                style:min-width="calc(var(--year) + {months.length} * 6.25rem)"
                                 onkeydown={navigate}
                                 onfocusin={(event) => {
                                     const key = event.target instanceof HTMLElement ? event.target.dataset.nav : undefined;
@@ -461,11 +473,14 @@
                                     }
                                 }}>
                                 <thead>
-                                    <tr>
-                                        <th scope="col" class="sticky left-0 w-32 bg-card-background px-3 py-2 text-left font-semibold">
+                                    <tr class="text-xs tracking-wider text-foreground-muted uppercase">
+                                        <!-- The grey sits on a layer over the card colour, so the rounded corner hides the months scrolled under it. -->
+                                        <th
+                                            scope="col"
+                                            class="sticky left-0 w-(--year) bg-card-background px-0 py-1 text-center font-semibold before:absolute before:inset-0 before:-z-10 before:rounded-l-md before:bg-muted">
                                             {#if period > 1}
                                                 <span class="sr-only">Year</span>
-                                                <span class="flex gap-1">
+                                                <span class="flex justify-center gap-1 pointer-coarse:gap-0">
                                                     {@render arrow(-1)}
                                                     {@render arrow(1)}
                                                 </span>
@@ -477,7 +492,7 @@
                                             <!-- Inset ring: outside it the scroll box clips the top and the sticky Year column covers the left. -->
                                             <th
                                                 scope="col"
-                                                class="px-3 py-2 text-center font-semibold uppercase focus-visible:-outline-offset-2"
+                                                class="bg-muted px-2 py-2.5 text-center font-semibold last:rounded-r-md focus-visible:-outline-offset-2"
                                                 {...navItem(`month-${month}`, index + 1)}>
                                                 {MONTH_NAMES[month - 1]}
                                             </th>
@@ -486,11 +501,12 @@
                                 </thead>
                                 <tbody>
                                     {#each years as row (row.year)}
-                                        <tr class="border-t border-border-muted">
-                                            <th scope="row" class="sticky left-0 bg-card-background px-3 py-1 text-left font-semibold">
+                                        <tr class="first:*:pt-2">
+                                            <th scope="row" class="sticky left-0 bg-card-background px-1 py-0.5 text-center">
                                                 <Checkbox
                                                     {...navItem(`year-${row.year}`, 0)}
                                                     size="sm"
+                                                    class={yearStyle}
                                                     label={String(row.year)}
                                                     checked={!exclusions.years.includes(row.year)}
                                                     onCheckedChange={() => exclude({ years: toggle(exclusions.years, row.year) })} />
@@ -499,7 +515,7 @@
                                                 <!-- `{@const}`, not the `{const}` declaration tag: that one runs once and misses exclusion changes. -->
                                                 {@const value = cellValue(row, month)}
                                                 {@const state = cellState(row.year, month, value, period, exclusions, now)}
-                                                <td class="p-1">
+                                                <td class="p-0.5">
                                                     {#if state !== "empty"}
                                                         {@render cell(row.year, month, index + 1, value, state)}
                                                     {/if}
@@ -509,23 +525,38 @@
                                     {/each}
                                 </tbody>
                                 <tfoot>
+                                    <tr>
+                                        <th scope="colgroup" colspan={months.length + 1} class="p-0">
+                                            <span class="sr-only">Forward Return results</span>
+                                        </th>
+                                    </tr>
                                     {#each resultRows as { label, hint, value }, row (label)}
-                                        {@const first = row === 0}
-                                        <tr class={[first && "border-t border-border"]}>
+                                        <tr class={[row === 0 && "*:border-t *:border-border-muted *:pt-3.5"]}>
                                             <th
                                                 scope="row"
-                                                class={[
-                                                    "sticky left-0 bg-card-background px-3 pb-1 text-left font-semibold",
-                                                    first ? "pt-4" : "pt-1"
-                                                ]}>
-                                                <Tooltip content={hint} portalTarget={root}>
-                                                    {#snippet trigger({ props })}
-                                                        <span {...withoutFocusStop(props)}>{label}</span>
-                                                    {/snippet}
-                                                </Tooltip>
+                                                class="sticky left-0 bg-card-background px-1 py-1.5 text-xs font-semibold text-foreground">
+                                                <!-- An invisible year sizes the box, so each label ends where the centred years end. -->
+                                                <span class="relative mx-auto block w-max">
+                                                    <span class="invisible" aria-hidden="true" inert>
+                                                        <Checkbox size="sm" class={yearStyle} label={String(years[0]?.year ?? "")} />
+                                                    </span>
+                                                    <Tooltip content={hint} portalTarget={root}>
+                                                        {#snippet trigger({ props })}
+                                                            <span
+                                                                {...withoutFocusStop(props)}
+                                                                class="absolute inset-y-0 right-0 flex items-center">{label}</span>
+                                                        {/snippet}
+                                                    </Tooltip>
+                                                </span>
                                             </th>
                                             {#each results as column, index (months[index])}
-                                                <td class={["px-3 pb-1 text-center", first ? "pt-4" : "pt-1"]}>{value(column)}</td>
+                                                <td
+                                                    class={[
+                                                        "px-1 py-1.5 text-center",
+                                                        label === "Returns"
+                                                            ? ["text-md font-semibold", rateTones[rateTone(column.returns)]]
+                                                            : "text-sm text-foreground-muted"
+                                                    ]}>{value(column)}</td>
                                             {/each}
                                         </tr>
                                     {/each}

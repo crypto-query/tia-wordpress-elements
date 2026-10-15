@@ -131,6 +131,8 @@ export function columnResults(years: YearReturns[], month: number, period: numbe
     return results;
 }
 
+export const rateTone = (rate: number | null): Tone => (rate === null ? "none" : rate > 50 ? "positive" : rate < 50 ? "negative" : "zero");
+
 export const formatRate = (rate: number | null) => (rate === null ? "\u2014" : `${rate.toFixed(2)}%`);
 
 const monthName = (index: number) => `${MONTH_NAMES[index % 12]} ${Math.floor(index / 12)}`;

@@ -15,6 +15,7 @@ import {
     periodOptions,
     periodLabel,
     pickSelection,
+    rateTone,
     restore,
     selectAsset,
     toggle,
@@ -161,6 +162,19 @@ describe("toneOf", () => {
         [null, "none"]
     ] as const)("tones %s as %s", (value, tone) => {
         expect(toneOf(value)).toBe(tone);
+    });
+});
+
+describe("rateTone", () => {
+    it.each([
+        [50.01, "positive"],
+        [100, "positive"],
+        [49.99, "negative"],
+        [0, "negative"],
+        [50, "zero"],
+        [null, "none"]
+    ] as const)("tones a Returns of %s as %s", (rate, tone) => {
+        expect(rateTone(rate)).toBe(tone);
     });
 });
 
