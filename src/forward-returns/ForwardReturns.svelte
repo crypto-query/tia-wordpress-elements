@@ -15,7 +15,6 @@
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
-    import Checkbox from "tia-design-system/ui/checkbox/Checkbox.svelte";
     import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
     import Toggle from "tia-design-system/ui/toggle/Toggle.svelte";
@@ -104,9 +103,6 @@
         zero: "bg-muted text-foreground-muted",
         none: ""
     };
-
-    // The Checkbox sets its own label type; the years take the month headers' instead.
-    const yearStyle = "**:text-xs **:font-semibold";
 
     const rateTones: Record<Tone, string> = {
         positive: "text-success-strong",
@@ -501,15 +497,23 @@
                                 </thead>
                                 <tbody>
                                     {#each years as row (row.year)}
+                                        {@const counted = !exclusions.years.includes(row.year)}
                                         <tr class="first:*:pt-2">
-                                            <th scope="row" class="sticky left-0 bg-card-background px-1 py-0.5 text-center">
-                                                <Checkbox
+                                            <!-- `h-px` lets the year fill the row's height; the inset ring keeps the scroll box from clipping it. -->
+                                            <th scope="row" class="sticky left-0 h-px bg-card-background p-0.5">
+                                                <button
                                                     {...navItem(`year-${row.year}`, 0)}
-                                                    size="sm"
-                                                    class={yearStyle}
-                                                    label={String(row.year)}
-                                                    checked={!exclusions.years.includes(row.year)}
-                                                    onCheckedChange={() => exclude({ years: toggle(exclusions.years, row.year) })} />
+                                                    type="button"
+                                                    role="checkbox"
+                                                    aria-checked={counted}
+                                                    aria-label="Count {row.year}"
+                                                    class={[
+                                                        "block size-full cursor-pointer rounded-md px-2 py-1 text-center text-xs font-semibold hover:bg-muted focus-visible:-outline-offset-2 pointer-coarse:min-h-11",
+                                                        counted ? "text-foreground" : "text-foreground-subtle"
+                                                    ]}
+                                                    onclick={() => exclude({ years: toggle(exclusions.years, row.year) })}>
+                                                    {row.year}
+                                                </button>
                                             </th>
                                             {#each months as month, index (month)}
                                                 <!-- `{@const}`, not the `{const}` declaration tag: that one runs once and misses exclusion changes. -->
@@ -537,9 +541,7 @@
                                                 class="sticky left-0 bg-card-background px-1 py-1.5 text-xs font-semibold text-foreground">
                                                 <!-- An invisible year sizes the box, so each label ends where the centred years end. -->
                                                 <span class="relative mx-auto block w-max">
-                                                    <span class="invisible" aria-hidden="true" inert>
-                                                        <Checkbox size="sm" class={yearStyle} label={String(years[0]?.year ?? "")} />
-                                                    </span>
+                                                    <span class="invisible" aria-hidden="true">{years[0]?.year}</span>
                                                     <Tooltip content={hint} portalTarget={root}>
                                                         {#snippet trigger({ props })}
                                                             <span

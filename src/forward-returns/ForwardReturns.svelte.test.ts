@@ -275,14 +275,14 @@ describe("ForwardReturns", () => {
         expect(result("Totals")).toEqual(["1", "1"]);
     });
 
-    it("the Year checkbox excludes the Year and keeps its cell exclusions for when it comes back", async () => {
+    it("a click on the year excludes the Year and keeps its cell exclusions for when it comes back", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
         render(ForwardReturns, props);
         await screen.findByRole("grid");
         await userEvent.click(screen.getByRole("checkbox", { name: /\+3\.21%/ }));
 
-        await userEvent.click(screen.getByRole("checkbox", { name: "2024" }));
+        await userEvent.click(screen.getByRole("checkbox", { name: "Count 2024" }));
         const loss = screen.getByRole("checkbox", { name: /\u22122\.10%/ });
         expect(loss).toHaveAttribute("aria-disabled", "true");
         expect(loss).toHaveAttribute("aria-checked", "false");
@@ -290,7 +290,7 @@ describe("ForwardReturns", () => {
         expect(loss).toHaveAttribute("aria-checked", "false");
         expect(result("Totals")).toEqual(["0", "0"]);
 
-        await userEvent.click(screen.getByRole("checkbox", { name: "2024" }));
+        await userEvent.click(screen.getByRole("checkbox", { name: "Count 2024" }));
         expect(screen.getByRole("checkbox", { name: /\+3\.21%/ })).toHaveAttribute("aria-checked", "false");
         expect(screen.getByRole("checkbox", { name: /\u22122\.10%/ })).toHaveAttribute("aria-checked", "true");
         expect(result("Totals")).toEqual(["0", "1"]);
@@ -314,7 +314,7 @@ describe("ForwardReturns", () => {
         expect(result("Totals")).toEqual(["1", "1"]);
 
         expect(partial).not.toHaveClass("text-foreground-muted");
-        await userEvent.click(screen.getByRole("checkbox", { name: String(next) }));
+        await userEvent.click(screen.getByRole("checkbox", { name: `Count ${next}` }));
         expect(partial).toHaveClass("text-foreground-muted");
     });
 
@@ -327,12 +327,12 @@ describe("ForwardReturns", () => {
         expect(reset).toHaveAttribute("aria-disabled", "true");
 
         await userEvent.click(screen.getByRole("checkbox", { name: /\+3\.21%/ }));
-        await userEvent.click(screen.getByRole("checkbox", { name: "2025" }));
+        await userEvent.click(screen.getByRole("checkbox", { name: "Count 2025" }));
         await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
         await userEvent.click(reset);
 
         expect(headers()).toEqual(["Year", "Jan", "Jul"]);
-        expect(screen.getByRole("checkbox", { name: "2025" })).toBeChecked();
+        expect(screen.getByRole("checkbox", { name: "Count 2025" })).toBeChecked();
         expect(screen.getByRole("checkbox", { name: /\+3\.21%/ })).toHaveAttribute("aria-checked", "true");
         expect(reset).toHaveAttribute("aria-disabled", "true");
         expect(reset).toHaveFocus();
@@ -386,7 +386,7 @@ describe("ForwardReturns", () => {
             await screen.findByRole("grid", { name: "Forward Returns" });
 
             expect(screen.getByRole("checkbox", { name: "January \u2013 June 2024, +3.21%" })).toBeInTheDocument();
-            await userEvent.click(screen.getByRole("checkbox", { name: "2024" }));
+            await userEvent.click(screen.getByRole("checkbox", { name: "Count 2024" }));
             const excluded = screen.getByRole("checkbox", { name: "July \u2013 December 2024, \u22122.10%, 2024 is excluded" });
             expect(excluded).toHaveAttribute("aria-disabled", "true");
             await userEvent.keyboard("{End}");
@@ -419,9 +419,9 @@ describe("ForwardReturns", () => {
             const loss = screen.getByRole("checkbox", { name: /\u22122\.10%/ });
             expect(focused()).toBe(loss);
             await press("Home");
-            expect(focused()).toBe(screen.getByRole("checkbox", { name: "2024" }));
+            expect(focused()).toBe(screen.getByRole("checkbox", { name: "Count 2024" }));
             await press("ArrowUp");
-            expect(focused()).toBe(screen.getByRole("checkbox", { name: "2025" }));
+            expect(focused()).toBe(screen.getByRole("checkbox", { name: "Count 2025" }));
             await press("ArrowUp");
             expect(focused()).toBe(previous);
 
@@ -448,8 +448,14 @@ describe("ForwardReturns", () => {
             expect(gain).toHaveAttribute("aria-checked", "false");
             expect(result("Totals")).toEqual(["0", "1"]);
             await press("Home");
+            const year = screen.getByRole("checkbox", { name: "Count 2024" });
+            expect(focused()).toBe(year);
             await press("Space");
-            expect(screen.getByRole("checkbox", { name: "2024" })).not.toBeChecked();
+            expect(year).not.toBeChecked();
+            expect(result("Totals")).toEqual(["0", "0"]);
+            await press("Space");
+            expect(year).toBeChecked();
+            expect(result("Totals")).toEqual(["0", "1"]);
         });
 
         it("keeps a Partial cell reachable but never toggles it", async () => {
