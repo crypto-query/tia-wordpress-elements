@@ -229,3 +229,17 @@ export function restore(
     const entryOffset = selection?.period === pick.period ? clamp(pick.entryOffset, 0, pick.period - 1) : 0;
     return selection && { ...selection, entryOffset };
 }
+
+/**
+ * An overlay scroll thumb along a track as long as the visible part: its length, its offset in the track, and
+ * the content pixels one pixel of drag scrolls. Null when nothing scrolls.
+ */
+export function thumb(visible: number, total: number, scrolled: number): { size: number; offset: number; ratio: number } | null {
+    const range = total - visible;
+    if (range <= 0) {
+        return null;
+    }
+    const size = Math.max(24, (visible * visible) / total);
+    const travel = Math.max(1, visible - size);
+    return { size, offset: (travel * clamp(scrolled, 0, range)) / range, ratio: range / travel };
+}

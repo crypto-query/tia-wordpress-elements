@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { logIn, wp } from "./wp";
 
 const renderBlock = `do_blocks( '<!-- wp:tia-elements/forward-returns /-->' ); echo defined( 'DONOTCACHEPAGE' ) ? 'no-cache' : 'cache';`;
@@ -285,4 +285,143 @@ test.describe("one Block on its own page", () => {
             wp("user", "delete", user, "--yes");
         }
     });
+});
+
+test.describe("a card taller than the viewport", () => {
+    /** Answers every data request with 20 Years, newest first, all months filled. */
+    async function manyYears(page: Page) {
+        await page.route(
+            (url) => decodeURIComponent(url.href).includes("forward-returns/data"),
+            (route) => {
+                const period = Number(new URL(route.request().url()).searchParams.get("period") ?? 1);
+                const returns = Array.from({ length: 20 }, (_, row) => ({
+                    year: 2025 - row,
+                    months: Array.from({ length: 12 }, (_, month) => ({ month: month + 1, value: ((row * 12 + month) % 7) - 3.25 }))
+                }));
+                return route.fulfill({ json: { title: "Bitcoin", base: "btc", quote: "usd", periods: [{ period, returns }] } });
+            }
+        );
+    }
+
+    async function open(page: Page, context: BrowserContext, size: { width: number; height: number }) {
+        await page.setViewportSize(size);
+        await logIn(page, "fx-pro-on-hold-overdue");
+        await context.addCookies([stub]);
+        await manyYears(page);
+        await page.goto("/forward-returns/");
+        await expect(block(page).getByRole("grid").locator("tbody").getByRole("row")).toHaveCount(20);
+        await block(page)
+            .locator(".rounded-xl")
+            .evaluate((card) => card.scrollIntoView());
+    }
+
+    /** The layout of the card and its scroll area, in viewport pixels. */
+    const layout = (page: Page) =>
+        block(page)
+            .getByRole("grid")
+            .evaluate((table: HTMLTableElement) => {
+                const scroller = table.parentElement;
+                if (!scroller) throw new Error("the table has no scroll area");
+                const box = (element: Element | null | undefined) => element?.getBoundingClientRect().toJSON() as DOMRect | undefined;
+                return {
+                    card: box(table.closest("[data-card]")),
+                    scroller: box(scroller),
+                    head: box(table.tHead),
+                    foot: box(table.tFoot),
+                    columns: box(scroller.parentElement?.querySelector('[data-thumb="columns"]')),
+                    scrollHeight: scroller.scrollHeight,
+                    clientHeight: scroller.clientHeight,
+                    scrollTop: scroller.scrollTop
+                };
+            });
+
+    test("only the year rows scroll, between a sticky header and results, with an overlay thumb", async ({ page, context }) => {
+        await open(page, context, { width: 1440, height: 600 });
+        const thumb = block(page).locator('[data-thumb="rows"]');
+        let box = await layout(page);
+        expect(box.card?.height).toBeLessThanOrEqual(600);
+        expect(box.scrollHeight).toBeGreaterThan(box.clientHeight);
+        await expect(block(page).locator('[data-thumb="columns"]')).toHaveCount(0);
+
+        // Hidden at rest, shown over the rows, between the header and the results.
+        await expect(thumb).toHaveCSS("opacity", "0");
+        await block(page).getByRole("rowheader", { name: "2024" }).hover();
+        await expect(thumb).toHaveCSS("opacity", "1");
+        const rest = await thumb.boundingBox();
+        if (!rest || !box.head || !box.foot || !box.scroller) throw new Error("no layout");
+        expect(rest.y).toBeCloseTo(box.head.bottom, 0);
+        expect(rest.x + rest.width).toBeLessThanOrEqual(box.scroller.right);
+        expect(rest.height).toBeGreaterThanOrEqual(24);
+
+        // A drag on the thumb scrolls the rows; the header and the results stay.
+        await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2 + 1000, { steps: 5 });
+        await page.mouse.up();
+        box = await layout(page);
+        expect(box.scrollTop).toBe(box.scrollHeight - box.clientHeight);
+        // Within a pixel: the table's height is fractional, the scroll position is not.
+        expect(Math.abs((box.head?.top ?? 0) - (box.scroller?.top ?? 0))).toBeLessThan(1);
+        expect(Math.abs((box.foot?.bottom ?? 0) - (box.scroller?.bottom ?? 0))).toBeLessThan(1);
+        const end = await thumb.boundingBox();
+        expect(Math.abs((end?.y ?? 0) + (end?.height ?? 0) - (box.foot?.top ?? 0))).toBeLessThan(1);
+    });
+
+    test("arrow keys bring a row out of view clear of the sticky header and results", async ({ page, context }) => {
+        await open(page, context, { width: 1440, height: 600 });
+        const year = (value: number) => block(page).getByRole("checkbox", { name: `Count ${value}` });
+        const clear = async (value: number) => {
+            const { head, foot } = await layout(page);
+            const row = await year(value).boundingBox();
+            return !!row && !!head && !!foot && row.y >= head.bottom - 1 && row.y + row.height <= foot.top + 1;
+        };
+
+        await year(2025).focus();
+        for (let step = 0; step < 19; step++) {
+            await page.keyboard.press("ArrowDown");
+        }
+        await expect(year(2006)).toBeFocused();
+        expect(await clear(2006)).toBe(true);
+        for (let step = 0; step < 19; step++) {
+            await page.keyboard.press("ArrowUp");
+        }
+        await expect(year(2025)).toBeFocused();
+        expect(await clear(2025)).toBe(true);
+    });
+
+    test("keeps the header, the results and two rows in a very short viewport, so the page scrolls", async ({ page, context }) => {
+        await open(page, context, { width: 1440, height: 300 });
+        const secondRow = async () => {
+            const { foot } = await layout(page);
+            const row = await block(page).getByRole("rowheader", { name: "2024" }).boundingBox();
+            return (foot?.top ?? 0) - ((row?.y ?? 0) + (row?.height ?? 0));
+        };
+        await expect.poll(secondRow).toBeGreaterThan(-1);
+        expect((await layout(page)).card?.height).toBeGreaterThan(300);
+    });
+
+    test("on a narrow screen a second thumb shows the sideways position under the results", async ({ page, context }) => {
+        await open(page, context, { width: 390, height: 700 });
+        await block(page).getByRole("rowheader", { name: "2024" }).hover();
+        const { foot, columns, card } = await layout(page);
+        expect(columns?.top).toBeGreaterThanOrEqual(foot?.bottom ?? Infinity);
+        expect(columns?.bottom).toBeLessThanOrEqual(card?.bottom ?? 0);
+        expect(card?.height).toBeLessThanOrEqual(700);
+    });
+});
+
+test("a card that fits keeps its natural height, with no thumb", async ({ page, context }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await logIn(page, "fx-pro-on-hold-overdue");
+    await context.addCookies([stub]);
+    await page.goto("/forward-returns/");
+    const table = block(page).getByRole("grid");
+    await expect(table.locator("tbody").getByRole("row")).toHaveCount(3);
+
+    const fit = await table.evaluate((grid: HTMLTableElement) => ({
+        scroller: grid.parentElement?.clientHeight,
+        table: grid.offsetHeight
+    }));
+    expect(fit.scroller).toBe(fit.table);
+    await expect(block(page).locator("[data-thumb]")).toHaveCount(0);
 });

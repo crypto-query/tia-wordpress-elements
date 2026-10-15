@@ -18,6 +18,7 @@ import {
     rateTone,
     restore,
     selectAsset,
+    thumb,
     toggle,
     toneOf,
     withExclusions,
@@ -397,5 +398,27 @@ describe("restore", () => {
     it("clamps the stored Entry Offset to the Holding Period", () => {
         const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 7 });
         expect(restore(attributes, entry, assets)).toEqual({ base: "btc", quote: "usd", period: 3, entryOffset: 2 });
+    });
+});
+
+describe("thumb", () => {
+    it("is absent when nothing scrolls", () => {
+        expect(thumb(300, 300, 0)).toBeNull();
+        expect(thumb(300, 200, 0)).toBeNull();
+    });
+
+    it("is as long as the visible share and moves with the scroll position", () => {
+        expect(thumb(300, 600, 0)).toEqual({ size: 150, offset: 0, ratio: 2 });
+        expect(thumb(300, 600, 150)).toEqual({ size: 150, offset: 75, ratio: 2 });
+        expect(thumb(300, 600, 300)).toEqual({ size: 150, offset: 150, ratio: 2 });
+    });
+
+    it("is at least 24 px long", () => {
+        expect(thumb(100, 10_000, 9900)).toEqual({ size: 24, offset: 76, ratio: 9900 / 76 });
+    });
+
+    it("stays inside its track when the scroll position overshoots", () => {
+        expect(thumb(300, 600, -40)?.offset).toBe(0);
+        expect(thumb(300, 600, 340)?.offset).toBe(150);
     });
 });

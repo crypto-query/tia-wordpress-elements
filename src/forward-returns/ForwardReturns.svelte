@@ -42,6 +42,7 @@
         rateTone,
         restore,
         selectAsset,
+        thumb,
         toggle,
         toneOf,
         withExclusions,
@@ -69,6 +70,17 @@
     // A Return Cell focused by keyboard opens its hint; the grid's one Tab stop is the item focused last.
     let focused = $state<string | null>(null);
     let lastFocused = $state<string | null>(null);
+    let scroller: HTMLDivElement | undefined;
+    // In px: the scroll area, the table, its sticky header, results and Year column, its first two rows,
+    // and the rest of the card around the scroll area (`chrome`).
+    let sizes = $state.raw({ width: 0, height: 0, tableWidth: 0, tableHeight: 0, head: 0, foot: 0, year: 0, twoRows: 0, chrome: 0 });
+    let scroll = $state.raw({ top: 0, left: 0 });
+    // The overlay thumbs show while the pointer is over the year rows or a thumb, while a drag runs, and while the rows scroll.
+    let overRows = $state(false);
+    let overThumb = $state(false);
+    let scrolling = $state(false);
+    let dragging = $state(false);
+    let idle: ReturnType<typeof setTimeout> | undefined;
 
     const now = new Date();
     const currentAsset = $derived(assets.find((asset) => selection !== null && assetKey(asset) === assetKey(selection)));
@@ -89,6 +101,9 @@
     ]);
     const tabStop = $derived(lastFocused !== null && navKeys.includes(lastFocused) ? lastFocused : navKeys[0]);
     const changed = $derived(entryOffset > 0 || exclusions.years.length > 0 || exclusions.cells.length > 0);
+    const rowsThumb = $derived(thumb(sizes.height - sizes.head - sizes.foot, sizes.tableHeight - sizes.head - sizes.foot, scroll.top));
+    const columnsThumb = $derived(thumb(sizes.width, sizes.tableWidth, scroll.left));
+    const thumbsShown = $derived(overRows || overThumb || scrolling || dragging);
 
     const resultRows: { label: string; hint: string; value: (results: Results) => string }[] = [
         { label: "Totals", hint: "Return Cells that count: not Excluded, not Partial, with data", value: ({ totals }) => String(totals) },
@@ -207,6 +222,76 @@
         }
         event.preventDefault();
         target?.focus();
+    }
+
+    function measure() {
+        const table = scroller?.querySelector("table");
+        if (!scroller || !table) {
+            return;
+        }
+        const card = scroller.closest<HTMLElement>("[data-card]");
+        const [first, second] = table.tBodies[0]?.rows ?? [];
+        sizes = {
+            width: scroller.clientWidth,
+            height: scroller.clientHeight,
+            tableWidth: table.offsetWidth,
+            tableHeight: table.offsetHeight,
+            head: table.tHead?.offsetHeight ?? 0,
+            foot: table.tFoot?.offsetHeight ?? 0,
+            year: table.tHead?.rows[0]?.cells[0]?.offsetWidth ?? 0,
+            twoRows: (first?.offsetHeight ?? 0) + (second?.offsetHeight ?? 0),
+            chrome: card ? card.getBoundingClientRect().height - scroller.getBoundingClientRect().height : 0
+        };
+    }
+
+    /** Remeasures the scroll area whenever it, the table or the card changes size. */
+    function scrollArea(element: HTMLDivElement) {
+        scroller = element;
+        const observer = new ResizeObserver(measure);
+        for (const target of [element, element.querySelector("table"), element.closest("[data-card]")]) {
+            if (target) {
+                observer.observe(target);
+            }
+        }
+        return () => {
+            observer.disconnect();
+            clearTimeout(idle);
+            scroller = undefined;
+        };
+    }
+
+    function scrolled(event: Event & { currentTarget: HTMLDivElement }) {
+        scroll = { top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft };
+        scrolling = true;
+        clearTimeout(idle);
+        idle = setTimeout(() => (scrolling = false), 800);
+    }
+
+    /** A drag on a thumb scrolls the rows (`y`) or the columns (`x`). */
+    function drag(event: PointerEvent & { currentTarget: HTMLDivElement }, axis: "x" | "y", ratio: number) {
+        const area = scroller;
+        if (!area || event.button !== 0) {
+            return;
+        }
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragging = true;
+        const start = axis === "y" ? event.clientY : event.clientX;
+        const from = axis === "y" ? area.scrollTop : area.scrollLeft;
+        const move = (next: PointerEvent) => {
+            const to = from + ((axis === "y" ? next.clientY : next.clientX) - start) * ratio;
+            area.scrollTo(axis === "y" ? { top: to } : { left: to });
+        };
+        // On the window, so the drag still ends when the thumb unmounts mid-drag.
+        const end = () => {
+            dragging = false;
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", end);
+            window.removeEventListener("pointercancel", end);
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", end);
+        window.addEventListener("pointercancel", end);
     }
 
     function fail(error: unknown, retry: () => void) {
@@ -393,6 +478,30 @@
     {/if}
 {/snippet}
 
+{#snippet scrollThumb(axis: "x" | "y", span: { size: number; offset: number; ratio: number })}
+    <!-- No layout space; wheel, touch and the keyboard grid scroll too, so screen readers skip it. -->
+    <div
+        data-thumb={axis === "y" ? "rows" : "columns"}
+        aria-hidden="true"
+        class={[
+            "absolute z-3 touch-none rounded-full transition-[opacity,background-color] duration-200 before:absolute",
+            axis === "y"
+                ? "right-px w-1.5 before:-inset-x-1.5 before:inset-y-0"
+                : "top-full mt-1 h-1.5 before:inset-x-0 before:-inset-y-1.5",
+            // Hidden, it lets clicks through to the tiles under it.
+            thumbsShown ? "opacity-100" : "pointer-events-none opacity-0",
+            dragging ? "bg-foreground-muted" : "bg-(--scrollbar-thumb) hover:bg-foreground-muted"
+        ]}
+        style:top={axis === "y" ? `${sizes.head + span.offset}px` : undefined}
+        style:height={axis === "y" ? `${span.size}px` : undefined}
+        style:left={axis === "x" ? `${span.offset}px` : undefined}
+        style:width={axis === "x" ? `${span.size}px` : undefined}
+        onpointerenter={(event) => (overThumb = event.pointerType !== "touch")}
+        onpointerleave={() => (overThumb = false)}
+        onpointerdown={(event) => drag(event, axis, span.ratio)}>
+    </div>
+{/snippet}
+
 {#snippet loading()}
     <div class="flex min-h-80 items-center justify-center">
         <Spinner size="lg" tone="muted" label="Loading Forward Returns" />
@@ -405,7 +514,16 @@
         <AccessCard feature="Forward Returns" {card} />
     {:else}
         <!-- A container: the Block may sit in a narrow column on a wide screen, so the layout follows the card's width. -->
-        <Card padding="none" class="@container">
+        <!-- At most the viewport height, below the admin bar when there is one; then only the year rows scroll.
+             It keeps room for the header, the results and about two rows; in a shorter viewport the page scrolls. -->
+        <Card
+            padding="none"
+            class="@container flex flex-col"
+            data-card
+            style="max-height: max(100dvh - var(--wp-admin--admin-bar--height, 0px), {sizes.chrome +
+                sizes.head +
+                sizes.foot +
+                sizes.twoRows}px)">
             {#if selection}
                 {@const picked = selection}
                 <div class="flex flex-col gap-4 border-b border-border-muted px-4 py-5 @lg:px-6 @3xl:flex-row @3xl:items-end">
@@ -447,14 +565,22 @@
                     </div>
                 </div>
             {/if}
-            <div class="px-4 pt-4 pb-5 @lg:px-5">
+            <div class="flex min-h-0 flex-col px-4 pt-4 pb-5 @lg:px-5">
                 {#if failure}
                     {@render problem(failure)}
                 {:else if !shown}
                     {@render loading()}
                 {:else}
-                    <div class="relative" aria-busy={request ? "true" : undefined}>
-                        <div class={["overflow-x-auto transition-opacity duration-150", request && "opacity-50"]}>
+                    <div class="relative flex min-h-0 flex-col" aria-busy={request ? "true" : undefined}>
+                        <!-- One scroll area for both directions. The scroll padding keeps a focused row clear of the sticky parts. -->
+                        <div
+                            {@attach scrollArea}
+                            class={[
+                                "scrollbar-none overflow-auto transition-opacity duration-150 [&::-webkit-scrollbar]:hidden",
+                                request && "opacity-50"
+                            ]}
+                            style:scroll-padding="{sizes.head}px 0 {sizes.foot}px {sizes.year}px"
+                            onscroll={scrolled}>
                             <!-- On a touch screen the Year column widens to fit both 44 px Entry Offset arrows. -->
                             <table
                                 role="grid"
@@ -468,12 +594,12 @@
                                         lastFocused = key;
                                     }
                                 }}>
-                                <thead>
+                                <thead class="sticky top-0 z-2">
                                     <tr class="text-xs tracking-wider text-foreground-muted uppercase">
-                                        <!-- The grey sits on a layer over the card colour, so the rounded corner hides the months scrolled under it. -->
+                                        <!-- The corner cells' grey sits on a layer over the card colour, so their rounded corners hide what scrolls under them. -->
                                         <th
                                             scope="col"
-                                            class="sticky left-0 w-(--year) bg-card-background px-0 py-1 text-center font-semibold before:absolute before:inset-0 before:-z-10 before:rounded-l-md before:bg-muted">
+                                            class="sticky left-0 z-1 w-(--year) bg-card-background px-0 py-1 text-center font-semibold before:absolute before:inset-0 before:-z-10 before:rounded-l-md before:bg-muted">
                                             {#if period > 1}
                                                 <span class="sr-only">Year</span>
                                                 <span class="flex justify-center gap-1 pointer-coarse:gap-0">
@@ -488,14 +614,16 @@
                                             <!-- Inset ring: outside it the scroll box clips the top and the sticky Year column covers the left. -->
                                             <th
                                                 scope="col"
-                                                class="bg-muted px-2 py-2.5 text-center font-semibold last:rounded-r-md focus-visible:-outline-offset-2"
+                                                class="bg-muted px-2 py-2.5 text-center font-semibold last:relative last:z-0 last:bg-card-background last:before:absolute last:before:inset-0 last:before:-z-10 last:before:rounded-r-md last:before:bg-muted focus-visible:-outline-offset-2"
                                                 {...navItem(`month-${month}`, index + 1)}>
                                                 {MONTH_NAMES[month - 1]}
                                             </th>
                                         {/each}
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody
+                                    onpointerenter={(event) => (overRows = event.pointerType !== "touch")}
+                                    onpointerleave={() => (overRows = false)}>
                                     {#each years as row (row.year)}
                                         {@const counted = !exclusions.years.includes(row.year)}
                                         <tr class="first:*:pt-2">
@@ -528,7 +656,7 @@
                                         </tr>
                                     {/each}
                                 </tbody>
-                                <tfoot>
+                                <tfoot class="sticky bottom-0 z-2 bg-card-background">
                                     <tr>
                                         <th scope="colgroup" colspan={months.length + 1} class="p-0">
                                             <span class="sr-only">Forward Return results</span>
@@ -565,6 +693,12 @@
                                 </tfoot>
                             </table>
                         </div>
+                        {#if rowsThumb}
+                            {@render scrollThumb("y", rowsThumb)}
+                        {/if}
+                        {#if columnsThumb}
+                            {@render scrollThumb("x", columnsThumb)}
+                        {/if}
                         {#if request}
                             <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
                                 <Spinner size="lg" tone="muted" label="Loading Forward Returns" />
