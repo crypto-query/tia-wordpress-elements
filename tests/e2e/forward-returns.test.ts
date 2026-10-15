@@ -433,3 +433,18 @@ test("a card that fits keeps its natural height, with no thumb", async ({ page, 
     expect(fit.scroller).toBe(fit.table);
     await expect(block(page).locator("[data-thumb]")).toHaveCount(0);
 });
+
+test("opening the Asset picker keeps the page where it is", async ({ page, context }) => {
+    await page.setViewportSize({ width: 1440, height: 600 });
+    await logIn(page, "fx-pro-on-hold-overdue");
+    await context.addCookies([stub]);
+    await page.goto("/forward-returns/");
+    await expect(block(page).getByRole("grid")).toBeVisible();
+    const picker = block(page).getByRole("combobox", { name: "Asset" });
+    await page.evaluate(() => scrollTo({ top: 150, behavior: "instant" }));
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(150);
+
+    await picker.click();
+    await expect(block(page).getByRole("option", { name: "Bitcoin - BTC" })).toBeVisible();
+    expect(await page.evaluate(() => scrollY)).toBe(150);
+});
