@@ -396,19 +396,21 @@
                 portalTarget={root}
                 value={assetKey(selection)}
                 onValueChange={pickAsset} />
-            <RadioGroup
-                label="Holding Period"
-                orientation="horizontal"
-                size="sm"
-                items={currentAsset ? periodOptions(currentAsset) : []}
-                value={String(selection.period)}
-                onValueChange={pickPeriod} />
-            <Button variant="outline" size="sm" class="self-start sm:ml-auto sm:self-auto" aria-disabled={!changed} onclick={reset}>
-                {#snippet leadingIcon()}
-                    <RotateCcw class="size-4" aria-hidden="true" />
-                {/snippet}
-                Reset
-            </Button>
+            <div class="flex flex-col gap-4 sm:ml-auto sm:flex-row sm:items-end">
+                <RadioGroup
+                    label="Holding Period"
+                    orientation="horizontal"
+                    size="sm"
+                    items={currentAsset ? periodOptions(currentAsset) : []}
+                    value={String(selection.period)}
+                    onValueChange={pickPeriod} />
+                <Button variant="outline" size="sm" class="self-start sm:self-auto" aria-disabled={!changed} onclick={reset}>
+                    {#snippet leadingIcon()}
+                        <RotateCcw class="size-4" aria-hidden="true" />
+                    {/snippet}
+                    Reset
+                </Button>
+            </div>
         </div>
         {#if failure}
             {@render problem(failure)}
@@ -420,7 +422,8 @@
                     <table
                         role="grid"
                         aria-label="Forward Returns"
-                        class="border-collapse text-right tabular-nums"
+                        class="w-full table-fixed border-collapse text-right tabular-nums"
+                        style:min-width="calc(8rem + {months.length} * 6.25rem)"
                         onkeydown={navigate}
                         onfocusin={(event) => {
                             const key = event.target instanceof HTMLElement ? event.target.dataset.nav : undefined;
@@ -430,7 +433,7 @@
                         }}>
                         <thead>
                             <tr>
-                                <th scope="col" class="sticky left-0 bg-background px-3 py-2 text-left font-semibold">
+                                <th scope="col" class="sticky left-0 w-32 bg-background px-3 py-2 text-left font-semibold">
                                     {#if period > 1}
                                         <span class="sr-only">Year</span>
                                         <span class="flex gap-1">
@@ -445,7 +448,7 @@
                                     <!-- Inset ring: outside it the scroll box clips the top and the sticky Year column covers the left. -->
                                     <th
                                         scope="col"
-                                        class="px-3 py-2 font-semibold focus-visible:-outline-offset-2"
+                                        class="px-3 py-2 text-center font-semibold uppercase focus-visible:-outline-offset-2"
                                         {...navItem(`month-${month}`, index + 1)}>
                                         {MONTH_NAMES[month - 1]}
                                     </th>
