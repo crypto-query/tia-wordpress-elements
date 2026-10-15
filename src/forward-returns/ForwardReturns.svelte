@@ -29,6 +29,7 @@
         MONTH_NAMES,
         assetKey,
         cellKey,
+        cellName,
         cellState,
         cellValue,
         columnResults,
@@ -62,6 +63,9 @@
     let entryOffset = $state(0);
     // The one Return Cell under the pointer mounts a Tooltip; one per cell blocks the page for seconds on long histories.
     let hinted = $state<string | null>(null);
+    // A Return Cell focused by keyboard opens its hint; the grid's one Tab stop is the item focused last.
+    let focused = $state<string | null>(null);
+    let lastFocused = $state<string | null>(null);
 
     const now = new Date();
     const currentAsset = $derived(assets.find((asset) => selection !== null && assetKey(asset) === assetKey(selection)));
@@ -72,6 +76,15 @@
     const exclusionStore = $derived(instance === null ? previewMemory : memory);
     const exclusions = $derived(exclusionStore.current.excluded[tableKey] ?? { years: [], cells: [] });
     const results = $derived(months.map((month) => columnResults(years, month, period, exclusions, now)));
+    const navKeys = $derived([
+        ...(period > 1 ? ["previous", "next"] : []),
+        ...months.map((month) => `month-${month}`),
+        ...years.flatMap((row) => [
+            `year-${row.year}`,
+            ...months.filter((month) => cellValue(row, month) !== null).map((month) => cellKey(row.year, month))
+        ])
+    ]);
+    const tabStop = $derived(lastFocused !== null && navKeys.includes(lastFocused) ? lastFocused : navKeys[0]);
     const changed = $derived(entryOffset > 0 || exclusions.years.length > 0 || exclusions.cells.length > 0);
 
     const resultRows: { label: string; hint: string; value: (results: Results) => string }[] = [
@@ -134,6 +147,56 @@
         delete rest.tabindex;
         delete rest.type;
         return rest;
+    }
+
+    /** Grid props for one item of the roving set; both Entry Offset arrows and the Year sit in column 0. */
+    const navItem = (key: string, column: number) => ({ "data-nav": key, "data-column": column, tabindex: key === tabStop ? 0 : -1 });
+
+    function navigate(event: KeyboardEvent & { currentTarget: HTMLTableElement }) {
+        const item = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-nav]") : null;
+        if (!item) {
+            return;
+        }
+        const rows = [...event.currentTarget.rows]
+            .map((row) => [...row.querySelectorAll<HTMLElement>("[data-nav]")])
+            .filter((row) => row.length > 0);
+        const rowIndex = rows.findIndex((row) => row.includes(item));
+        const row = rows[rowIndex];
+        const index = row.indexOf(item);
+        let target: HTMLElement | undefined;
+        switch (event.key) {
+            case "ArrowLeft":
+                target = row[index - 1];
+                break;
+            case "ArrowRight":
+                target = row[index + 1];
+                break;
+            case "Home":
+                target = row[0];
+                break;
+            case "End":
+                target = row.at(-1);
+                break;
+            case "ArrowUp":
+            case "ArrowDown": {
+                // Rows without a cell in this column are skipped.
+                const step = event.key === "ArrowUp" ? -1 : 1;
+                for (let next = rowIndex + step; !target && next >= 0 && next < rows.length; next += step) {
+                    target = rows[next].find((candidate) => candidate.dataset.column === item.dataset.column);
+                }
+                break;
+            }
+            case " ":
+                // An Entry Month header has no action; Space would scroll the page.
+                if (item.tagName === "TH") {
+                    event.preventDefault();
+                }
+                return;
+            default:
+                return;
+        }
+        event.preventDefault();
+        target?.focus();
     }
 
     function fail(error: unknown, retry: () => void) {
@@ -234,6 +297,7 @@
         {#snippet trigger({ props })}
             <Button
                 {...props}
+                {...navItem(step < 0 ? "previous" : "next", 0)}
                 variant="ghost"
                 size="icon"
                 class="size-7 pointer-coarse:size-11"
@@ -255,13 +319,15 @@
     </Tooltip>
 {/snippet}
 
-{#snippet cell(year: number, month: number, value: number | null, state: CellState)}
+{#snippet cell(year: number, month: number, column: number, value: number | null, state: CellState)}
     {@const key = cellKey(year, month)}
     {@const locked = state === "partial" || state === "year-excluded"}
     <button
+        {...navItem(key, column)}
         type="button"
         role="checkbox"
         aria-checked={state === "counted"}
+        aria-label={cellName(year, month, value, period, state)}
         aria-disabled={locked ? "true" : undefined}
         class={[
             "grid w-full min-w-20 items-center rounded-md border text-right whitespace-nowrap pointer-coarse:min-h-11",
@@ -272,6 +338,11 @@
             locked ? "cursor-not-allowed" : "cursor-pointer"
         ]}
         onpointerenter={() => (hinted = key)}
+        onfocus={(event) => {
+            hinted = key;
+            focused = event.currentTarget.matches(":focus-visible") ? key : null;
+        }}
+        onblur={() => (focused = null)}
         onclick={() => {
             if (!locked) {
                 exclude({ cells: toggle(exclusions.cells, key) });
@@ -284,7 +355,12 @@
 {#snippet hint(key: string, year: number, month: number, value: number | null, state: CellState)}
     {#if hinted === key}
         <!-- No offset beyond the arrow: rows sit closer than the default gap, so its tip would touch the row above. -->
-        <Tooltip content={cellHint(year, month, value, state)} class="whitespace-pre-line" offset={0} portalTarget={root}>
+        <Tooltip
+            content={cellHint(year, month, value, state)}
+            class="whitespace-pre-line"
+            offset={0}
+            open={focused === key}
+            portalTarget={root}>
             {#snippet trigger({ props })}
                 <span {...withoutFocusStop(props)} class="block px-2 py-1.5">{formatReturn(value)}</span>
             {/snippet}
@@ -341,7 +417,17 @@
         {:else}
             <div class="relative" aria-busy={request ? "true" : undefined}>
                 <div class={["overflow-x-auto transition-opacity duration-150", request && "opacity-50"]}>
-                    <table class="border-collapse text-right tabular-nums">
+                    <table
+                        role="grid"
+                        aria-label="Forward Returns"
+                        class="border-collapse text-right tabular-nums"
+                        onkeydown={navigate}
+                        onfocusin={(event) => {
+                            const key = event.target instanceof HTMLElement ? event.target.dataset.nav : undefined;
+                            if (key) {
+                                lastFocused = key;
+                            }
+                        }}>
                         <thead>
                             <tr>
                                 <th scope="col" class="sticky left-0 bg-background px-3 py-2 text-left font-semibold">
@@ -355,8 +441,14 @@
                                         Year
                                     {/if}
                                 </th>
-                                {#each months as month (month)}
-                                    <th scope="col" class="px-3 py-2 font-semibold">{MONTH_NAMES[month - 1]}</th>
+                                {#each months as month, index (month)}
+                                    <!-- Inset ring: outside it the scroll box clips the top and the sticky Year column covers the left. -->
+                                    <th
+                                        scope="col"
+                                        class="px-3 py-2 font-semibold focus-visible:-outline-offset-2"
+                                        {...navItem(`month-${month}`, index + 1)}>
+                                        {MONTH_NAMES[month - 1]}
+                                    </th>
                                 {/each}
                             </tr>
                         </thead>
@@ -365,18 +457,19 @@
                                 <tr class="border-t border-border-muted">
                                     <th scope="row" class="sticky left-0 bg-background px-3 py-1 text-left font-semibold">
                                         <Checkbox
+                                            {...navItem(`year-${row.year}`, 0)}
                                             size="sm"
                                             label={String(row.year)}
                                             checked={!exclusions.years.includes(row.year)}
                                             onCheckedChange={() => exclude({ years: toggle(exclusions.years, row.year) })} />
                                     </th>
-                                    {#each months as month (month)}
+                                    {#each months as month, index (month)}
                                         <!-- `{@const}`, not the `{const}` declaration tag: that one runs once and misses exclusion changes. -->
                                         {@const value = cellValue(row, month)}
                                         {@const state = cellState(row.year, month, value, period, exclusions, now)}
                                         <td class="p-1">
                                             {#if state !== "empty"}
-                                                {@render cell(row.year, month, value, state)}
+                                                {@render cell(row.year, month, index + 1, value, state)}
                                             {/if}
                                         </td>
                                     {/each}

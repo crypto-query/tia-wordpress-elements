@@ -59,7 +59,7 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
     await logIn(page, "fx-pro-on-hold-overdue");
     await context.addCookies([{ name: "tia_elements_test", value: "supabase-stub", url: "http://localhost:8000" }]);
     await page.goto("/forward-returns/");
-    const table = page.locator(".wp-block-tia-elements-forward-returns").getByRole("table");
+    const table = page.locator(".wp-block-tia-elements-forward-returns").getByRole("grid");
 
     await expect(table.locator("thead").getByRole("columnheader")).toHaveText([
         "Year",
@@ -81,7 +81,7 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
         table
             .getByRole("row")
             .filter({ has: page.getByRole("rowheader", { name: year }) })
-            .getByRole("cell");
+            .getByRole("gridcell");
     await expect(cells("2026")).toHaveText(Array<string>(12).fill(""));
     await expect(cells("2025")).toHaveText(["+5.50%", "\u22122.75%", "+0.30%", "+1.90%", "\u22124.40%", "", "", "", "", "", "", ""]);
     await expect(cells("2024")).toHaveText([
@@ -176,7 +176,7 @@ test("storage that holds bad JSON is ignored and overwritten", async ({ page, co
     await page.evaluate((key) => localStorage.setItem(key, "{not json"), storageKey);
     await page.goto("/forward-returns/");
 
-    await expect(block(page).getByRole("table").locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
+    await expect(block(page).getByRole("grid").locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
     await block(page).getByRole("checkbox", { name: "+3.21%" }).click();
     await expect
         .poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null") as unknown, storageKey))
@@ -233,7 +233,7 @@ test.describe("one Block on its own page", () => {
         await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
         const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-forward-returns");
 
-        await expect(preview.getByRole("table").locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
+        await expect(preview.getByRole("grid").locator("tbody").getByRole("rowheader")).toHaveText(["2026", "2025", "2024"]);
         await preview.getByText("Forward Return results").click();
         const inspector = page.getByRole("region", { name: "Editor settings" });
         await expect(inspector.getByRole("combobox", { name: "Asset" })).toBeVisible();

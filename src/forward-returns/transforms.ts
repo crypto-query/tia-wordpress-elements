@@ -144,6 +144,32 @@ export function periodLabel(year: number, month: number, period: number, now: Da
     return period === 1 ? monthName(start) : `${monthName(start)} \u2013 ${monthName(start + period - 1)}`;
 }
 
+const FULL_MONTH_NAMES = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December"
+];
+
+/** A Return Cell's accessible name: "January – March 2024, +3.21%", plus why it cannot count when a rule says so. */
+export function cellName(year: number, month: number, value: number | null, period: number, state: CellState): string {
+    const start = monthIndex(year, month);
+    const end = start + period - 1;
+    const [startYear, endYear] = [Math.floor(start / 12), Math.floor(end / 12)];
+    const first = FULL_MONTH_NAMES[start % 12] + (startYear === endYear ? "" : ` ${startYear}`);
+    const months = period === 1 ? first : `${first} \u2013 ${FULL_MONTH_NAMES[end % 12]}`;
+    const reason = state === "partial" ? ", Partial" : state === "year-excluded" ? `, ${year} is excluded` : "";
+    return `${months} ${endYear}, ${formatReturn(value)}${reason}`;
+}
+
 /** The Block attributes a stored pick is tied to. */
 export const ATTRIBUTE_KEYS = ["base", "quote", "period"] as const;
 

@@ -3,6 +3,7 @@ import type { Asset, YearReturns } from "./api";
 import {
     assetKey,
     cellKey,
+    cellName,
     cellState,
     cellValue,
     columnResults,
@@ -275,6 +276,18 @@ describe("periodLabel", () => {
         [2026, 3, 1, "Mar 2026 \u2013 today"]
     ])("names %i-%i over %i months %j", (year, month, period, label) => {
         expect(periodLabel(year, month, period, now)).toBe(label);
+    });
+});
+
+describe("cellName", () => {
+    it.each([
+        [2024, 1, 3, 3.21, "counted", "January \u2013 March 2024, +3.21%"],
+        [2024, 12, 3, -2.1, "excluded", "December 2024 \u2013 February 2025, \u22122.10%"],
+        [2024, 5, 1, 0, "counted", "May 2024, 0.00%"],
+        [2024, 7, 6, 1, "year-excluded", "July \u2013 December 2024, +1.00%, 2024 is excluded"],
+        [2026, 1, 3, 5, "partial", "January \u2013 March 2026, +5.00%, Partial"]
+    ] as const)("names %i-%i over %i months", (year, month, period, value, state, name) => {
+        expect(cellName(year, month, value, period, state)).toBe(name);
     });
 });
 
