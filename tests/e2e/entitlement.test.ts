@@ -1,5 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
-import { logIn, wp } from "./wp";
+import { logIn, restoreOption, snapshotOption, wp, type OptionSnapshot } from "./wp";
+
+// A stored Stripe key would send non-Members to real Stripe; these tests cover the WooCommerce side alone.
+let stripeKey: OptionSnapshot;
+
+test.beforeAll(() => {
+    stripeKey = snapshotOption("tia_stripe_key");
+    wp("option", "delete", "tia_stripe_key");
+});
+
+test.afterAll(() => {
+    restoreOption(stripeKey);
+});
 
 const bootCard = `echo wp_json_encode( TIA_Elements_Blocks::boot( 'tia-elements/forward-returns', array() )['card'] );`;
 

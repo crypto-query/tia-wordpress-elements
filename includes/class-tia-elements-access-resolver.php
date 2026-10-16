@@ -12,8 +12,12 @@ defined( 'ABSPATH' ) || exit;
  *
  * @phpstan-type Record array{status: string, created: int, trial_end: int, period_end: int, trial_end_pre_cancellation: string}
  * @phpstan-type MemberProduct array{id: int, field: 'product_id'|'variation_id'}
+ * @phpstan-import-type Subscription from TIA_Elements_Suite_Subscriptions
  */
 final class TIA_Elements_Access_Resolver {
+
+	// Checkout Trials run 7 days; a wind-down `trialing` pauses billing for months and is not a Trial.
+	private const STRIPE_TRIAL_MAX_SECONDS = 31 * 86400;
 
 	/**
 	 * Products that make a subscription a member subscription, each with the line-item field it matches.
@@ -104,6 +108,30 @@ final class TIA_Elements_Access_Resolver {
 			}
 			$access = self::subscription_access( $record, $now );
 			if ( null === $best || ( 'full' === $access->level && 'trial' === $best->level ) ) {
+				$best = $access;
+			}
+		}
+		return $best ?? TIA_Elements_Access::denied();
+	}
+
+	/**
+	 * Access from the user's TIA Indicator Suite subscriptions.
+	 *
+	 * @param array $subscriptions Suite subscriptions with raw Stripe statuses.
+	 *
+	 * @phpstan-param list<Subscription> $subscriptions
+	 */
+	public static function stripe( array $subscriptions ): TIA_Elements_Access {
+		$best = null;
+		foreach ( $subscriptions as $subscription ) {
+			$access = match ( $subscription['status'] ) {
+				'active', 'past_due' => TIA_Elements_Access::full( 'indicator-suite', $subscription['created'], $subscription['current_period_end'] ),
+				'trialing'           => $subscription['trial_end'] - $subscription['created'] <= self::STRIPE_TRIAL_MAX_SECONDS
+					? TIA_Elements_Access::trial( 'indicator-suite', $subscription['trial_end'] )
+					: TIA_Elements_Access::full( 'indicator-suite', $subscription['created'], $subscription['trial_end'] ),
+				default              => null,
+			};
+			if ( null !== $access && ( null === $best || ( 'full' === $access->level && 'trial' === $best->level ) ) ) {
 				$best = $access;
 			}
 		}

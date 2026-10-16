@@ -228,7 +228,7 @@ final class TIA_Elements_Settings_Page {
 		}
 		check_admin_referer( self::TEST_ACTION, self::TEST_ACTION . '_nonce' );
 
-		foreach ( array( self::supabase_check() ) as $check ) {
+		foreach ( array( self::supabase_check(), ...self::stripe_checks() ) as $check ) {
 			printf(
 				'<div class="notice notice-%1$s inline"><p>%2$s</p></div>',
 				esc_attr( $check['ok'] ? 'success' : 'error' ),
@@ -274,6 +274,53 @@ final class TIA_Elements_Settings_Page {
 			/* translators: %d: the HTTP status. */
 			'message' => sprintf( __( 'Supabase: connected (HTTP %d).', 'tia-wordpress-elements' ), $status ),
 		);
+	}
+
+	/**
+	 * Reads the suite product, one subscription and a Customer Search for a dummy email.
+	 *
+	 * @return list<array{ok: bool, message: string}>
+	 */
+	private static function stripe_checks(): array {
+		$settings = TIA_Elements_Settings::from_wordpress();
+		if ( '' === $settings->get( 'stripe_key' )['value'] ) {
+			return array(
+				array(
+					'ok'      => false,
+					'message' => __( 'Stripe: not configured: set the restricted key.', 'tia-wordpress-elements' ),
+				),
+			);
+		}
+
+		$checks = array(
+			__( 'Stripe suite product', 'tia-wordpress-elements' ) => array( '/v1/products/' . rawurlencode( $settings->get( 'stripe_suite_product' )['value'] ), array() ),
+			__( 'Stripe subscriptions', 'tia-wordpress-elements' ) => array( '/v1/subscriptions', array( 'limit' => 1 ) ),
+			__( 'Stripe customer search', 'tia-wordpress-elements' ) => array( '/v1/customers/search', array( 'query' => 'email:"test-connection@example.invalid"' ) ),
+		);
+		$lines  = array();
+		foreach ( $checks as $label => list( $path, $query ) ) {
+			$status = 0;
+			$body   = TIA_Elements_Stripe_Client::get( $path, $query, $status );
+			if ( is_wp_error( $body ) ) {
+				$lines[] = array(
+					'ok'      => false,
+					/* translators: 1: the check, 2: what went wrong, e.g. "HTTP 401 invalid_request_error". */
+					'message' => sprintf( __( '%1$s: %2$s.', 'tia-wordpress-elements' ), $label, $body->get_error_message() ),
+				);
+				continue;
+			}
+			$detail = '';
+			if ( isset( $body['name'] ) && is_string( $body['name'] ) ) {
+				/* translators: 1: the product name, 2: live mode or test mode. */
+				$detail = sprintf( __( '%1$s, %2$s, ', 'tia-wordpress-elements' ), $body['name'], empty( $body['livemode'] ) ? __( 'test mode', 'tia-wordpress-elements' ) : __( 'live mode', 'tia-wordpress-elements' ) );
+			}
+			$lines[] = array(
+				'ok'      => true,
+				/* translators: 1: the check, 2: product details or nothing, 3: the HTTP status. */
+				'message' => sprintf( __( '%1$s: %2$sHTTP %3$d.', 'tia-wordpress-elements' ), $label, $detail, $status ),
+			);
+		}
+		return $lines;
 	}
 
 	/**

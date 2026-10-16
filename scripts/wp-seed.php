@@ -232,6 +232,22 @@ function tia_elements_seed_fixtures( $now ) {
 			'role' => 'active_membership',
 			'subs' => array(),
 		),
+		'fx-suite-active'        => array(
+			'role' => 'subscriber',
+			'subs' => array(),
+		),
+		'fx-suite-trial'         => array(
+			'role' => 'subscriber',
+			'subs' => array(),
+		),
+		'fx-suite-paused'        => array(
+			'role' => 'subscriber',
+			'subs' => array(),
+		),
+		'fx-suite-error'         => array(
+			'role' => 'subscriber',
+			'subs' => array(),
+		),
 		'fx-two-member-subs'     => array(
 			'role' => $pro,
 			'subs' => array(

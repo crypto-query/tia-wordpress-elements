@@ -107,6 +107,19 @@ final class CardTest extends TestCase {
 	}
 
 	/**
+	 * A TIA Indicator Suite Trial gets the Trial card with its own source.
+	 */
+	public function test_suite_trial_gets_trial_card(): void {
+		$this->assertSame(
+			array(
+				'case'   => 'trial',
+				'source' => 'indicator-suite',
+			),
+			self::card( TIA_Elements_Access::trial( 'indicator-suite', 2_000_000_000 ), true, array( 'subscriber' ) )
+		);
+	}
+
+	/**
 	 * A failed source gets the Unavailable card, with no price and no CTA.
 	 */
 	public function test_unavailable_gets_unavailable_card(): void {

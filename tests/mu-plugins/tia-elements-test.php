@@ -11,6 +11,9 @@
  * Switches:
  * - `wcs-unavailable`: every WooCommerce Subscriptions read of a user's subscriptions throws.
  * - `supabase-stub`: Supabase is configured with fake values, and month_returns reads answer with fixture rows.
+ * - `stripe-stub`: Stripe is configured with a fake key, and Stripe calls answer per email with fixture customers:
+ *   `fx-suite-active@example.test` (active), `fx-suite-trial@example.test` (7-day trialing),
+ *   `fx-suite-paused@example.test` (paused), `fx-suite-error@example.test` (HTTP 500); any other email finds none.
  *
  * @package tia-wordpress-elements
  */
@@ -105,6 +108,115 @@ function tia_elements_test_supabase( $url ) {
 }
 
 /**
+ * Answers a Stripe call: Customer Search per email, the suite product, and the subscription list.
+ *
+ * @param string $url Request URL.
+ * @return false|array<string, mixed>
+ */
+function tia_elements_test_stripe( $url ) {
+	if ( 'api.stripe.com' !== wp_parse_url( $url, PHP_URL_HOST ) ) {
+		return false;
+	}
+	$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+	parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+	$now     = time();
+	$product = 'prod_QhxKPj5ay8NjPH';
+	$list    = static fn( $data ) => array(
+		'object'   => 'list',
+		'data'     => $data,
+		'has_more' => false,
+	);
+
+	$status = 200;
+	if ( str_starts_with( $path, '/v1/products/' ) ) {
+		$body = array(
+			'id'       => substr( $path, strlen( '/v1/products/' ) ),
+			'object'   => 'product',
+			'name'     => 'TIA Indicator Suite (stub)',
+			'livemode' => false,
+		);
+	} elseif ( '/v1/subscriptions' === $path ) {
+		$body = $list( array() );
+	} elseif ( '/v1/customers/search' === $path ) {
+		preg_match( '/^email:"(.*)"$/', (string) ( $query['query'] ?? '' ), $match );
+		$email    = $match[1] ?? '';
+		$statuses = array(
+			'fx-suite-active@example.test' => array( 'active', 0, $now + 300 * DAY_IN_SECONDS ),
+			'fx-suite-trial@example.test'  => array( 'trialing', $now + 5 * DAY_IN_SECONDS, $now + 5 * DAY_IN_SECONDS ),
+			'fx-suite-paused@example.test' => array( 'paused', 0, $now - DAY_IN_SECONDS ),
+		);
+		$body     = $list( array() );
+		if ( 'fx-suite-error@example.test' === $email ) {
+			$status = 500;
+			// Stripe's message can echo the query; the client must not pass it on.
+			$body = array(
+				'error' => array(
+					'type'    => 'api_error',
+					'message' => 'Something went wrong searching ' . $email,
+				),
+			);
+		} elseif ( isset( $statuses[ $email ] ) ) {
+			list( $sub_status, $trial_end, $period_end ) = $statuses[ $email ];
+
+			$body = $list(
+				array(
+					array(
+						'id'            => 'cus_stub_' . md5( $email ),
+						'object'        => 'customer',
+						'email'         => $email,
+						'subscriptions' => $list(
+							array(
+								array(
+									'id'                   => 'sub_stub_' . md5( $email ),
+									'object'               => 'subscription',
+									'status'               => $sub_status,
+									'created'              => $now - 2 * DAY_IN_SECONDS,
+									'trial_end'            => $trial_end ? $trial_end : null,
+									'cancel_at_period_end' => false,
+									'currency'             => 'usd',
+									'items'                => $list(
+										array(
+											array(
+												'price'    => array(
+													'product'     => $product,
+													'unit_amount' => 29900,
+													'recurring'   => array( 'interval' => 'year' ),
+												),
+												'quantity' => 1,
+												'current_period_end' => $period_end,
+											),
+										)
+									),
+								),
+							)
+						),
+					),
+				)
+			);
+		}
+	} else {
+		$status = 404;
+		$body   = array(
+			'error' => array(
+				'type' => 'invalid_request_error',
+				'code' => 'resource_missing',
+			),
+		);
+	}
+
+	return array(
+		'headers'  => array( 'content-type' => 'application/json' ),
+		'body'     => wp_json_encode( $body ),
+		'response' => array(
+			'code'    => $status,
+			'message' => 200 === $status ? 'OK' : 'Error',
+		),
+		'cookies'  => array(),
+		'filename' => null,
+	);
+}
+
+/**
  * Answers outbound HTTP for the switches that stub it.
  *
  * @param false|array<string, mixed> $response The response so far; false sends the request.
@@ -116,6 +228,7 @@ function tia_elements_test_http( $response, $args, $url ) {
 	// Switch name => callable( $url, $args ) returning a response array, or false to pass.
 	$stubs = array(
 		'supabase-stub' => 'tia_elements_test_supabase',
+		'stripe-stub'   => 'tia_elements_test_stripe',
 	);
 	foreach ( array_intersect_key( $stubs, array_flip( tia_elements_test_switches() ) ) as $stub ) {
 		$stubbed = $stub( $url, $args );
@@ -132,5 +245,8 @@ if ( in_array( 'wcs-unavailable', tia_elements_test_switches(), true ) ) {
 if ( in_array( 'supabase-stub', tia_elements_test_switches(), true ) ) {
 	add_filter( 'pre_option_tia_supabase_url', static fn() => 'https://supabase.test' );
 	add_filter( 'pre_option_tia_supabase_key', static fn() => 'test-key' );
+}
+if ( in_array( 'stripe-stub', tia_elements_test_switches(), true ) ) {
+	add_filter( 'pre_option_tia_stripe_key', static fn() => 'rk_test_stub' );
 }
 add_filter( 'pre_http_request', 'tia_elements_test_http', 10, 3 );

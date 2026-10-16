@@ -17,7 +17,7 @@ final class TIA_Elements_Access {
 	 *
 	 * @param 'granted'|'denied'|'unavailable' $state      Whether a source grants, none does, or a source failed.
 	 * @param 'full'|'trial'|null              $level      Set when granted.
-	 * @param 'tia-pro'|null                   $source     The granting source; null for an admin.
+	 * @param 'tia-pro'|'indicator-suite'|null $source     The granting source; null for an admin.
 	 * @param int|null                         $trial_end  UTC epoch; the Trial cut-off.
 	 * @param int|null                         $created    UTC epoch the granting subscription started.
 	 * @param int|null                         $period_end UTC epoch the paid period of the granting subscription ends.
@@ -48,9 +48,9 @@ final class TIA_Elements_Access {
 	/**
 	 * Full access. Without dates (an admin or a manual grant) there is no cut-off.
 	 *
-	 * @param 'tia-pro'|null $source     The granting source.
-	 * @param int|null       $created    UTC epoch the subscription started.
-	 * @param int|null       $period_end UTC epoch the paid period ends.
+	 * @param 'tia-pro'|'indicator-suite'|null $source     The granting source.
+	 * @param int|null                         $created    UTC epoch the subscription started.
+	 * @param int|null                         $period_end UTC epoch the paid period ends.
 	 */
 	public static function full( ?string $source = null, ?int $created = null, ?int $period_end = null ): self {
 		return new self( 'granted', 'full', $source, null, $created, $period_end );
@@ -62,7 +62,7 @@ final class TIA_Elements_Access {
 	 * @param string $source    The granting source.
 	 * @param int    $trial_end UTC epoch the trial ends.
 	 *
-	 * @phpstan-param 'tia-pro' $source
+	 * @phpstan-param 'tia-pro'|'indicator-suite' $source
 	 */
 	public static function trial( string $source, int $trial_end ): self {
 		return new self( 'granted', 'trial', $source, $trial_end );
