@@ -64,12 +64,74 @@ final class TIA_Elements_Rest {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/predictive-cycles/assets',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => static fn() => self::respond( TIA_Elements_Predictive_Cycles_Service::assets() ),
+				'permission_callback' => array( self::class, 'member_or_trial_gate' ),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/predictive-cycles/data',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( self::class, 'predictive_cycles_data' ),
+				'permission_callback' => array( self::class, 'member_or_trial_gate' ),
+				'args'                => array(
+					'id'        => array(
+						'type'              => 'string',
+						'default'           => '',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+					'base_year' => array(
+						'type'              => 'integer',
+						'default'           => 0,
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+					'curves'    => array(
+						'type'              => 'array',
+						'default'           => array(),
+						'items'             => array(
+							'type'       => 'object',
+							'properties' => array(
+								'id'    => array(
+									'type'     => 'integer',
+									'required' => true,
+								),
+								'years' => array(
+									'type'  => 'array',
+									'items' => array( 'type' => 'integer' ),
+								),
+							),
+						),
+						'validate_callback' => array( self::class, 'is_valid_predictive_cycles_request' ),
+					),
+				),
+			)
+		);
 	}
 
 	/**
-	 * The Member gate: logged in, access checked, granted in full.
+	 * The Member gate for data a Trial does not include: logged in, access checked, granted in full.
 	 */
 	public static function member_gate(): true|WP_Error {
+		$gate = self::member_or_trial_gate();
+		if ( true === $gate && 'trial' === TIA_Elements_Entitlement::current()->level ) {
+			return new WP_Error( 'tia_data_trial', __( 'This data is not part of the Trial.', 'tia-wordpress-elements' ), array( 'status' => 403 ) );
+		}
+
+		return $gate;
+	}
+
+	/**
+	 * The Member gate for data a Trial includes: logged in, access checked, granted in full or as a Trial.
+	 */
+	public static function member_or_trial_gate(): true|WP_Error {
 		if ( ! is_user_logged_in() ) {
 			return new WP_Error( 'tia_data_logged_out', __( 'Log in to see this data.', 'tia-wordpress-elements' ), array( 'status' => 401 ) );
 		}
@@ -80,9 +142,6 @@ final class TIA_Elements_Rest {
 		}
 		if ( 'granted' !== $access->state ) {
 			return new WP_Error( 'tia_data_not_member', __( 'This data is for Members only.', 'tia-wordpress-elements' ), array( 'status' => 403 ) );
-		}
-		if ( 'trial' === $access->level ) {
-			return new WP_Error( 'tia_data_trial', __( 'This data is not part of the Trial.', 'tia-wordpress-elements' ), array( 'status' => 403 ) );
 		}
 
 		return true;
@@ -120,6 +179,77 @@ final class TIA_Elements_Rest {
 				(string) $request->get_param( 'base' ),
 				(string) $request->get_param( 'quote' ),
 				(int) $request->get_param( 'period' )
+			)
+		);
+	}
+
+	/**
+	 * Whether the curves, with the request's asset and Base Year, fit an enabled Predictive Cycles asset.
+	 *
+	 * @param mixed           $curves  The curves parameter.
+	 * @param WP_REST_Request $request The request.
+	 * @param string          $key     The parameter name.
+	 *
+	 * @phpstan-param WP_REST_Request<array<string, mixed>> $request
+	 */
+	public static function is_valid_predictive_cycles_request( mixed $curves, WP_REST_Request $request, string $key ): bool|WP_Error {
+		$valid = rest_validate_request_arg( $curves, $request, $key );
+		// WordPress validates before the permission callback, so a failed gate must answer before any upstream read.
+		if ( true !== $valid || true !== self::member_or_trial_gate() ) {
+			return $valid;
+		}
+		$assets = TIA_Elements_Predictive_Cycles_Service::assets();
+		// The callback answers with the same memoized upstream error.
+		if ( is_wp_error( $assets ) ) {
+			return true;
+		}
+
+		return TIA_Elements_Predictive_Cycles::valid_request( $assets, $request->get_param( 'id' ), $request->get_param( 'base_year' ), $curves );
+	}
+
+	/**
+	 * One Predictive Cycles asset for one Base Year, cut off at the user's Access Cut-off.
+	 *
+	 * @param WP_REST_Request $request The validated request.
+	 *
+	 * @phpstan-param WP_REST_Request<array<string, mixed>> $request
+	 */
+	public static function predictive_cycles_data( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+		$assets = TIA_Elements_Predictive_Cycles_Service::assets();
+		if ( is_wp_error( $assets ) ) {
+			return self::respond( $assets );
+		}
+
+		$curves = array();
+		foreach ( (array) $request->get_param( 'curves' ) as $curve ) {
+			$item = array( 'id' => (int) $curve['id'] );
+			if ( isset( $curve['years'] ) ) {
+				$item['years'] = array_values( array_map( 'intval', (array) $curve['years'] ) );
+			}
+			$curves[] = $item;
+		}
+
+		$access  = TIA_Elements_Entitlement::current();
+		$seconds = $access->cutoff();
+		$data    = TIA_Elements_Predictive_Cycles_Service::data(
+			(string) $request->get_param( 'id' ),
+			(int) $request->get_param( 'base_year' ),
+			$curves,
+			null === $seconds ? null : $seconds * 1000
+		);
+		if ( is_wp_error( $data ) ) {
+			return self::respond( $data );
+		}
+
+		return self::respond(
+			array(
+				'data'   => $data,
+				'cutoff' => null === $seconds ? null : array(
+					'at'     => $seconds * 1000,
+					'date'   => (string) wp_date( (string) get_option( 'date_format' ), $seconds, new DateTimeZone( 'UTC' ) ),
+					'trial'  => 'trial' === $access->level,
+					'source' => $access->source,
+				),
 			)
 		);
 	}

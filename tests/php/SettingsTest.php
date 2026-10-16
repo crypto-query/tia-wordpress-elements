@@ -204,6 +204,44 @@ final class SettingsTest extends TestCase {
 	}
 
 	/**
+	 * Without a saved list, the Predictive Cycles assets are all nine with their groups.
+	 */
+	public function test_predictive_cycles_assets_default(): void {
+		$expected = array(
+			array( 'btc', 'Crypto' ),
+			array( 'eth', 'Crypto' ),
+			array( 'xau', 'Metals' ),
+			array( 'xag', 'Metals' ),
+			array( 'dji', 'Indices' ),
+			array( 'spx', 'Indices' ),
+			array( 'ndx', 'Indices' ),
+			array( 'xjo', 'Indices' ),
+			array( 'xao', 'Indices' ),
+		);
+
+		foreach ( array( array(), array( 'tia_predictive_cycles_assets' => '' ) ) as $options ) {
+			$assets = ( new TIA_Elements_Settings( $options, array() ) )->predictive_cycles_assets();
+
+			$this->assertSame( $expected, array_map( static fn( $asset ) => array( $asset['id'], $asset['group'] ), $assets ) );
+		}
+	}
+
+	/**
+	 * A saved list replaces the default, even when empty; malformed entries are dropped.
+	 */
+	public function test_predictive_cycles_assets_saved(): void {
+		$saved = array(
+			array(
+				'id'    => 'aapl',
+				'group' => 'Stocks',
+			),
+		);
+
+		$this->assertSame( $saved, ( new TIA_Elements_Settings( array( 'tia_predictive_cycles_assets' => array( ...$saved, array( 'id' => 'eth' ), 'btc' ) ), array() ) )->predictive_cycles_assets() );
+		$this->assertSame( array(), ( new TIA_Elements_Settings( array( 'tia_predictive_cycles_assets' => array() ), array() ) )->predictive_cycles_assets() );
+	}
+
+	/**
 	 * A field absent from the form keeps the stored value, secret or not.
 	 */
 	public function test_absent_input_keeps_stored(): void {

@@ -107,7 +107,7 @@ final class TIA_Elements_Access_Resolver {
 				continue;
 			}
 			$access = self::subscription_access( $record, $now );
-			if ( null === $best || ( 'full' === $access->level && 'trial' === $best->level ) ) {
+			if ( self::beats( $access, $best ) ) {
 				$best = $access;
 			}
 		}
@@ -131,11 +131,30 @@ final class TIA_Elements_Access_Resolver {
 					: TIA_Elements_Access::full( 'indicator-suite', $subscription['created'], $subscription['trial_end'] ),
 				default              => null,
 			};
-			if ( null !== $access && ( null === $best || ( 'full' === $access->level && 'trial' === $best->level ) ) ) {
+			if ( null !== $access && self::beats( $access, $best ) ) {
 				$best = $access;
 			}
 		}
 		return $best ?? TIA_Elements_Access::denied();
+	}
+
+	/**
+	 * The Access Cut-off of full access, from the subscription's age at its period end.
+	 *
+	 * Counts calendar months and ignores the day: past 11 months it is Dec 31 of the period-end year,
+	 * else one calendar month after the period end, rolling over like `Date.setMonth` (31 Jan → early March).
+	 *
+	 * @param int $created    UTC epoch the subscription started.
+	 * @param int $period_end UTC epoch the paid period ends.
+	 * @return int UTC epoch.
+	 */
+	public static function year_end_cutoff( int $created, int $period_end ): int {
+		$year   = (int) gmdate( 'Y', $period_end );
+		$months = 12 * ( $year - (int) gmdate( 'Y', $created ) ) + (int) gmdate( 'n', $period_end ) - (int) gmdate( 'n', $created );
+		if ( $months > 11 ) {
+			return (int) gmmktime( 0, 0, 0, 12, 31, $year );
+		}
+		return ( new DateTimeImmutable( '@' . $period_end ) )->add( new DateInterval( 'P1M' ) )->getTimestamp();
 	}
 
 	/**
@@ -147,6 +166,24 @@ final class TIA_Elements_Access_Resolver {
 	 */
 	public static function is_stripe_trial( array $subscription ): bool {
 		return 'trialing' === $subscription['status'] && $subscription['trial_end'] - $subscription['created'] <= self::STRIPE_TRIAL_MAX_SECONDS;
+	}
+
+	/**
+	 * Whether granted access beats the best so far: full beats Trial, then the later cut-off; none counts as latest.
+	 *
+	 * @param TIA_Elements_Access      $access Granted access.
+	 * @param TIA_Elements_Access|null $best   The best granted access so far.
+	 */
+	private static function beats( TIA_Elements_Access $access, ?TIA_Elements_Access $best ): bool {
+		if ( null === $best ) {
+			return true;
+		}
+		if ( $access->level !== $best->level ) {
+			return 'full' === $access->level;
+		}
+		$cutoff = $access->cutoff();
+		$least  = $best->cutoff();
+		return null !== $least && ( null === $cutoff || $cutoff > $least );
 	}
 
 	/**

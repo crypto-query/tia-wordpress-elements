@@ -79,6 +79,21 @@ final class TIA_Elements_Settings {
 		array( 'xao.indx', 'aud', 'Indices' ),
 	);
 
+	public const PREDICTIVE_CYCLES_ASSETS_OPTION = 'tia_predictive_cycles_assets';
+
+	/** Id and group of each default Predictive Cycles asset. */
+	private const PREDICTIVE_CYCLES_ASSETS_DEFAULT = array(
+		array( 'btc', 'Crypto' ),
+		array( 'eth', 'Crypto' ),
+		array( 'xau', 'Metals' ),
+		array( 'xag', 'Metals' ),
+		array( 'dji', 'Indices' ),
+		array( 'spx', 'Indices' ),
+		array( 'ndx', 'Indices' ),
+		array( 'xjo', 'Indices' ),
+		array( 'xao', 'Indices' ),
+	);
+
 	/** Every option the plugin stores; uninstall deletes them all. */
 	public const OPTIONS = array(
 		'tia_supabase_url',
@@ -88,7 +103,7 @@ final class TIA_Elements_Settings {
 		'tia_stripe_suite_product',
 		self::MEMBER_ROLES_OPTION,
 		self::FORWARD_RETURNS_ASSETS_OPTION,
-		'tia_predictive_cycles_assets',
+		self::PREDICTIVE_CYCLES_ASSETS_OPTION,
 		'tia_decennial_cycles_assets',
 	);
 
@@ -129,8 +144,9 @@ final class TIA_Elements_Settings {
 				$constants[ $field['constant'] ] = constant( $field['constant'] );
 			}
 		}
-		$options[ self::MEMBER_ROLES_OPTION ]           = get_option( self::MEMBER_ROLES_OPTION, null );
-		$options[ self::FORWARD_RETURNS_ASSETS_OPTION ] = get_option( self::FORWARD_RETURNS_ASSETS_OPTION, null );
+		$options[ self::MEMBER_ROLES_OPTION ]             = get_option( self::MEMBER_ROLES_OPTION, null );
+		$options[ self::FORWARD_RETURNS_ASSETS_OPTION ]   = get_option( self::FORWARD_RETURNS_ASSETS_OPTION, null );
+		$options[ self::PREDICTIVE_CYCLES_ASSETS_OPTION ] = get_option( self::PREDICTIVE_CYCLES_ASSETS_OPTION, null );
 
 		return new self( array_filter( $options, static fn( $value ) => null !== $value ), $constants );
 	}
@@ -220,6 +236,31 @@ final class TIA_Elements_Settings {
 				'group' => $asset[2],
 			),
 			self::FORWARD_RETURNS_ASSETS_DEFAULT
+		);
+	}
+
+	/**
+	 * The enabled Predictive Cycles assets: the saved list, or the default while none is saved.
+	 *
+	 * @return list<array{id: string, group: string}>
+	 */
+	public function predictive_cycles_assets(): array {
+		$saved = $this->options[ self::PREDICTIVE_CYCLES_ASSETS_OPTION ] ?? null;
+		if ( is_array( $saved ) ) {
+			return array_values(
+				array_filter(
+					$saved,
+					static fn( $asset ) => is_array( $asset ) && is_string( $asset['id'] ?? null ) && is_string( $asset['group'] ?? null )
+				)
+			);
+		}
+
+		return array_map(
+			static fn( array $asset ) => array(
+				'id'    => $asset[0],
+				'group' => $asset[1],
+			),
+			self::PREDICTIVE_CYCLES_ASSETS_DEFAULT
 		);
 	}
 

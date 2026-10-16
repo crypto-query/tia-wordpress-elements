@@ -1,4 +1,4 @@
-import apiFetch from "@wordpress/api-fetch";
+import apiFetch, { type APIFetchOptions } from "@wordpress/api-fetch";
 
 /** What a failed request means to the reader: `invalid` reads as `unavailable` and goes to the console. */
 export type ErrorKind = "access" | "unavailable" | "invalid";
@@ -26,9 +26,15 @@ export function errorKind(error: unknown): ErrorKind {
 }
 
 /** GETs a REST path through the core `wp-api-fetch` handle, which already adds the root URL and the nonce. */
-export async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+export const get = <T>(path: string, signal?: AbortSignal): Promise<T> => request<T>({ path, signal });
+
+/** POSTs `body` as JSON to a REST path, with the same error kinds as `get`. */
+export const post = <T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> =>
+    request<T>({ path, method: "POST", data: body, signal });
+
+async function request<T>(options: APIFetchOptions<true>): Promise<T> {
     try {
-        return await apiFetch<T>({ path, signal });
+        return await apiFetch<T>(options);
     } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
             throw error;

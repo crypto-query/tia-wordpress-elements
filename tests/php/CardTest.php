@@ -120,6 +120,19 @@ final class CardTest extends TestCase {
 	}
 
 	/**
+	 * A Block that shows data in a Trial gives a Trial no card; other cases stay.
+	 */
+	public function test_trial_sees_data_where_the_block_allows_it(): void {
+		$card = static fn( TIA_Elements_Access $access, bool $logged_in, array $roles ) => TIA_Elements_Card::for_access( $access, $logged_in, $roles, self::MEMBER, self::PRICE, self::CTA, self::LOGIN, false );
+
+		$this->assertNull( $card( TIA_Elements_Access::trial( 'tia-pro', 2_000_000_000 ), true, self::MEMBER ) );
+		$this->assertNull( $card( TIA_Elements_Access::trial( 'indicator-suite', 2_000_000_000 ), true, array( 'subscriber' ) ) );
+		$this->assertNull( $card( TIA_Elements_Access::full( 'tia-pro', 1, 2 ), true, self::MEMBER ) );
+		$this->assertSame( array( 'case' => 'unavailable' ), $card( TIA_Elements_Access::unavailable(), true, self::MEMBER ) );
+		$this->assertSame( 'purchase', $card( TIA_Elements_Access::denied(), false, array() )['case'] ?? null );
+	}
+
+	/**
 	 * A failed source gets the Unavailable card, with no price and no CTA.
 	 */
 	public function test_unavailable_gets_unavailable_card(): void {

@@ -46,6 +46,19 @@ test("a saved secret is never shown again, and a blank submit keeps it", async (
     await expect(source).toHaveText("Source: option");
 });
 
+test("Test connection reports the data server", async ({ page, context }) => {
+    const cookie = (value: string) => ({ name: "tia_elements_test", value, url: "http://localhost:8000" });
+    await openSettings(page);
+
+    await context.addCookies([cookie("data-server-stub")]);
+    await page.getByRole("button", { name: "Test connection" }).click();
+    await expect(page.getByText("Data server: connected (HTTP 200).")).toBeVisible();
+
+    await context.addCookies([cookie("data-server-forbidden")]);
+    await page.getByRole("button", { name: "Test connection" }).click();
+    await expect(page.getByText("Data server: HTTP 403: this server's egress IP is not on the data server allowlist.")).toBeVisible();
+});
+
 test("saving the page unchanged keeps the member roles default unsaved", async ({ page }) => {
     wp("option", "delete", "tia_member_roles");
 

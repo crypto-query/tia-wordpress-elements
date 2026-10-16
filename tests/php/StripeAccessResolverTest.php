@@ -173,4 +173,40 @@ final class StripeAccessResolverTest extends TestCase {
 		$this->assertEquals( $want, TIA_Elements_Access_Resolver::stripe( array( $trial, self::sub( 'past_due' ) ) ) );
 		$this->assertEquals( $want, TIA_Elements_Access_Resolver::stripe( array( self::sub( 'active' ), $trial ) ) );
 	}
+
+	/**
+	 * Among full suite subscriptions the later cut-off wins, in any order, not the later period end.
+	 */
+	public function test_later_cutoff_wins(): void {
+		$utc = static fn( string $date ) => ( new DateTimeImmutable( $date, new DateTimeZone( 'UTC' ) ) )->getTimestamp();
+		// Month 13 of a monthly plan: cut off Dec 31 2027.
+		$monthly = self::sub(
+			'active',
+			array(
+				'created'            => $utc( '2026-01-10' ),
+				'current_period_end' => $utc( '2027-02-10' ),
+			)
+		);
+		// A young yearly plan with a later period end: cut off Jul 5 2027.
+		$young   = self::sub(
+			'active',
+			array(
+				'created'            => $utc( '2027-01-05' ),
+				'current_period_end' => $utc( '2027-06-05' ),
+			)
+		);
+		$overdue = self::sub(
+			'past_due',
+			array(
+				'created'            => $utc( '2026-11-01' ),
+				'current_period_end' => $utc( '2026-12-01' ),
+			)
+		);
+		$want    = $utc( '2027-12-31' );
+
+		$this->assertSame( $want, TIA_Elements_Access_Resolver::stripe( array( $monthly, $young, $overdue ) )->cutoff() );
+		$this->assertSame( $want, TIA_Elements_Access_Resolver::stripe( array( $overdue, $young, $monthly ) )->cutoff() );
+		$this->assertSame( $want, TIA_Elements_Access_Resolver::stripe( array( $young, self::sub( 'paused' ), $monthly ) )->cutoff() );
+		$this->assertSame( $utc( '2027-07-05' ), TIA_Elements_Access_Resolver::stripe( array( $overdue, $young ) )->cutoff() );
+	}
 }

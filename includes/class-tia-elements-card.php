@@ -34,14 +34,15 @@ final class TIA_Elements_Card {
 	 * @param string              $price_html   TIA Pro's price HTML.
 	 * @param string              $cta_url      TIA Pro's product page.
 	 * @param string              $login_url    The login page, back to the current page.
+	 * @param bool                $trial_card   Whether a Trial gets the Trial card; false where a Trial sees the data.
 	 * @return array<string, string>|null
 	 */
-	public static function for_access( TIA_Elements_Access $access, bool $logged_in, array $roles, array $member_roles, string $price_html, string $cta_url, string $login_url ): ?array {
+	public static function for_access( TIA_Elements_Access $access, bool $logged_in, array $roles, array $member_roles, string $price_html, string $cta_url, string $login_url, bool $trial_card = true ): ?array {
 		if ( 'unavailable' === $access->state ) {
 			return array( 'case' => 'unavailable' );
 		}
 		if ( 'granted' === $access->state ) {
-			return 'trial' === $access->level ? array(
+			return 'trial' === $access->level && $trial_card ? array(
 				'case'   => 'trial',
 				'source' => (string) $access->source,
 			) : null;

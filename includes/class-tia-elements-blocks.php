@@ -75,9 +75,10 @@ final class TIA_Elements_Blocks {
 	 *
 	 * @param string               $name       Block name.
 	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param bool                 $trial_card Whether a Trial gets the Trial card; false where a Trial sees the data.
 	 * @return array{attributes: object, rest: array{root: string, nonce: string}, card: array<string, string>|null, instance: string}
 	 */
-	public static function boot( string $name, array $attributes ): array {
+	public static function boot( string $name, array $attributes, bool $trial_card = true ): array {
 		$logged_in = is_user_logged_in();
 		if ( $logged_in && ! defined( 'DONOTCACHEPAGE' ) ) {
 			// Logged-out visitors share one cached page; a logged-in page holds a user's own card.
@@ -104,7 +105,8 @@ final class TIA_Elements_Blocks {
 				TIA_Elements_Settings::from_wordpress()->member_roles(),
 				$product ? $product->get_price_html() : '',
 				$product ? $product->get_permalink() : '',
-				wp_login_url( $permalink ? $permalink : '' )
+				wp_login_url( $permalink ? $permalink : '' ),
+				$trial_card
 			),
 			'instance'   => $post_id . ':' . self::$rendered[ $key ],
 		);

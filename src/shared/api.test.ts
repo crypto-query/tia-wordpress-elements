@@ -1,6 +1,6 @@
 import apiFetch from "@wordpress/api-fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, errorKind, get } from "./api";
+import { ApiError, errorKind, get, post } from "./api";
 
 vi.mock("@wordpress/api-fetch", () => ({ default: vi.fn() }));
 
@@ -67,5 +67,32 @@ describe("get", () => {
         vi.mocked(apiFetch).mockRejectedValue(abort);
 
         await expect(get("/x")).rejects.toBe(abort);
+    });
+});
+
+describe("post", () => {
+    afterEach(() => {
+        vi.mocked(apiFetch).mockReset();
+    });
+
+    it("POSTs the body as JSON data and returns the parsed body", async () => {
+        vi.mocked(apiFetch).mockResolvedValue({ ok: true });
+        const signal = new AbortController().signal;
+
+        await expect(post("/tia-data/v1/x", { id: "btc" }, signal)).resolves.toEqual({ ok: true });
+        expect(apiFetch).toHaveBeenCalledWith({ path: "/tia-data/v1/x", method: "POST", data: { id: "btc" }, signal });
+    });
+
+    it("throws an ApiError with the kind of the failure", async () => {
+        vi.mocked(apiFetch).mockRejectedValue(restError(502, "tia_data_upstream"));
+
+        await expect(post("/x", {})).rejects.toEqual(expect.objectContaining({ name: "ApiError", kind: "unavailable" }));
+    });
+
+    it("lets an AbortError through unmapped", async () => {
+        const abort = new DOMException("The operation was aborted.", "AbortError");
+        vi.mocked(apiFetch).mockRejectedValue(abort);
+
+        await expect(post("/x", {})).rejects.toBe(abort);
     });
 });

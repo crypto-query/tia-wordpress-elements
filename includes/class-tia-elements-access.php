@@ -32,6 +32,19 @@ final class TIA_Elements_Access {
 	) {}
 
 	/**
+	 * The Access Cut-off as a UTC epoch: the trial end, the year-end rule for full access, or null for none.
+	 */
+	public function cutoff(): ?int {
+		if ( 'trial' === $this->level ) {
+			return $this->trial_end;
+		}
+		if ( 'full' === $this->level && null !== $this->created && null !== $this->period_end ) {
+			return TIA_Elements_Access_Resolver::year_end_cutoff( $this->created, $this->period_end );
+		}
+		return null;
+	}
+
+	/**
 	 * No source grants access.
 	 */
 	public static function denied(): self {

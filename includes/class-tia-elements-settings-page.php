@@ -228,7 +228,7 @@ final class TIA_Elements_Settings_Page {
 		}
 		check_admin_referer( self::TEST_ACTION, self::TEST_ACTION . '_nonce' );
 
-		foreach ( array( self::supabase_check(), ...self::stripe_checks() ) as $check ) {
+		foreach ( array( self::supabase_check(), self::data_server_check(), ...self::stripe_checks() ) as $check ) {
 			printf(
 				'<div class="notice notice-%1$s inline"><p>%2$s</p></div>',
 				esc_attr( $check['ok'] ? 'success' : 'error' ),
@@ -273,6 +273,32 @@ final class TIA_Elements_Settings_Page {
 			'ok'      => true,
 			/* translators: %d: the HTTP status. */
 			'message' => sprintf( __( 'Supabase: connected (HTTP %d).', 'tia-wordpress-elements' ), $status ),
+		);
+	}
+
+	/**
+	 * Reads the Predictive Cycles asset list; a 403 means the allowlist lacks this server's egress IP.
+	 *
+	 * @return array{ok: bool, message: string}
+	 */
+	private static function data_server_check(): array {
+		$status = 0;
+		$body   = TIA_Elements_Data_Server::get( '/forecast_curves_assets', $status );
+
+		if ( is_wp_error( $body ) ) {
+			$data = $body->get_error_data();
+
+			return array(
+				'ok'      => false,
+				/* translators: %s: what went wrong, e.g. "HTTP 500" or the transport error. */
+				'message' => sprintf( __( 'Data server: %s.', 'tia-wordpress-elements' ), is_array( $data ) && is_string( $data['detail'] ?? null ) ? $data['detail'] : $body->get_error_message() ),
+			);
+		}
+
+		return array(
+			'ok'      => true,
+			/* translators: %d: the HTTP status. */
+			'message' => sprintf( __( 'Data server: connected (HTTP %d).', 'tia-wordpress-elements' ), $status ),
 		);
 	}
 

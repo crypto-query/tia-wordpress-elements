@@ -297,4 +297,72 @@ final class AccessResolverTest extends TestCase {
 		$this->assertEquals( $want, TIA_Elements_Access_Resolver::woocommerce( array( $trial, $full ), self::NOW ) );
 		$this->assertEquals( $want, TIA_Elements_Access_Resolver::woocommerce( array( $full, $trial ), self::NOW ) );
 	}
+
+	/**
+	 * Among full member subscriptions the later cut-off wins, in any order, not the later period end.
+	 */
+	public function test_later_cutoff_wins(): void {
+		$utc = static fn( string $date ) => ( new DateTimeImmutable( $date, new DateTimeZone( 'UTC' ) ) )->getTimestamp();
+		$now = $utc( '2027-01-15' );
+		// Month 13 of a monthly TIA Pro: cut off Dec 31 2027.
+		$monthly = self::sub(
+			'active',
+			array(
+				'created'    => $utc( '2026-01-10' ),
+				'period_end' => $utc( '2027-02-10' ),
+			)
+		);
+		// A young subscription with a later period end, cut off Jul 20 2027.
+		$young = self::sub(
+			'pending-cancel',
+			array(
+				'created'    => $utc( '2026-12-20' ),
+				'period_end' => $utc( '2027-06-20' ),
+			)
+		);
+		// TIA Elite paid three years ahead: cut off Dec 31 2029.
+		$elite   = self::sub(
+			'active',
+			array(
+				'created'    => $utc( '2026-12-01' ),
+				'period_end' => $utc( '2029-12-01' ),
+			)
+		);
+		$overdue = self::sub( 'on-hold', array( 'period_end' => $utc( '2026-12-01' ) ) );
+		$trial   = self::sub(
+			'active',
+			array(
+				'trial_end'  => $utc( '2031-01-01' ),
+				'period_end' => $utc( '2031-01-01' ),
+			)
+		);
+
+		$this->assertEquals( $utc( '2029-12-31' ), TIA_Elements_Access_Resolver::woocommerce( array( $monthly, $young, $elite, $overdue, $trial ), $now )->cutoff() );
+		$this->assertEquals( $utc( '2029-12-31' ), TIA_Elements_Access_Resolver::woocommerce( array( $trial, $elite, $overdue, $young, $monthly ), $now )->cutoff() );
+		$this->assertEquals( $utc( '2027-12-31' ), TIA_Elements_Access_Resolver::woocommerce( array( $young, $monthly, $overdue ), $now )->cutoff() );
+		$this->assertEquals( $utc( '2027-12-31' ), TIA_Elements_Access_Resolver::woocommerce( array( $overdue, $monthly, $young ), $now )->cutoff() );
+	}
+
+	/**
+	 * A full subscription without a period end has no cut-off, so it counts as the latest.
+	 */
+	public function test_no_cutoff_counts_as_latest(): void {
+		$dated = self::sub( 'active', array( 'period_end' => self::NOW + 900 * self::DAY ) );
+		$open  = self::sub( 'active' );
+
+		$this->assertNull( TIA_Elements_Access_Resolver::woocommerce( array( $dated, $open ), self::NOW )->cutoff() );
+		$this->assertNull( TIA_Elements_Access_Resolver::woocommerce( array( $open, $dated ), self::NOW )->cutoff() );
+	}
+
+	/**
+	 * Between two Trials the later trial end wins.
+	 */
+	public function test_later_trial_end_wins(): void {
+		$early = self::sub( 'active', array( 'trial_end' => self::NOW + 2 * self::DAY ) );
+		$late  = self::sub( 'active', array( 'trial_end' => self::NOW + 6 * self::DAY ) );
+		$want  = TIA_Elements_Access::trial( 'tia-pro', self::NOW + 6 * self::DAY );
+
+		$this->assertEquals( $want, TIA_Elements_Access_Resolver::woocommerce( array( $early, $late ), self::NOW ) );
+		$this->assertEquals( $want, TIA_Elements_Access_Resolver::woocommerce( array( $late, $early ), self::NOW ) );
+	}
 }

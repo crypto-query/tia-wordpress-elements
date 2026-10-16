@@ -27,11 +27,17 @@ const TIA_ELEMENTS_SEED_IDS   = array(
 	'membership' => 244,
 );
 const TIA_ELEMENTS_SEED_PAGES = array(
-	'forward-returns' => array(
+	'forward-returns'   => array(
 		'title'   => 'Forward Returns',
 		// Live pages pad their content in a container; a bare Block would sit flush on the viewport edge.
 		'content' => '<!-- wp:group {"style":{"spacing":{"padding":{"left":"20px","right":"20px"}}}} -->'
 			. '<div class="wp-block-group" style="padding-right:20px;padding-left:20px"><!-- wp:tia-elements/forward-returns /--></div>'
+			. '<!-- /wp:group -->',
+	),
+	'predictive-cycles' => array(
+		'title'   => 'Predictive Cycles',
+		'content' => '<!-- wp:group {"style":{"spacing":{"padding":{"left":"20px","right":"20px"}}}} -->'
+			. '<div class="wp-block-group" style="padding-right:20px;padding-left:20px"><!-- wp:tia-elements/predictive-cycles /--></div>'
 			. '<!-- /wp:group -->',
 	),
 );

@@ -16,6 +16,13 @@
  *   `fx-suite-paused@example.test` (paused), `fx-pro-active@example.test` (wind-down),
  *   `fx-no-role@example.test` (one of each Suite Subscriptions status, plus `unpaid`),
  *   `fx-suite-error@example.test` (HTTP 500); any other email finds none.
+ * - `data-server-stub`: the data server URL is `https://data-server.test`. `/forecast_curves_assets` lists
+ *   btc, dji and xau, each with Base Years from the current UTC year -2 to +2, plus `foo`, which no option
+ *   enables. `/forecast_curves_data` answers one row per UTC day of the Base Year, Actual null after today;
+ *   an unknown asset gets upstream's `400 {"error": "Invalid asset ID"}`.
+ * - `data-server-forbidden`: the data server URL is `https://data-server.test`, and every call to it gets HTTP 403.
+ * - `data-server-bad-request`: with `data-server-stub`, `/forecast_curves_data` answers `400 {"error": "Invalid asset ID"}`
+ *   for every asset; `/forecast_curves_assets` still answers the stub list.
  *
  * @package tia-wordpress-elements
  */
@@ -231,6 +238,168 @@ function tia_elements_test_stripe( $url ) {
 }
 
 /**
+ * The stub data server's assets: id => name, title, range begin, base, quote, curves (label, info, years, static).
+ *
+ * @return array<string, array{0: string, 1: string, 2: int, 3: string, 4: string, 5: array<int, array<string, mixed>>}>
+ */
+function tia_elements_test_data_server_assets() {
+	$curve  = static fn( $label, $info, $extra = array() ) => array_merge( compact( 'label', 'info' ), $extra );
+	$actual = $curve( 'Actual', 'Actual returns for the year' );
+	$all    = $curve( 'All', 'Average returns for all years' );
+
+	return array(
+		'btc' => array(
+			'Bitcoin - BTC',
+			'Bitcoin Curves vs. Actual',
+			2011,
+			'btc',
+			'usd',
+			array(
+				$actual,
+				$all,
+				$curve( 'Y1 Post-election', 'Average returns for post-election years', array( 'years' => array( 2013, 2017, 2021, 2025 ) ) ),
+				$curve( 'Y2 Midterm', 'Average returns for midterm years', array( 'years' => array( 2014, 2018, 2022 ) ) ),
+				$curve( 'Y3 Pre-election', 'Average returns for pre-election years', array( 'years' => array( 2015, 2019, 2023 ) ) ),
+				$curve( 'Y4 Election', 'Average returns for election years', array( 'years' => array( 2012, 2016, 2020, 2024 ) ) ),
+				$curve( 'Bear', 'Average returns for bear market years', array( 'years' => array( 2014, 2018, 2022 ) ) ),
+				$curve( 'Bull', 'Average returns for bull market years', array( 'years' => array( 2013, 2017, 2021 ) ) ),
+				$curve( 'Halving', 'Average returns for halving years', array( 'years' => array( 2012, 2016, 2020, 2024 ) ) ),
+			),
+		),
+		'dji' => array(
+			'Dow Jones Industrial - DJI',
+			'Dow Jones Industrial Curves vs. Actual',
+			1897,
+			'^dji',
+			'usd',
+			array(
+				$actual,
+				$all,
+				$curve( '20 & 60', 'Average returns for the selected years', array( 'static' => array( 20, 60 ) ) ),
+				$curve( 'Y1 Post-election', 'Average returns for post-election years', array( 'years' => array( 2001, 2005, 2009, 2013, 2017, 2021, 2025 ) ) ),
+				$curve( 'Y2 Midterm', 'Average returns for midterm years', array( 'years' => array( 2002, 2006, 2010, 2014, 2018, 2022 ) ) ),
+				$curve( 'Y3 Pre-election', 'Average returns for pre-election years', array( 'years' => array( 2003, 2007, 2011, 2015, 2019, 2023 ) ) ),
+				$curve( 'Y4 Election', 'Average returns for election years', array( 'years' => array( 2004, 2008, 2012, 2016, 2020, 2024 ) ) ),
+				$curve( 'Decade offsets', 'Average returns for the same year of past decades', array( 'years' => array( 10, 20, 30 ) ) ),
+			),
+		),
+		'xau' => array(
+			'Gold - XAU',
+			'Gold Curves vs. Actual',
+			1971,
+			'xauusd',
+			'usd',
+			array(
+				$actual,
+				$all,
+				$curve( 'Y4 Election', 'Average returns for election years', array( 'years' => array( 2012, 2016, 2020, 2024 ) ) ),
+			),
+		),
+		'foo' => array( 'Foo - not enabled', 'Foo Curves vs. Actual', 2000, 'foo', 'usd', array( $actual ) ),
+	);
+}
+
+/**
+ * Answers a data-server call: the asset list, or one asset's curve table for one Base Year.
+ *
+ * @param string               $url  Request URL.
+ * @param array<string, mixed> $args Request arguments.
+ * @return false|array<string, mixed>
+ */
+function tia_elements_test_data_server( $url, $args ) {
+	if ( 'data-server.test' !== wp_parse_url( $url, PHP_URL_HOST ) ) {
+		return false;
+	}
+	$path   = (string) wp_parse_url( $url, PHP_URL_PATH );
+	$year   = (int) gmdate( 'Y' );
+	$assets = tia_elements_test_data_server_assets();
+	$status = 200;
+
+	if ( '/forecast_curves_assets' === $path ) {
+		$body = array( 'assets' => array() );
+		foreach ( $assets as $id => list( $name, $title, $begin, $base, $quote, $curves ) ) {
+			$body['assets'][] = array(
+				'id'         => $id,
+				'base'       => $base,
+				'quote'      => $quote,
+				'name'       => $name,
+				'title'      => $title,
+				'range'      => array(
+					'begin' => $begin,
+					'end'   => $year,
+				),
+				'base_years' => range( $year - 2, $year + 2 ),
+				'curves'     => array_map( static fn( $curve, $curve_id ) => array( 'id' => $curve_id ) + $curve, $curves, array_keys( $curves ) ),
+			);
+		}
+	} elseif ( '/forecast_curves_data' === $path ) {
+		$request = json_decode( is_string( $args['body'] ?? null ) ? $args['body'] : '', true );
+		$id      = is_array( $request ) ? $request['id'] ?? null : null;
+		if ( ! is_string( $id ) || ! isset( $assets[ $id ] ) || in_array( 'data-server-bad-request', tia_elements_test_switches(), true ) ) {
+			$status = 400;
+			$body   = array( 'error' => 'Invalid asset ID' );
+		} else {
+			$base_year = (int) ( $request['base_year'] ?? $year );
+			$ids       = array_map( static fn( $curve ) => (int) ( $curve['id'] ?? 0 ), (array) ( $request['curves'] ?? array() ) );
+			$today     = strtotime( gmdate( 'Y-m-d' ) . ' 00:00:00 UTC' ) * 1000;
+			$body      = array(
+				'ids'     => $ids,
+				'columns' => array_map( static fn( $curve_id ) => $assets[ $id ][5][ $curve_id ]['label'] ?? 'Curve ' . $curve_id, $ids ),
+				'index'   => array(),
+				'data'    => array(),
+			);
+			$day       = 0;
+			$end       = gmmktime( 0, 0, 0, 1, 1, $base_year + 1 ) * 1000;
+			for ( $at = gmmktime( 0, 0, 0, 1, 1, $base_year ) * 1000; $at < $end; $at += DAY_IN_SECONDS * 1000 ) {
+				$body['index'][] = $at;
+				$body['data'][]  = array_map(
+					// Actual (id 0) has no value after today, as in the real data.
+					static fn( $curve_id ) => 0 === $curve_id && $at > $today ? null : round( 8 * sin( ( $day + 23 * $curve_id ) / 40 ) + ( $curve_id - 3 ) * $day / 60, 2 ),
+					$ids
+				);
+				++$day;
+			}
+		}
+	} else {
+		$status = 404;
+		$body   = array( 'error' => 'Not found' );
+	}
+
+	return array(
+		'headers'  => array( 'content-type' => 'application/json' ),
+		'body'     => wp_json_encode( $body ),
+		'response' => array(
+			'code'    => $status,
+			'message' => 200 === $status ? 'OK' : 'Error',
+		),
+		'cookies'  => array(),
+		'filename' => null,
+	);
+}
+
+/**
+ * Answers every data-server call with HTTP 403, as the allowlist does for an unknown egress IP.
+ *
+ * @param string $url Request URL.
+ * @return false|array<string, mixed>
+ */
+function tia_elements_test_data_server_forbidden( $url ) {
+	if ( 'data-server.test' !== wp_parse_url( $url, PHP_URL_HOST ) ) {
+		return false;
+	}
+	return array(
+		'headers'  => array( 'content-type' => 'text/html' ),
+		'body'     => '<html><body><h1>403 Forbidden</h1></body></html>',
+		'response' => array(
+			'code'    => 403,
+			'message' => 'Forbidden',
+		),
+		'cookies'  => array(),
+		'filename' => null,
+	);
+}
+
+/**
  * Answers outbound HTTP for the switches that stub it.
  *
  * @param false|array<string, mixed> $response The response so far; false sends the request.
@@ -241,8 +410,10 @@ function tia_elements_test_stripe( $url ) {
 function tia_elements_test_http( $response, $args, $url ) {
 	// Switch name => callable( $url, $args ) returning a response array, or false to pass.
 	$stubs = array(
-		'supabase-stub' => 'tia_elements_test_supabase',
-		'stripe-stub'   => 'tia_elements_test_stripe',
+		'supabase-stub'         => 'tia_elements_test_supabase',
+		'stripe-stub'           => 'tia_elements_test_stripe',
+		'data-server-forbidden' => 'tia_elements_test_data_server_forbidden',
+		'data-server-stub'      => 'tia_elements_test_data_server',
 	);
 	foreach ( array_intersect_key( $stubs, array_flip( tia_elements_test_switches() ) ) as $stub ) {
 		$stubbed = $stub( $url, $args );
@@ -259,6 +430,9 @@ if ( in_array( 'wcs-unavailable', tia_elements_test_switches(), true ) ) {
 if ( in_array( 'supabase-stub', tia_elements_test_switches(), true ) ) {
 	add_filter( 'pre_option_tia_supabase_url', static fn() => 'https://supabase.test' );
 	add_filter( 'pre_option_tia_supabase_key', static fn() => 'test-key' );
+}
+if ( array_intersect( array( 'data-server-stub', 'data-server-forbidden' ), tia_elements_test_switches() ) ) {
+	add_filter( 'pre_option_tia_data_server_url', static fn() => 'https://data-server.test' );
 }
 if ( in_array( 'stripe-stub', tia_elements_test_switches(), true ) ) {
 	add_filter( 'pre_option_tia_stripe_key', static fn() => 'rk_test_stub' );
