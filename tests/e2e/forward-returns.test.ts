@@ -112,7 +112,13 @@ test("a Member sees the Forward Returns table from the stubbed rows", async ({ p
     ]);
 
     await block(page).getByRole("radio", { name: "Quarterly" }).click();
-    await expect(table.locator("thead").getByRole("columnheader")).toHaveText(["Year", "Jan", "Apr", "Jul", "Oct"]);
+    await expect(table.locator("thead").getByRole("columnheader")).toHaveText([
+        "Year",
+        "Jan \u2013 Mar",
+        "Apr \u2013 Jun",
+        "Jul \u2013 Sep",
+        "Oct \u2013 Dec"
+    ]);
 
     await block(page).getByRole("combobox", { name: "Asset" }).click();
     await expect(block(page).getByRole("group", { name: "Crypto" }).getByRole("option")).toHaveText(["Bitcoin - BTC", "Ethereum - ETH"]);
@@ -189,13 +195,13 @@ test("a Member's exclusion, Holding Period and Entry Offset survive a reload", a
 
     await block(page).getByRole("radio", { name: "Quarterly" }).click();
     await block(page).getByRole("button", { name: "Next Entry Offset" }).click();
-    await expect(headers(block(page))).toHaveText(["Year", "Feb", "May", "Aug", "Nov"]);
+    await expect(headers(block(page))).toHaveText(["Year", "Feb \u2013 Apr", "May \u2013 Jul", "Aug \u2013 Oct", "Nov \u2013 Jan"]);
     await block(page).getByRole("checkbox", { name: "\u22123.20%" }).click();
     await expect(block(page).getByRole("checkbox", { name: "\u22123.20%" })).not.toBeChecked();
 
     await page.reload();
     await expect(block(page).getByRole("radio", { name: "Quarterly" })).toBeChecked();
-    await expect(headers(block(page))).toHaveText(["Year", "Feb", "May", "Aug", "Nov"]);
+    await expect(headers(block(page))).toHaveText(["Year", "Feb \u2013 Apr", "May \u2013 Jul", "Aug \u2013 Oct", "Nov \u2013 Jan"]);
     await expect(block(page).getByRole("checkbox", { name: "\u22123.20%" })).not.toBeChecked();
     expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toContain('"btc/usd/3"');
 });
@@ -268,7 +274,7 @@ test.describe("one Block on its own page", () => {
         const inspector = page.getByRole("region", { name: "Editor settings" });
         await expect(inspector.getByRole("combobox", { name: "Asset" })).toBeVisible();
         await inspector.getByRole("radio", { name: "Quarterly" }).check();
-        await expect(headers(preview)).toHaveText(["Year", "Jan", "Apr", "Jul", "Oct"]);
+        await expect(headers(preview)).toHaveText(["Year", "Jan \u2013 Mar", "Apr \u2013 Jun", "Jul \u2013 Sep", "Oct \u2013 Dec"]);
     });
 
     test("an editor who is not a Member sees the placeholder and read-only defaults", async ({ page, context }) => {
