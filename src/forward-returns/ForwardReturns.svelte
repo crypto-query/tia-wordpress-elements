@@ -558,7 +558,7 @@
                                 {/each}
                             </ToggleGroup>
                         </div>
-                        <Button variant="outline-fill" size="sm" aria-disabled={!changed} onclick={reset}>
+                        <Button variant="outline-fill" size="sm" class="@max-lg:w-full" aria-disabled={!changed} onclick={reset}>
                             {#snippet leadingIcon()}
                                 <RotateCcw class="size-4" aria-hidden="true" />
                             {/snippet}
