@@ -131,7 +131,7 @@ describe("notice and zone label", () => {
 
     it("labels the gray zone by trial", () => {
         expect(zoneLabel(cutoff(false, "indicator-suite"))).toBe("Available after renewal");
-        expect(zoneLabel(cutoff(true, "tia-pro"))).toBe("Available after your trial");
+        expect(zoneLabel(cutoff(true, "tia-pro"))).toBe("Available after trial");
     });
 });
 

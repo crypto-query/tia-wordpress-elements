@@ -57,11 +57,10 @@
             const from = zone === "before" ? firstAt : cutoff.at;
             helper.markArea = {
                 silent: true,
-                // Above the lines (z 3) so a spilled label stays readable; the curves end where the zone starts.
-                z: 4,
                 itemStyle: { color: theme.zone },
-                // Anchored right so a zone narrower than the text grows the label into the plot, not off the canvas.
-                label: { ...label, position: "insideTopRight", distance: 8, backgroundColor: theme.zone, padding: [2, 4] },
+                // Rotated 90° about its anchor: align "right" ends the text at the anchor near the top,
+                // verticalAlign "top" puts its height right of the anchor, so it clears the line.
+                label: { ...label, position: [4, 8], rotate: 90, align: "right", verticalAlign: "top" },
                 data: [[{ name: zoneLabel(cutoff), xAxis: from }, { xAxis: lastAt }]]
             };
             if (zone === "inside") {
@@ -69,7 +68,7 @@
                     silent: true,
                     symbol: "none",
                     label: { show: false },
-                    lineStyle: { color: label.color, type: "solid", width: 1 },
+                    lineStyle: { color: label.color, type: "dashed", width: 1 },
                     data: [{ xAxis: cutoff.at }]
                 };
             }

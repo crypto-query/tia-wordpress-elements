@@ -61,7 +61,7 @@ export function notice({ date, trial, source }: Cutoff): string {
         : `Your ${PRODUCTS[source]} subscription includes cycle projections up to ${date}. Later projections appear when your subscription renews.`;
 }
 
-export const zoneLabel = ({ trial }: Cutoff): string => (trial ? "Available after your trial" : "Available after renewal");
+export const zoneLabel = ({ trial }: Cutoff): string => (trial ? "Available after trial" : "Available after renewal");
 
 /** Epoch ms of the 12 UTC month starts of `year`. */
 export const monthStarts = (year: number): number[] => Array.from({ length: 12 }, (_, month) => Date.UTC(year, month, 1));
