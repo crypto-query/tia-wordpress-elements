@@ -13,7 +13,9 @@
  * - `supabase-stub`: Supabase is configured with fake values, and month_returns reads answer with fixture rows.
  * - `stripe-stub`: Stripe is configured with a fake key, and Stripe calls answer per email with fixture customers:
  *   `fx-suite-active@example.test` (active), `fx-suite-trial@example.test` (7-day trialing),
- *   `fx-suite-paused@example.test` (paused), `fx-suite-error@example.test` (HTTP 500); any other email finds none.
+ *   `fx-suite-paused@example.test` (paused), `fx-pro-active@example.test` (wind-down),
+ *   `fx-no-role@example.test` (one of each Suite Subscriptions status, plus `unpaid`),
+ *   `fx-suite-error@example.test` (HTTP 500); any other email finds none.
  *
  * @package tia-wordpress-elements
  */
@@ -139,13 +141,27 @@ function tia_elements_test_stripe( $url ) {
 		$body = $list( array() );
 	} elseif ( '/v1/customers/search' === $path ) {
 		preg_match( '/^email:"(.*)"$/', (string) ( $query['query'] ?? '' ), $match );
-		$email    = $match[1] ?? '';
-		$statuses = array(
-			'fx-suite-active@example.test' => array( 'active', 0, $now + 300 * DAY_IN_SECONDS ),
-			'fx-suite-trial@example.test'  => array( 'trialing', $now + 5 * DAY_IN_SECONDS, $now + 5 * DAY_IN_SECONDS ),
-			'fx-suite-paused@example.test' => array( 'paused', 0, $now - DAY_IN_SECONDS ),
+		$email = $match[1] ?? '';
+		$day   = DAY_IN_SECONDS;
+		// Per email: status, created, trial_end (0 = none), current_period_end, cancel_at_period_end, unit_amount, interval.
+		$wind_down     = array( 'trialing', $now - 200 * $day, $now + 80 * $day, $now + 80 * $day, true, 99900, 'year' );
+		$subscriptions = array(
+			'fx-suite-active@example.test' => array( array( 'active', $now - 2 * $day, 0, $now + 300 * $day, false, 29900, 'year' ) ),
+			'fx-suite-trial@example.test'  => array( array( 'trialing', $now - 2 * $day, $now + 5 * $day, $now + 5 * $day, false, 29900, 'year' ) ),
+			'fx-suite-paused@example.test' => array( array( 'paused', $now - 2 * $day, 0, $now - $day, false, 29900, 'year' ) ),
+			'fx-pro-active@example.test'   => array( $wind_down ),
+			'fx-no-role@example.test'      => array(
+				array( 'active', $now - 40 * $day, 0, $now + 20 * $day, false, 9900, 'month' ),
+				array( 'active', $now - 300 * $day, 0, $now + 65 * $day, true, 99900, 'year' ),
+				array( 'trialing', $now - 2 * $day, $now + 5 * $day, $now + 5 * $day, false, 9900, 'month' ),
+				$wind_down,
+				array( 'past_due', $now - 70 * $day, 0, $now + 10 * $day, false, 9900, 'month' ),
+				array( 'paused', $now - 100 * $day, 0, $now - 10 * $day, false, 9900, 'month' ),
+				array( 'incomplete', $now - $day, 0, $now + 29 * $day, false, 9900, 'month' ),
+				array( 'unpaid', $now - 90 * $day, 0, $now - 30 * $day, false, 9900, 'month' ),
+			),
 		);
-		$body     = $list( array() );
+		$body          = $list( array() );
 		if ( 'fx-suite-error@example.test' === $email ) {
 			$status = 500;
 			// Stripe's message can echo the query; the client must not pass it on.
@@ -155,41 +171,39 @@ function tia_elements_test_stripe( $url ) {
 					'message' => 'Something went wrong searching ' . $email,
 				),
 			);
-		} elseif ( isset( $statuses[ $email ] ) ) {
-			list( $sub_status, $trial_end, $period_end ) = $statuses[ $email ];
-
+		} elseif ( isset( $subscriptions[ $email ] ) ) {
+			$subs = array();
+			foreach ( $subscriptions[ $email ] as $index => list( $sub_status, $created, $trial_end, $period_end, $cancel, $amount, $interval ) ) {
+				$subs[] = array(
+					'id'                   => 'sub_stub_' . md5( $email ) . '_' . $index,
+					'object'               => 'subscription',
+					'status'               => $sub_status,
+					'created'              => $created,
+					'trial_end'            => $trial_end ? $trial_end : null,
+					'cancel_at_period_end' => $cancel,
+					'currency'             => 'usd',
+					'items'                => $list(
+						array(
+							array(
+								'price'              => array(
+									'product'     => $product,
+									'unit_amount' => $amount,
+									'recurring'   => array( 'interval' => $interval ),
+								),
+								'quantity'           => 1,
+								'current_period_end' => $period_end,
+							),
+						)
+					),
+				);
+			}
 			$body = $list(
 				array(
 					array(
 						'id'            => 'cus_stub_' . md5( $email ),
 						'object'        => 'customer',
 						'email'         => $email,
-						'subscriptions' => $list(
-							array(
-								array(
-									'id'                   => 'sub_stub_' . md5( $email ),
-									'object'               => 'subscription',
-									'status'               => $sub_status,
-									'created'              => $now - 2 * DAY_IN_SECONDS,
-									'trial_end'            => $trial_end ? $trial_end : null,
-									'cancel_at_period_end' => false,
-									'currency'             => 'usd',
-									'items'                => $list(
-										array(
-											array(
-												'price'    => array(
-													'product'     => $product,
-													'unit_amount' => 29900,
-													'recurring'   => array( 'interval' => 'year' ),
-												),
-												'quantity' => 1,
-												'current_period_end' => $period_end,
-											),
-										)
-									),
-								),
-							)
-						),
+						'subscriptions' => $list( $subs ),
 					),
 				)
 			);

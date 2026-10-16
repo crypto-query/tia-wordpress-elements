@@ -29,7 +29,10 @@ require_once __DIR__ . '/includes/class-tia-elements-supabase.php';
 require_once __DIR__ . '/includes/class-tia-elements-forward-returns.php';
 require_once __DIR__ . '/includes/class-tia-elements-forward-returns-service.php';
 require_once __DIR__ . '/includes/class-tia-elements-rest.php';
+require_once __DIR__ . '/src/suite-subscriptions/class-tia-elements-suite-subscription-rows.php';
+require_once __DIR__ . '/src/suite-subscriptions/class-tia-elements-suite-subscriptions-element.php';
 
 TIA_Elements_Settings_Page::register();
 TIA_Elements_Blocks::register();
 TIA_Elements_Rest::register();
+TIA_Elements_Suite_Subscriptions_Element::register();

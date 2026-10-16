@@ -5,7 +5,8 @@
  * Run through `bun run wp:seed` (add `clean` to only remove the data). Each run removes
  * what the previous run made: users, subscriptions, products and pages that carry the seed marker,
  * then makes them again with dates relative to now (UTC), and checks the result. It also links
- * the test mu-plugin, tests/mu-plugins/tia-elements-test.php, into wp-content/mu-plugins/.
+ * the test mu-plugin, tests/mu-plugins/tia-elements-test.php, into wp-content/mu-plugins/, and gives
+ * the My Account page the live template; `clean` restores the old one.
  *
  * @package tia-wordpress-elements
  */
@@ -16,6 +17,8 @@ const TIA_ELEMENTS_SEED_MARKER    = '_tia_elements_seed';
 const TIA_ELEMENTS_SEED_ROLES_OPT = 'tia_elements_seed_roles';
 const TIA_ELEMENTS_SEED_OTHER_SKU = 'tia-seed-other-subscription';
 const TIA_ELEMENTS_SEED_MU_FILE   = 'tia-elements-test.php';
+// The My Account page's template before the seed set the live one; absent while nothing is to restore.
+const TIA_ELEMENTS_SEED_TEMPLATE_OPT = 'tia_elements_seed_myaccount_template';
 // The live IDs. Variations come before their parent, so `clean` deletes in this order.
 const TIA_ELEMENTS_SEED_IDS   = array(
 	'pro'        => 19339,
@@ -394,6 +397,36 @@ function tia_elements_seed_pages() {
 }
 
 /**
+ * Gives the My Account page the live template, `member-layout.php`, so a browser pass sees the live
+ * content width. Keeps the old template, so `clean` can restore it.
+ */
+function tia_elements_seed_myaccount_template() {
+	$page = (int) get_option( 'woocommerce_myaccount_page_id' );
+	if ( ! get_post( $page ) ) {
+		WP_CLI::error( 'WooCommerce has no My Account page.' );
+	}
+	update_option( TIA_ELEMENTS_SEED_TEMPLATE_OPT, (string) get_post_meta( $page, '_wp_page_template', true ), false );
+	update_post_meta( $page, '_wp_page_template', 'member-layout.php' );
+}
+
+/**
+ * Gives the My Account page back the template it had before the seed.
+ */
+function tia_elements_seed_restore_myaccount_template() {
+	$old = get_option( TIA_ELEMENTS_SEED_TEMPLATE_OPT );
+	if ( false === $old ) {
+		return;
+	}
+	$page = (int) get_option( 'woocommerce_myaccount_page_id' );
+	if ( '' === $old ) {
+		delete_post_meta( $page, '_wp_page_template' );
+	} else {
+		update_post_meta( $page, '_wp_page_template', $old );
+	}
+	delete_option( TIA_ELEMENTS_SEED_TEMPLATE_OPT );
+}
+
+/**
  * Removes the roles the seed added, and the option that lists them.
  */
 function tia_elements_seed_remove_roles() {
@@ -694,6 +727,7 @@ function tia_elements_seed_run( $cli_args ) {
 	$fixtures = tia_elements_seed_fixtures( $now );
 	tia_elements_seed_clean( $fixtures );
 	tia_elements_seed_clean_pages();
+	tia_elements_seed_restore_myaccount_template();
 	tia_elements_seed_unlink_mu_plugin();
 	if ( in_array( 'clean', (array) $cli_args, true ) ) {
 		tia_elements_seed_remove_roles();
@@ -733,6 +767,7 @@ function tia_elements_seed_run( $cli_args ) {
 	}
 
 	tia_elements_seed_pages();
+	tia_elements_seed_myaccount_template();
 	tia_elements_seed_link_mu_plugin();
 	WP_CLI::log( 'Currency: ' . get_woocommerce_currency() . ', TIA Pro price: ' . wp_strip_all_tags( $products['pro']->get_price_html() ) );
 	$errors = tia_elements_seed_check( $fixtures, $products );

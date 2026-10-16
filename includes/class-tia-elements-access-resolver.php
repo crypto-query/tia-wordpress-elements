@@ -126,7 +126,7 @@ final class TIA_Elements_Access_Resolver {
 		foreach ( $subscriptions as $subscription ) {
 			$access = match ( $subscription['status'] ) {
 				'active', 'past_due' => TIA_Elements_Access::full( 'indicator-suite', $subscription['created'], $subscription['current_period_end'] ),
-				'trialing'           => $subscription['trial_end'] - $subscription['created'] <= self::STRIPE_TRIAL_MAX_SECONDS
+				'trialing'           => self::is_stripe_trial( $subscription )
 					? TIA_Elements_Access::trial( 'indicator-suite', $subscription['trial_end'] )
 					: TIA_Elements_Access::full( 'indicator-suite', $subscription['created'], $subscription['trial_end'] ),
 				default              => null,
@@ -136,6 +136,17 @@ final class TIA_Elements_Access_Resolver {
 			}
 		}
 		return $best ?? TIA_Elements_Access::denied();
+	}
+
+	/**
+	 * Whether a suite subscription is a Trial: `trialing` for at most 31 days.
+	 *
+	 * @param array $subscription A suite subscription.
+	 *
+	 * @phpstan-param Subscription $subscription
+	 */
+	public static function is_stripe_trial( array $subscription ): bool {
+		return 'trialing' === $subscription['status'] && $subscription['trial_end'] - $subscription['created'] <= self::STRIPE_TRIAL_MAX_SECONDS;
 	}
 
 	/**
