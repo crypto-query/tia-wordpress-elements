@@ -1,7 +1,8 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../shared/api";
-import { getAssets, getPredictiveCycles, type Asset, type Cutoff, type PredictiveCycles as Data } from "./api";
+import { getAssets, getPredictiveCycles, type Asset, type Cutoff, type DataRequest, type PredictiveCycles as Data } from "./api";
 import PredictiveCycles from "./PredictiveCycles.svelte";
 
 vi.mock("./api", () => ({ getAssets: vi.fn(), getPredictiveCycles: vi.fn() }));
@@ -68,8 +69,11 @@ describe("PredictiveCycles", () => {
         expect(screen.getByRole("status", { name: "Loading Predictive Cycles" })).toBeInTheDocument();
         await chart();
 
-        expect(getPredictiveCycles).toHaveBeenCalledWith({ asset, baseYear: 2026 }, expect.any(AbortSignal));
-        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(getPredictiveCycles).toHaveBeenCalledWith(
+            { id: "btc", base_year: 2026, curves: [{ id: 0 }, { id: 1 }] },
+            expect.any(AbortSignal)
+        );
+        expect(screen.queryByRole("status", { name: "Loading Predictive Cycles" })).not.toBeInTheDocument();
         expect(screen.queryByText(/cycle projections/)).not.toBeInTheDocument();
     });
 
@@ -122,5 +126,149 @@ describe("PredictiveCycles", () => {
 
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
         expect(getAssets).not.toHaveBeenCalled();
+    });
+
+    describe("controls", () => {
+        const eth: Asset = {
+            ...asset,
+            id: "eth",
+            name: "Ethereum",
+            title: "Ethereum",
+            base_years: [2025, 2024],
+            curves: [
+                { id: 0, name: "Actual", info: "Actual returns for the year" },
+                { id: 1, name: "Bear", info: "Average returns for the bear years", years: [2014, 2018, 2022] },
+                { id: 2, name: "Decade offsets", years: [10, 20] }
+            ]
+        };
+        /** Answers with the requested asset and Base Year, every curve a flat line. */
+        const answer = ({ id, base_year, curves }: DataRequest): Data => ({
+            data: {
+                id,
+                base_year,
+                curves: curves.map((curve) => ({
+                    id: curve.id,
+                    name: [asset, eth].find((one) => one.id === id)?.curves[curve.id]?.name ?? "",
+                    points: [[Date.UTC(base_year, 0, 1), 1]]
+                }))
+            },
+            cutoff: null
+        });
+        const lastRequest = () => vi.mocked(getPredictiveCycles).mock.lastCall?.[0];
+
+        async function open(assets: Asset[], attributes: Record<string, unknown> = { baseYear: 2026 }) {
+            vi.mocked(getAssets).mockResolvedValue(assets);
+            vi.mocked(getPredictiveCycles).mockImplementation(async (request) => answer(request));
+            render(PredictiveCycles, { ...props, attributes });
+            await screen.findByRole("group", { name: /^Predictive Cycles chart/ });
+        }
+
+        it("steps the Base Year by value, disabled at the bounds, and refetches", async () => {
+            await open([asset]);
+            const older = screen.getByRole("button", { name: "Older Base Year" });
+            const newer = screen.getByRole("button", { name: "Newer Base Year" });
+            expect(screen.getByRole("status", { name: "Base Year" })).toHaveTextContent("2026");
+            expect(newer).toHaveAttribute("aria-disabled", "true");
+
+            await fireEvent.click(older);
+            expect(screen.getByRole("status", { name: "Base Year" })).toHaveTextContent("2025");
+            expect(older).toHaveAttribute("aria-disabled", "true");
+            expect(newer).toHaveAttribute("aria-disabled", "false");
+            await screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2025" });
+            expect(lastRequest()).toMatchObject({ id: "btc", base_year: 2025 });
+
+            await fireEvent.click(older);
+            expect(getPredictiveCycles).toHaveBeenCalledTimes(2);
+        });
+
+        it("debounces quick picks into one request and aborts the one in flight", async () => {
+            await open([{ ...asset, base_years: [2026, 2025, 2024] }]);
+            let first: AbortSignal | undefined;
+            vi.mocked(getPredictiveCycles).mockImplementationOnce((request, signal) => {
+                first = signal;
+                return new Promise(() => {});
+            });
+            await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
+            await waitFor(() => expect(getPredictiveCycles).toHaveBeenCalledTimes(2));
+
+            await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
+            await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
+            await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
+            expect(first?.aborted).toBe(true);
+            await screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2024" });
+            expect(getPredictiveCycles).toHaveBeenCalledTimes(3);
+        });
+
+        it("keeps the Base Year by value across assets, else falls back", async () => {
+            await open([asset, eth], { baseYear: 2025 });
+
+            await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
+            await userEvent.click(await screen.findByRole("option", { name: "Ethereum" }));
+            await screen.findByRole("group", { name: "Predictive Cycles chart, ETH, Base Year 2025" });
+
+            await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
+            await screen.findByRole("group", { name: "Predictive Cycles chart, ETH, Base Year 2024" });
+            await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
+            await userEvent.click(await screen.findByRole("option", { name: "Bitcoin" }));
+            await screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2026" });
+        });
+
+        it("shows and hides curves locally, never disabled, and asks for one when none shows", async () => {
+            await open([asset]);
+            const actual = screen.getByRole("checkbox", { name: "Actual" });
+            const all = screen.getByRole("checkbox", { name: "All" });
+            expect(actual).toBeChecked();
+
+            await fireEvent.click(actual);
+            await fireEvent.click(all);
+            expect(actual).not.toBeChecked();
+            expect(all).toBeEnabled();
+            expect(screen.getByText("Select a curve to show")).toBeInTheDocument();
+
+            await fireEvent.click(all);
+            expect(screen.queryByText("Select a curve to show")).not.toBeInTheDocument();
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            expect(getPredictiveCycles).toHaveBeenCalledOnce();
+        });
+
+        it("excludes a year with its chip, refetches, and keeps the last year included", async () => {
+            await open([eth], { baseYear: 2025 });
+            const chip = (name: string) => screen.getByRole("checkbox", { name });
+
+            await fireEvent.click(chip("2018"));
+            expect(chip("2018")).not.toBeChecked();
+            await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2014, 2022] }));
+
+            await fireEvent.click(chip("2014"));
+            expect(chip("2022")).toHaveAttribute("aria-disabled", "true");
+            await fireEvent.click(chip("2022"));
+            expect(chip("2022")).toBeChecked();
+            await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2022] }));
+
+            await fireEvent.click(chip("2018"));
+            expect(chip("2022")).not.toHaveAttribute("aria-disabled", "true");
+        });
+
+        it("labels decade-offset chips with the year they mean, and relabels on a Base Year change", async () => {
+            await open([eth], { baseYear: 2025 });
+            expect(screen.getByRole("checkbox", { name: "2015 (10 years before 2025)" })).toHaveTextContent("2015");
+
+            await fireEvent.click(screen.getByRole("checkbox", { name: "2005 (20 years before 2025)" }));
+            await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
+            expect(screen.getByRole("checkbox", { name: "2014 (10 years before 2024)" })).toBeChecked();
+            expect(screen.getByRole("checkbox", { name: "2004 (20 years before 2024)" })).not.toBeChecked();
+            await waitFor(() =>
+                expect(lastRequest()).toMatchObject({ base_year: 2024, curves: [{ id: 0 }, { id: 1 }, { id: 2, years: [10] }] })
+            );
+        });
+
+        it("explains each curve with its info and years", async () => {
+            await open([eth], { baseYear: 2025 });
+
+            screen.getByRole("button", { name: "About Bear" }).focus();
+            expect(await screen.findByText(/Years: 2014, 2018, 2022/)).toHaveTextContent(
+                "Average returns for the bear years Years: 2014, 2018, 2022"
+            );
+        });
     });
 });

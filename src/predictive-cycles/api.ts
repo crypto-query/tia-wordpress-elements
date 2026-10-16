@@ -38,17 +38,13 @@ export const getAssets = memoize(
     () => "assets"
 );
 
-/** Every curve of the asset for one Base Year, memoized for every Block on the page. */
+/** A year-curve lists the years (or offsets) it keeps; any other curve sends only its id. */
+export type CurveRequest = { id: number; years?: number[] };
+
+export type DataRequest = { id: string; base_year: number; curves: CurveRequest[] };
+
+/** The curves of one asset and Base Year, a year-curve averaged over its sent years; memoized for every Block on the page. */
 export const getPredictiveCycles = memoize(
-    ({ asset, baseYear }: Selection, signal: AbortSignal) =>
-        post<PredictiveCycles>(
-            "/tia-data/v1/predictive-cycles/data",
-            {
-                id: asset.id,
-                base_year: baseYear,
-                curves: asset.curves.map(({ id, years }) => (years ? { id, years } : { id }))
-            },
-            signal
-        ),
-    ({ asset, baseYear }) => [asset.id, baseYear, ...asset.curves.flatMap(({ years }) => (years ? [years.join(",")] : []))].join("/")
+    (request: DataRequest, signal: AbortSignal) => post<PredictiveCycles>("/tia-data/v1/predictive-cycles/data", request, signal),
+    ({ id, base_year, curves }) => [id, base_year, ...curves.flatMap(({ years }) => (years ? [years.join(",")] : []))].join("/")
 );

@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { Asset, Cutoff } from "./api";
-import { curveSlots, cutoffCase, monthStarts, notice, pickSelection, zoneLabel } from "./transforms";
+import type { Asset, Curve, Cutoff } from "./api";
+import {
+    chips,
+    curveInfo,
+    curveSlots,
+    cutoffCase,
+    dataRequest,
+    monthStarts,
+    notice,
+    pickSelection,
+    stepYear,
+    toggleYear,
+    zoneLabel
+} from "./transforms";
 
 const asset = (id: string, base_years: number[]): Asset => ({
     id,
@@ -143,5 +155,79 @@ describe("monthStarts", () => {
         expect(starts[1]).toBe(Date.parse("2024-02-01T00:00:00Z"));
         expect(starts[2]).toBe(Date.parse("2024-03-01T00:00:00Z"));
         expect(starts[11]).toBe(Date.parse("2024-12-01T00:00:00Z"));
+    });
+});
+
+const bear: Curve = { id: 9, name: "Bear", info: "Average returns for the bear years", years: [2014, 2018, 2022] };
+const decades: Curve = { id: 7, name: "Decade offsets", info: "Average returns for the selected years", years: [10, 20, 30] };
+
+describe("dataRequest", () => {
+    it("sends every curve, a year-curve with only its included years", () => {
+        const curves = [{ id: 0, name: "Actual" }, bear, decades, { id: 2, name: "20 & 60", static: [20, 60] }];
+        const request = dataRequest({ asset: { ...btc, curves }, baseYear: 2026 }, { 9: [2018], 7: [] });
+
+        expect(request).toEqual({
+            id: "btc",
+            base_year: 2026,
+            curves: [{ id: 0 }, { id: 9, years: [2014, 2022] }, { id: 7, years: [10, 20, 30] }, { id: 2 }]
+        });
+    });
+});
+
+describe("chips", () => {
+    it("labels a year chip with its year", () => {
+        expect(chips(bear, 2026)[0]).toEqual({ value: 2014, text: "2014", name: "2014" });
+    });
+
+    it("labels a decade-offset chip with the year it means at the Base Year", () => {
+        expect(chips(decades, 2026)[0]).toEqual({ value: 10, text: "2016", name: "2016 (10 years before 2026)" });
+        expect(chips(decades, 2025).map(({ text }) => text)).toEqual(["2015", "2005", "1995"]);
+    });
+
+    it("gives no chips to a curve without years", () => {
+        expect(chips({ id: 2, static: [20, 60] }, 2026)).toEqual([]);
+    });
+});
+
+describe("curveInfo", () => {
+    it("adds the years after the upstream info", () => {
+        expect(curveInfo(bear)).toBe("Average returns for the bear years\nYears: 2014, 2018, 2022");
+        expect(curveInfo({ id: 3, info: "Election years", static: [2016, 2020] })).toBe("Election years\nYears: 2016, 2020");
+    });
+
+    it("adds the offsets after the upstream info", () => {
+        expect(curveInfo(decades)).toBe("Average returns for the selected years\nOffsets: 10, 20, 30 years before the Base Year");
+        expect(curveInfo({ id: 2, static: [20, 60] })).toBe("Offsets: 20, 60 years before the Base Year");
+    });
+
+    it("keeps the info as it is for a curve without years", () => {
+        expect(curveInfo({ id: 0, info: "Actual returns for the year" })).toBe("Actual returns for the year");
+        expect(curveInfo({ id: 0 })).toBe("");
+    });
+});
+
+describe("toggleYear", () => {
+    it("excludes an included year and includes an excluded one", () => {
+        expect(toggleYear(bear, [], 2018)).toEqual([2018]);
+        expect(toggleYear(bear, [2018, 2014], 2018)).toEqual([2014]);
+    });
+
+    it("keeps the last included year", () => {
+        expect(toggleYear(bear, [2014, 2022], 2018)).toEqual([2014, 2022]);
+    });
+});
+
+describe("stepYear", () => {
+    const years = [2027, 2026, 2024];
+
+    it("steps to the next older or newer listed year by value", () => {
+        expect(stepYear(years, 2026, -1)).toBe(2024);
+        expect(stepYear(years, 2026, 1)).toBe(2027);
+        expect(stepYear([2024, 2026, 2025], 2024, 1)).toBe(2025);
+    });
+
+    it("gives null at the bounds", () => {
+        expect(stepYear(years, 2024, -1)).toBeNull();
+        expect(stepYear(years, 2027, 1)).toBeNull();
     });
 });

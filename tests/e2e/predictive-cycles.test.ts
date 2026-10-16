@@ -179,6 +179,30 @@ test("a Member sees the spinner, then the chart", async ({ page, context }) => {
     await expect(block(page).getByRole("group", { name: `Predictive Cycles chart, BTC, Base Year ${year}` })).toBeVisible();
 });
 
+test("a year chip refetches without its year, and the Base Year stepper refetches the older year", async ({ page, context }) => {
+    await logIn(page, "fx-pro-active");
+    await context.addCookies([{ name: "tia_elements_test", value: stub, url: "http://localhost:8000" }]);
+    await page.goto("/predictive-cycles/");
+    const year = new Date().getUTCFullYear();
+    await expect(block(page).getByRole("group", { name: `Predictive Cycles chart, BTC, Base Year ${year}` })).toBeVisible();
+
+    const bear = block(page)
+        .getByRole("listitem")
+        .filter({ has: page.getByRole("checkbox", { name: "Bear", exact: true }) });
+    const posted = page.waitForResponse(
+        (response) => response.url().includes("predictive-cycles") && response.request().method() === "POST"
+    );
+    await bear.getByRole("checkbox", { name: "2018" }).click();
+    const response = await posted;
+    expect(response.status()).toBe(200);
+    const body = response.request().postDataJSON() as { curves: Curve[] };
+    expect(body.curves.find(({ id }) => id === 6)).toEqual({ id: 6, years: [2014, 2022] });
+    await expect(bear.getByRole("checkbox", { name: "2018" })).toHaveAttribute("aria-checked", "false");
+
+    await block(page).getByRole("button", { name: "Older Base Year" }).click();
+    await expect(block(page).getByRole("group", { name: `Predictive Cycles chart, BTC, Base Year ${year - 1}` })).toBeVisible();
+});
+
 test.describe("a page on the Base Year of the first hidden day", () => {
     let id = "";
     test.afterEach(() => {
