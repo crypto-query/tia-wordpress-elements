@@ -70,7 +70,7 @@ describe("ForwardReturns", () => {
         await screen.findByRole("grid");
 
         expect(getForwardReturns).toHaveBeenCalledWith({ base: "btc", quote: "usd", period: 6 }, expect.any(AbortSignal));
-        expect(headers()).toEqual(["Year", "Jan", "Jul"]);
+        expect(headers()).toEqual(["Year", "Jan \u2013 Jun", "Jul \u2013 Dec"]);
         expect(texts(part(1).getAllByRole("rowheader"))).toEqual(["2025", "2024"]);
         expect(texts(part(1).getAllByRole("cell"))).toEqual(["", "", "+3.21%", "\u22122.10%"]);
     });
@@ -105,12 +105,12 @@ describe("ForwardReturns", () => {
 
         await userEvent.click(screen.getByRole("radio", { name: "Annually" }));
 
-        expect(headers()).toEqual(["Year", "Jan", "Jul"]);
+        expect(headers()).toEqual(["Year", "Jan \u2013 Jun", "Jul \u2013 Dec"]);
         expect(screen.getByRole("status", { name: "Loading Forward Returns" })).toBeInTheDocument();
         expect(getForwardReturns).toHaveBeenLastCalledWith({ base: "btc", quote: "usd", period: 12 }, expect.any(AbortSignal));
 
         pending.resolve(answer({ base: "btc", quote: "usd", period: 12 }));
-        await waitFor(() => expect(headers()).toEqual(["Year", "Jan"]));
+        await waitFor(() => expect(headers()).toEqual(["Year", "Jan \u2013 Dec"]));
         expect(texts(part(1).getAllByRole("cell"))).toEqual(["+1.00%"]);
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
@@ -131,11 +131,11 @@ describe("ForwardReturns", () => {
         expect(vi.mocked(getForwardReturns).mock.calls.at(1)?.[1]?.aborted).toBe(true);
 
         second.resolve(answer({ base: "btc", quote: "usd", period: 12 }));
-        await waitFor(() => expect(headers()).toEqual(["Year", "Jan"]));
+        await waitFor(() => expect(headers()).toEqual(["Year", "Jan \u2013 Dec"]));
         first.resolve(answer({ base: "btc", quote: "usd", period: 6 }));
         await first.promise;
         await tick();
-        expect(headers()).toEqual(["Year", "Jan"]);
+        expect(headers()).toEqual(["Year", "Jan \u2013 Dec"]);
     });
 
     it("the Holding Period toggle picks with arrow keys and keeps its pick on a second click", async () => {
@@ -156,7 +156,7 @@ describe("ForwardReturns", () => {
         expect(semiannually).toHaveFocus();
         expect(semiannually).toHaveAttribute("aria-checked", "true");
         expect(getForwardReturns).toHaveBeenLastCalledWith({ base: "btc", quote: "usd", period: 6 }, expect.any(AbortSignal));
-        await waitFor(() => expect(headers()).toEqual(["Year", "Jan", "Jul"]));
+        await waitFor(() => expect(headers()).toEqual(["Year", "Jan \u2013 Jun", "Jul \u2013 Dec"]));
     });
 
     it("Tab from Asset lands on the picked Holding Period", async () => {
@@ -221,11 +221,11 @@ describe("ForwardReturns", () => {
 
         expect(previous).toHaveAttribute("aria-disabled", "true");
         await userEvent.click(next);
-        expect(headers()).toEqual(["Year", "Feb", "Aug"]);
+        expect(headers()).toEqual(["Year", "Feb \u2013 Jul", "Aug \u2013 Jan"]);
         for (let step = 0; step < 4; step++) {
             await userEvent.click(next);
         }
-        expect(headers()).toEqual(["Year", "Jun", "Dec"]);
+        expect(headers()).toEqual(["Year", "Jun \u2013 Nov", "Dec \u2013 May"]);
         expect(next).toHaveAttribute("aria-disabled", "true");
         expect(previous).toHaveAttribute("aria-disabled", "false");
     });
@@ -331,7 +331,7 @@ describe("ForwardReturns", () => {
         await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
         await userEvent.click(reset);
 
-        expect(headers()).toEqual(["Year", "Jan", "Jul"]);
+        expect(headers()).toEqual(["Year", "Jan \u2013 Jun", "Jul \u2013 Dec"]);
         expect(screen.getByRole("checkbox", { name: "Count 2025" })).toBeChecked();
         expect(screen.getByRole("checkbox", { name: /\+3\.21%/ })).toHaveAttribute("aria-checked", "true");
         expect(reset).toHaveAttribute("aria-disabled", "true");
@@ -348,9 +348,9 @@ describe("ForwardReturns", () => {
         }
 
         await userEvent.click(screen.getByRole("radio", { name: "Quarterly" }));
-        await waitFor(() => expect(headers()).toEqual(["Year", "Mar", "Jun", "Sep", "Dec"]));
+        await waitFor(() => expect(headers()).toEqual(["Year", "Mar \u2013 May", "Jun \u2013 Aug", "Sep \u2013 Nov", "Dec \u2013 Feb"]));
         await userEvent.click(screen.getByRole("radio", { name: "Semiannually" }));
-        await waitFor(() => expect(headers()).toEqual(["Year", "Mar", "Sep"]));
+        await waitFor(() => expect(headers()).toEqual(["Year", "Mar \u2013 Aug", "Sep \u2013 Feb"]));
     });
 
     it("a hovered Return Cell names its months, its value and what a click does", async () => {
@@ -406,7 +406,7 @@ describe("ForwardReturns", () => {
             await press("ArrowRight");
             expect(focused()).toBe(screen.getByRole("button", { name: "Next Entry Offset" }));
             await press("ArrowRight");
-            const january = part(0).getByRole("columnheader", { name: "Jan" });
+            const january = part(0).getByRole("columnheader", { name: "Jan \u2013 Jun" });
             expect(focused()).toBe(january);
             // 2025 has no January cell, so Down skips to 2024's.
             await press("ArrowDown");
@@ -469,7 +469,7 @@ describe("ForwardReturns", () => {
             await screen.findByRole("grid");
             const partial = screen.getByRole("checkbox", { name: `January \u2013 June ${next}, +5.00%, Partial` });
 
-            part(0).getByRole("columnheader", { name: "Jan" }).focus();
+            part(0).getByRole("columnheader", { name: "Jan \u2013 Jun" }).focus();
             await press("ArrowDown");
             expect(focused()).toBe(partial);
             expect(partial).toHaveAttribute("aria-disabled", "true");
@@ -520,7 +520,7 @@ describe("ForwardReturns", () => {
             await screen.findByRole("grid");
 
             expect(getForwardReturns).toHaveBeenCalledWith({ base: "btc", quote: "usd", period: 12 }, expect.any(AbortSignal));
-            expect(headers()).toEqual(["Year", "Mar"]);
+            expect(headers()).toEqual(["Year", "Mar \u2013 Feb"]);
         });
 
         it("drops the stored pick when an attribute changed since it was stored", async () => {
@@ -531,7 +531,7 @@ describe("ForwardReturns", () => {
             await screen.findByRole("grid");
 
             expect(getForwardReturns).toHaveBeenCalledWith({ base: "btc", quote: "usd", period: 6 }, expect.any(AbortSignal));
-            expect(headers()).toEqual(["Year", "Jan", "Jul"]);
+            expect(headers()).toEqual(["Year", "Jan \u2013 Jun", "Jul \u2013 Dec"]);
             expect(memory.current.instances).toEqual({});
         });
 
@@ -573,7 +573,7 @@ describe("ForwardReturns", () => {
             memory.set(stored(unset));
             render(ForwardReturns, { ...props, instance: null });
             await screen.findByRole("grid");
-            expect(headers()).toEqual(["Year", "Jan", "Jul"]);
+            expect(headers()).toEqual(["Year", "Jan \u2013 Jun", "Jul \u2013 Dec"]);
 
             await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
             await userEvent.click(screen.getByRole("radio", { name: "Annually" }));

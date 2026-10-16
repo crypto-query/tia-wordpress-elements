@@ -33,6 +33,7 @@
         cellName,
         cellState,
         cellValue,
+        columnLabel,
         columnResults,
         entryMonths,
         formatRate,
@@ -617,7 +618,7 @@
                                                 scope="col"
                                                 class="bg-muted px-2 py-2.5 text-center font-semibold last:relative last:z-0 last:bg-card-background last:before:absolute last:before:inset-0 last:before:-z-10 last:before:rounded-r-md last:before:bg-muted focus-visible:-outline-offset-2"
                                                 {...navItem(`month-${month}`, index + 1)}>
-                                                {MONTH_NAMES[month - 1]}
+                                                {columnLabel(month, period)}
                                             </th>
                                         {/each}
                                     </tr>

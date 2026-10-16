@@ -37,6 +37,10 @@ export function pickSelection(attributes: Record<string, unknown>, assets: Asset
     return asset ? selectAsset(asset, match && typeof attributes.period === "number" ? attributes.period : undefined) : null;
 }
 
+/** A column header: the Entry Month, or the months the Holding Period spans, "Jan – Mar". */
+export const columnLabel = (month: number, period: number) =>
+    period === 1 ? MONTH_NAMES[month - 1] : `${MONTH_NAMES[month - 1]} \u2013 ${MONTH_NAMES[(month + period - 2) % 12]}`;
+
 /** The Entry Months (1–12) of a Holding Period, from the calendar rather than the data. */
 export function entryMonths(period: number, offset = 0): number[] {
     const months = [];

@@ -6,6 +6,7 @@ import {
     cellName,
     cellState,
     cellValue,
+    columnLabel,
     columnResults,
     entryMonths,
     formatRate,
@@ -276,6 +277,19 @@ describe("formatRate", () => {
         [null, "\u2014"]
     ])("formats %s as %j", (rate, text) => {
         expect(formatRate(rate)).toBe(text);
+    });
+});
+
+describe("columnLabel", () => {
+    it.each([
+        [1, 1, "Jan"],
+        [1, 3, "Jan \u2013 Mar"],
+        [7, 6, "Jul \u2013 Dec"],
+        [1, 12, "Jan \u2013 Dec"],
+        [12, 3, "Dec \u2013 Feb"],
+        [2, 12, "Feb \u2013 Jan"]
+    ])("names Entry Month %i over %i months %j", (month, period, label) => {
+        expect(columnLabel(month, period)).toBe(label);
     });
 });
 
