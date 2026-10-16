@@ -66,9 +66,9 @@
     let request = $state.raw<AbortController | null>(null);
     let failure = $state.raw<{ kind: ErrorKind; retry: () => void } | null>(null);
     let entryOffset = $state(0);
-    // The one Return Cell under the pointer mounts a Tooltip; one per cell blocks the page for seconds on long histories.
+    // The one Return Cell or year under the pointer mounts a Tooltip; one per cell blocks the page for seconds on long histories.
     let hinted = $state<string | null>(null);
-    // A Return Cell focused by keyboard opens its hint; the grid's one Tab stop is the item focused last.
+    // A Return Cell or year focused by keyboard opens its hint; the grid's one Tab stop is the item focused last.
     let focused = $state<string | null>(null);
     let lastFocused = $state<string | null>(null);
     let scroller: HTMLDivElement | undefined;
@@ -638,11 +638,30 @@
                                                     aria-checked={counted}
                                                     aria-label="Count {row.year}"
                                                     class={[
-                                                        "block size-full cursor-pointer rounded-md px-2 py-1 text-center text-xs font-semibold hover:bg-muted focus-visible:-outline-offset-2 pointer-coarse:min-h-11",
+                                                        "block size-full cursor-pointer rounded-md text-center text-xs font-semibold hover:bg-muted focus-visible:-outline-offset-2 pointer-coarse:min-h-11",
                                                         counted ? "text-foreground" : "text-foreground-subtle"
                                                     ]}
+                                                    onpointerenter={() => (hinted = `year-${row.year}`)}
+                                                    onfocus={(event) => {
+                                                        hinted = `year-${row.year}`;
+                                                        focused = event.currentTarget.matches(":focus-visible") ? hinted : null;
+                                                    }}
+                                                    onblur={() => (focused = null)}
                                                     onclick={() => exclude({ years: toggle(exclusions.years, row.year) })}>
-                                                    {row.year}
+                                                    {#if hinted === `year-${row.year}`}
+                                                        <Tooltip
+                                                            content={`${row.year} · whole row\nClick to ${counted ? "exclude" : "include"}`}
+                                                            class="whitespace-pre-line"
+                                                            offset={0}
+                                                            open={focused === hinted}
+                                                            portalTarget={root}>
+                                                            {#snippet trigger({ props })}
+                                                                <span {...withoutFocusStop(props)} class="block px-2 py-1">{row.year}</span>
+                                                            {/snippet}
+                                                        </Tooltip>
+                                                    {:else}
+                                                        <span class="block px-2 py-1">{row.year}</span>
+                                                    {/if}
                                                 </button>
                                             </th>
                                             {#each months as month, index (month)}

@@ -353,6 +353,25 @@ describe("ForwardReturns", () => {
         await waitFor(() => expect(headers()).toEqual(["Year", "Mar \u2013 Aug", "Sep \u2013 Feb"]));
     });
 
+    it("a hovered year says a click excludes its row, and once excluded that a click includes it", async () => {
+        vi.mocked(getAssets).mockResolvedValue([asset]);
+        vi.mocked(getForwardReturns).mockResolvedValue(data);
+        render(ForwardReturns, props);
+        await screen.findByRole("grid");
+        const year = screen.getByRole("checkbox", { name: "Count 2024" });
+
+        await userEvent.hover(year);
+        await fireEvent.pointerMove(within(year).getByText("2024"), { pointerType: "mouse" });
+        expect(await screen.findByRole("tooltip")).toHaveTextContent("2024 \u00b7 whole row Click to exclude");
+
+        await userEvent.click(year);
+        // A click closes the Tooltip until the pointer leaves and comes back.
+        await userEvent.unhover(year);
+        await userEvent.hover(year);
+        await fireEvent.pointerMove(within(year).getByText("2024"), { pointerType: "mouse" });
+        await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("2024 \u00b7 whole row Click to include"));
+    });
+
     it("a hovered Return Cell names its months, its value and what a click does", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
