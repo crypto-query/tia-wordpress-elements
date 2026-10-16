@@ -628,7 +628,7 @@
                                     onpointerleave={() => (overRows = false)}>
                                     {#each years as row (row.year)}
                                         {@const counted = !exclusions.years.includes(row.year)}
-                                        <tr class="first:*:pt-2">
+                                        <tr class="first:*:pt-2 last:*:pb-2">
                                             <!-- `h-px` lets the year fill the row's height; the inset ring keeps the scroll box from clipping it. -->
                                             <th scope="row" class="sticky left-0 h-px bg-card-background p-0.5">
                                                 <button
