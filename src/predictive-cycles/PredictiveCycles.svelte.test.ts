@@ -206,15 +206,24 @@ describe("PredictiveCycles", () => {
             send("mouseup", x + dx, y + dy);
         }
 
-        it("keeps the value tooltip over Actual's line", async () => {
+        it("shows Actual's real value and the drag hint over its moved line, and drops the hint off the line", async () => {
             const group = await open();
             // The test page has no Tailwind, so the chart gets its size here.
             group.style.height = "360px";
+            group.focus();
+            await userEvent.keyboard("{ArrowUp}");
+            await announced("Actual moved 0 days, +1.00%");
             await new Promise((resolve) => setTimeout(resolve, 100));
 
             const [x, y] = actualPixel(group);
             pointer(group)("mousemove", x, y);
             await waitFor(() => expect(within(group).getByText("Jul 1 · day 182")).toBeVisible());
+            expect(within(group).getByText("+4.00%")).toBeVisible();
+            expect(within(group).getByText("Drag to move, or use the arrow keys")).toBeVisible();
+
+            pointer(group)("mousemove", x, y + 60);
+            await waitFor(() => expect(within(group).queryByText("Drag to move, or use the arrow keys")).not.toBeInTheDocument());
+            expect(within(group).getByText("Jul 1 · day 182")).toBeVisible();
         });
 
         it("moves Actual with the mouse after the keys moved it, by whole days", async () => {

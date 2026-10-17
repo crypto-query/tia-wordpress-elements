@@ -14,8 +14,6 @@ type Attributes = { asset?: string; baseYear?: number };
 
 type SetAttributes = BlockEditProps<Attributes>["setAttributes"];
 
-const DEFAULT_YEAR = "Current year, else newest";
-
 function assetControls(assets: Asset[], attributes: Attributes, setAttributes: SetAttributes) {
     const match = assets.find(({ id }) => id === attributes.asset);
     const shown = pickSelection(attributes, assets, new Date());
@@ -55,7 +53,8 @@ function assetControls(assets: Asset[], attributes: Attributes, setAttributes: S
                 onChange: (value: string) => setAttributes({ baseYear: value ? Number(value) : undefined }),
                 __next40pxDefaultSize: true
             },
-            createElement("option", { value: "" }, DEFAULT_YEAR),
+            // The view opens on the current UTC year when the asset lists it, else on its newest year.
+            createElement("option", { value: "" }, years.includes(new Date().getUTCFullYear()) ? "Current year" : "Newest year"),
             years.map((year) => createElement("option", { key: year, value: String(year) }, year))
         )
     ];
@@ -76,7 +75,7 @@ function Edit({ attributes, setAttributes }: BlockEditProps<Attributes>) {
             ? assetControls(assets.value, attributes, setAttributes)
             : readOnlyRows([
                   ["Asset", asset ?? "First asset"],
-                  ["Base Year", baseYear === undefined ? DEFAULT_YEAR : String(baseYear)]
+                  ["Base Year", baseYear === undefined ? "Current year" : String(baseYear)]
               ]);
 
     return createElement(

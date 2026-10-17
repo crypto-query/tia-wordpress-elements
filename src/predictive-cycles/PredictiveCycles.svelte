@@ -245,13 +245,17 @@
         });
     }
 
-    /** The value tooltip of the day under the pointer. */
+    /**
+     * The value tooltip of the day under the pointer, with the drag hint as its last line. The hint shares the panel
+     * because ECharts moves its tooltip around the pointer, so a second panel there would sometimes lie under it.
+     */
     function gripTooltip(): string {
         const at: unknown = chart?.convertFromPixel({ xAxisIndex: 0 }, gripX);
         if (!shown || typeof at !== "number") {
             return "";
         }
-        return tooltipHtml(dragCurves(shown.data.curves, drag), hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
+        const values = tooltipHtml(shown.data.curves, hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
+        return grab ? values : `${values}<div class="mt-2 text-foreground-muted">Drag to move, or use the arrow keys</div>`;
     }
 
     function startGrab({ offsetX, offsetY }: ElementEvent) {
@@ -365,7 +369,7 @@
                 axisPointer: { type: "none" },
                 formatter: (params) => {
                     const [first] = [params].flat();
-                    return first && "axisValue" in first ? tooltipHtml(curves, hidden, Number(first.axisValue)) : "";
+                    return first && "axisValue" in first ? tooltipHtml(data.curves, hidden, Number(first.axisValue)) : "";
                 }
             },
             dataZoom: [
