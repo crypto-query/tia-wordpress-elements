@@ -1,6 +1,6 @@
 import { isObject } from "../shared/boot";
+import { formatReturn } from "../shared/format";
 import { clamp, storedPick, type InstanceEntry } from "../shared/load-rules";
-import { formatReturn } from "../forward-returns/transforms";
 import type { Asset, Curve, CurveData, Cutoff, DataRequest, Selection } from "./api";
 
 /** Default pick: the asset attribute if listed, else the first; the Base Year attribute, else the current UTC year, else the largest. */
@@ -204,12 +204,9 @@ export function restore(
     return selection && { selection, ...kept, zoom: { start, end: clamp(pick.zoom.end, start, 100) } };
 }
 
-/** Reset has something to do: a hidden curve of the asset, an excluded year, or a zoom. */
-export const canReset = (asset: Asset, hidden: string[], excluded: Exclusions, zoom: Zoom): boolean =>
-    asset.curves.some(({ name }) => hidden.includes(name)) ||
-    Object.values(excluded).some((years) => years.length > 0) ||
-    zoom.start > 0 ||
-    zoom.end < 100;
+/** Reset has something to do: a hidden curve on any asset, an excluded year of this asset, or a zoom. */
+export const canReset = (hidden: string[], excluded: Exclusions, zoom: Zoom): boolean =>
+    hidden.length > 0 || Object.values(excluded).some((years) => years.length > 0) || zoom.start > 0 || zoom.end < 100;
 
 /** Epoch ms of the 12 UTC month starts of `year`. */
 export const monthStarts = (year: number): number[] => Array.from({ length: 12 }, (_, month) => Date.UTC(year, month, 1));

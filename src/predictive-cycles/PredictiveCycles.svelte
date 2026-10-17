@@ -49,12 +49,11 @@
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
     import Toggle from "tia-design-system/ui/toggle/Toggle.svelte";
     import Tooltip from "tia-design-system/ui/tooltip/Tooltip.svelte";
-    import { withoutKey } from "../forward-returns/transforms";
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
     import { asinhTicks, toAsinh } from "../shared/asinh";
     import { isObject, type Card as BootCard } from "../shared/boot";
-    import { normalise, storedPick } from "../shared/load-rules";
+    import { normalise, storedPick, withoutKey } from "../shared/load-rules";
     import { getAssets, getPredictiveCycles, type Asset, type Curve, type PredictiveCycles, type Selection } from "./api";
     import {
         ATTRIBUTE_KEYS,
@@ -106,7 +105,7 @@
     const excluded = $derived(selection ? (store.current.excluded[selection.asset.id] ?? {}) : {});
     const wanted = $derived(selection && dataRequest(selection, excluded));
     const loading = $derived(waiting || request !== null);
-    const resettable = $derived(selection !== null && canReset(selection.asset, hidden, excluded, zoom));
+    const resettable = $derived(selection !== null && canReset(hidden, excluded, zoom));
 
     const firstAt = $derived(shown ? Date.UTC(shown.data.base_year, 0, 1) : 0);
     // The last day comes from the data: a year has 365 or 366 points, or fewer.
@@ -209,6 +208,8 @@
                 ...theme.tooltip,
                 show: !empty,
                 trigger: "axis",
+                // The cut-off already draws a dashed line; the pointer draws none.
+                axisPointer: { type: "none" },
                 formatter: (params) => {
                     const [first] = [params].flat();
                     return first && "axisValue" in first ? tooltipHtml(shown, hidden, Number(first.axisValue)) : "";
@@ -400,10 +401,9 @@
         if (!selection || !resettable) {
             return;
         }
-        const { asset } = selection;
-        hidden = hidden.filter((name) => !asset.curves.some((curve) => curve.name === name));
+        hidden = [];
         zoom = FULL_ZOOM;
-        store.set({ ...store.current, excluded: withoutKey(store.current.excluded, asset.id) });
+        store.set({ ...store.current, excluded: withoutKey(store.current.excluded, selection.asset.id) });
         remember();
     }
 

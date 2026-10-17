@@ -13,4 +13,7 @@ export function storedPick<P>(entry: InstanceEntry<P> | undefined, attributes: R
     return keys.every((key) => (entry.attributes[key] ?? null) === (attributes[key] ?? null)) ? entry.pick : null;
 }
 
+export const withoutKey = <T>(record: Record<string, T>, key: string): Record<string, T> =>
+    Object.fromEntries(Object.entries(record).filter(([entry]) => entry !== key));
+
 export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);

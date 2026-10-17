@@ -355,6 +355,18 @@ describe("PredictiveCycles", () => {
             );
         });
 
+        it("shows a curve hidden on another asset again on Reset", async () => {
+            await open([asset, eth], { baseYear: 2025 });
+            await fireEvent.click(screen.getByRole("checkbox", { name: "All" }));
+            await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
+            await userEvent.click(await screen.findByRole("option", { name: "Ethereum" }));
+            expect(resetButton()).toHaveAttribute("aria-disabled", "false");
+
+            await fireEvent.click(resetButton());
+            expect(stored()?.hidden).toEqual([]);
+            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+        });
+
         it("shares year exclusions live with the other instances", async () => {
             await open([eth], { baseYear: 2025 });
             render(PredictiveCycles, { ...props, attributes: { baseYear: 2025 }, instance: "1:1" });

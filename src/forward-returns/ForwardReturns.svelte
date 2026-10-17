@@ -23,7 +23,8 @@
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
     import type { Card as BootCard } from "../shared/boot";
-    import { clamp, normalise, storedPick } from "../shared/load-rules";
+    import { formatReturn } from "../shared/format";
+    import { clamp, normalise, storedPick, withoutKey } from "../shared/load-rules";
     import { getAssets, getForwardReturns, type Asset, type ForwardReturns, type Selection } from "./api";
     import {
         ATTRIBUTE_KEYS,
@@ -37,7 +38,6 @@
         columnResults,
         entryMonths,
         formatRate,
-        formatReturn,
         periodLabel,
         periodOptions,
         rateTone,
@@ -47,7 +47,6 @@
         toggle,
         toneOf,
         withExclusions,
-        withoutKey,
         type CellState,
         type Exclusions,
         type Results,

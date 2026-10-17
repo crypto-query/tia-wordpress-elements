@@ -351,23 +351,15 @@ describe("restore", () => {
 });
 
 describe("canReset", () => {
-    const withCurves = {
-        ...btc,
-        curves: [
-            { id: 0, name: "Actual" },
-            { id: 1, name: "All" }
-        ]
-    };
-
     it("is false when the view is as loaded", () => {
-        expect(canReset(withCurves, ["Bear"], { 1: [] }, { start: 0, end: 100 })).toBe(false);
+        expect(canReset([], { 1: [] }, { start: 0, end: 100 })).toBe(false);
     });
 
     it.each([
-        ["a hidden curve of the asset", ["All"], {}, { start: 0, end: 100 }],
+        ["a hidden curve", ["Bear"], {}, { start: 0, end: 100 }],
         ["an excluded year", [], { 1: [2018] }, { start: 0, end: 100 }],
         ["a zoom", [], {}, { start: 0, end: 80 }]
     ])("is true with %s", (_, hidden, excluded, zoom) => {
-        expect(canReset(withCurves, hidden, excluded, zoom)).toBe(true);
+        expect(canReset(hidden, excluded, zoom)).toBe(true);
     });
 });
