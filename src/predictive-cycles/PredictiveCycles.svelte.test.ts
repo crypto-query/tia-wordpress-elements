@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { userEvent } from "@vitest/browser/context";
 import { getInstanceByDom } from "echarts/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -130,6 +130,133 @@ describe("PredictiveCycles", () => {
 
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
         expect(getAssets).not.toHaveBeenCalled();
+    });
+
+    describe("drag", () => {
+        type Series = { name: string; data: [number, number | null][]; lineStyle: { width: number } };
+        const actualSeries = (group: HTMLElement) =>
+            (getInstanceByDom(group)?.getOption().series as Series[]).find(({ name }) => name === "Actual");
+        const announced = (text: string) => screen.findByText(text, { selector: "[aria-live=polite]" });
+
+        async function open() {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getPredictiveCycles).mockResolvedValue(data(null));
+            render(PredictiveCycles, props);
+            return chart();
+        }
+
+        it("is one Tab stop that tells its curves' values and how to drag", async () => {
+            const group = await open();
+            screen.getByRole("button", { name: "Reset" }).focus();
+            await userEvent.tab();
+            expect(group).toHaveFocus();
+            await userEvent.tab();
+            expect(screen.getByRole("checkbox", { name: "Actual" })).toHaveFocus();
+
+            expect(group).toHaveAccessibleDescription("Jul 1: Actual +4.00%, All +2.00%.");
+            expect(screen.getByText("Drag Actual, or use the arrow keys")).toBeVisible();
+            expect(screen.queryByRole("table")).not.toBeInTheDocument();
+        });
+
+        it("moves Actual a day or a percent per arrow key, draws it thicker with focus, and Reset clears it", async () => {
+            const group = await open();
+            expect(actualSeries(group)?.lineStyle.width).toBe(2);
+            group.focus();
+            await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(3));
+            expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
+
+            await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}{ArrowUp}{ArrowUp}{ArrowDown}");
+            await announced("Actual moved +3 days, +1.00%");
+            expect(actualSeries(group)?.data.slice(0, 2)).toEqual([
+                [day(0, 4), 1.5],
+                [day(6, 4), 5]
+            ]);
+            expect(group).toHaveAccessibleDescription("Jul 1: Actual +4.00%, All +2.00%.");
+
+            await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
+            await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 4), Math.asinh(1.5)]));
+
+            group.blur();
+            await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(2));
+            await fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+            expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
+            await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), Math.asinh(0.5)]));
+        });
+
+        /** Mouse events at chart pixels, sent where zrender listens. */
+        function pointer(group: HTMLElement) {
+            const surface = group.querySelector("canvas") ?? group;
+            const { left, top } = surface.getBoundingClientRect();
+            return (type: string, x: number, y: number) =>
+                surface.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: left + x, clientY: top + y }));
+        }
+
+        const actualPixel = (group: HTMLElement) =>
+            (getInstanceByDom(group)?.convertToPixel({ gridIndex: 0 }, actualSeries(group)?.data[1] ?? []) ?? []) as number[];
+
+        /** Presses on Actual's Jul 1 point, moves the pointer by `dx`, `dy` pixels and lets go. */
+        async function dragActual(group: HTMLElement, dx: number, dy: number) {
+            const [x, y] = actualPixel(group);
+            const send = pointer(group);
+            send("mousemove", x, y);
+            send("mousedown", x, y);
+            for (let step = 1; step <= 4; step++) {
+                send("mousemove", x + (dx * step) / 4, y + (dy * step) / 4);
+            }
+            send("mouseup", x + dx, y + dy);
+        }
+
+        it("keeps the value tooltip over Actual's line", async () => {
+            const group = await open();
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            const [x, y] = actualPixel(group);
+            pointer(group)("mousemove", x, y);
+            await waitFor(() => expect(within(group).getByText("Jul 1 · day 182")).toBeVisible());
+        });
+
+        it("moves Actual with the mouse after the keys moved it, by whole days", async () => {
+            const group = await open();
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            group.focus();
+            await userEvent.keyboard("{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}");
+            await announced("Actual moved 0 days, +5.00%");
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            await dragActual(group, 60, 0);
+            const text = (await screen.findByText(/^Actual moved \+\d+ days, \+5\.00%$/, { selector: "[aria-live=polite]" })).textContent;
+            const days = Number(/\+(\d+) days/.exec(text ?? "")?.[1]);
+            expect(days).toBeGreaterThan(10);
+            expect(actualSeries(group)?.data[0]).toEqual([day(0, 1 + days), 5.5]);
+        });
+
+        it("does nothing while Actual is hidden", async () => {
+            const group = await open();
+            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
+            expect(screen.queryByText("Drag Actual, or use the arrow keys")).not.toBeInTheDocument();
+            expect(group).toHaveAccessibleDescription("Jul 1: All +2.00%.");
+
+            group.focus();
+            await userEvent.keyboard("{ArrowRight}");
+            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
+            expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), 0.5]);
+        });
+
+        it("clears the drag on a Base Year change", async () => {
+            const group = await open();
+            group.focus();
+            await userEvent.keyboard("{ArrowUp}");
+            await announced("Actual moved 0 days, +1.00%");
+
+            await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
+            await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
+            expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
+            expect(screen.queryByText(/^Actual moved/)).not.toBeInTheDocument();
+            await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), 0.5]));
+        });
     });
 
     describe("controls", () => {

@@ -122,11 +122,15 @@ export function notice({ date, trial, source }: Cutoff): string {
 
 export const zoneLabel = ({ trial }: Cutoff): string => (trial ? "Available after trial" : "Available after renewal");
 
+export const DAY = 86_400_000;
+
+/** "Oct 10", in UTC. */
+const shortDate = (at: number): string => new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
 /** The tooltip header: "Oct 10 · day 283", in UTC. */
 export function dayLabel(at: number): string {
-    const date = new Date(at);
-    const day = Math.round((at - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86_400_000) + 1;
-    return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} · day ${day}`;
+    const day = Math.round((at - Date.UTC(new Date(at).getUTCFullYear(), 0, 1)) / DAY) + 1;
+    return `${shortDate(at)} · day ${day}`;
 }
 
 export type TooltipRow = { name: string; slot: number; value: string };
@@ -204,9 +208,49 @@ export function restore(
     return selection && { selection, ...kept, zoom: { start, end: clamp(pick.zoom.end, start, 100) } };
 }
 
-/** Reset has something to do: a hidden curve on any asset, an excluded year of this asset, or a zoom. */
-export const canReset = (hidden: string[], excluded: Exclusions, zoom: Zoom): boolean =>
-    hidden.length > 0 || Object.values(excluded).some((years) => years.length > 0) || zoom.start > 0 || zoom.end < 100;
+/** Reset has something to do: a hidden curve on any asset, an excluded year of this asset, a zoom, or a drag. */
+export const canReset = (hidden: string[], excluded: Exclusions, zoom: Zoom, drag: Drag): boolean =>
+    hidden.length > 0 ||
+    Object.values(excluded).some((years) => years.length > 0) ||
+    zoom.start > 0 ||
+    zoom.end < 100 ||
+    drag.days !== 0 ||
+    drag.percent !== 0;
+
+/** The one curve a Member can drag, by its exact upstream name. */
+export const ACTUAL = "Actual";
+
+/** How far Actual is dragged: whole days in x, percentage points in y. */
+export type Drag = { days: number; percent: number };
+
+export const NO_DRAG: Drag = { days: 0, percent: 0 };
+
+/** The curves with Actual moved by the drag. */
+export const dragCurves = (curves: CurveData[], { days, percent }: Drag): CurveData[] =>
+    curves.map((curve) =>
+        curve.name === ACTUAL
+            ? { ...curve, points: curve.points.map(([at, value]) => [at + days * DAY, value === null ? null : value + percent]) }
+            : curve
+    );
+
+/** "Actual moved +3 days, +1.00%". */
+export function dragAnnouncement({ days, percent }: Drag): string {
+    const sign = days > 0 ? "+" : days < 0 ? "\u2212" : "";
+    return `Actual moved ${sign}${Math.abs(days)} ${Math.abs(days) === 1 ? "day" : "days"}, ${formatReturn(percent)}`;
+}
+
+/** Each shown curve's value on Actual's last day with a value and on Dec 31 of the Base Year; days with no value are left out. */
+export function chartSummary(curves: CurveData[], hidden: string[], baseYear: number): string {
+    const actual = curves.find(({ name }) => name === ACTUAL)?.points.findLast(([, value]) => value !== null)?.[0];
+    const yearEnd = Date.UTC(baseYear, 11, 31);
+    const days = actual === undefined || actual === yearEnd ? [yearEnd] : [actual, yearEnd];
+    return days
+        .flatMap((at) => {
+            const rows = tooltipRows(curves, hidden, at);
+            return rows.length === 0 ? [] : [`${shortDate(at)}: ${rows.map(({ name, value }) => `${name} ${value}`).join(", ")}.`];
+        })
+        .join(" ");
+}
 
 /** Epoch ms of the 12 UTC month starts of `year`. */
 export const monthStarts = (year: number): number[] => Array.from({ length: 12 }, (_, month) => Date.UTC(year, month, 1));

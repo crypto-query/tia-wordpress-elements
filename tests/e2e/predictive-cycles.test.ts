@@ -258,3 +258,52 @@ test.describe("a page on the Base Year of the first hidden day", () => {
         ).toBeVisible();
     });
 });
+
+test.describe("the editor", () => {
+    const year = new Date().getUTCFullYear();
+    let id = "";
+    test.beforeEach(() => {
+        id = createPage(year);
+    });
+    test.afterEach(() => wp("post", "delete", id, "--force"));
+
+    test("an admin sees the live preview and sets the default Base Year in the inspector", async ({ page, context }) => {
+        await logIn(page, "admin", "admin");
+        await context.addCookies([{ name: "tia_elements_test", value: stub, url: "http://localhost:8000" }]);
+        await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
+        const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-predictive-cycles");
+
+        await preview.getByText("Drag Actual, or use the arrow keys").click();
+        const inspector = page.getByRole("region", { name: "Editor settings" });
+        await expect(inspector.getByRole("combobox", { name: "Asset" })).toHaveValue("");
+        await inspector.getByRole("combobox", { name: "Base Year" }).selectOption(String(year - 1));
+        await expect(preview.getByRole("group", { name: `Predictive Cycles chart, BTC, Base Year ${year - 1}` })).toBeVisible();
+    });
+
+    test("an editor who is not a Member sees the placeholder and read-only defaults", async ({ page, context }) => {
+        const user = wp(
+            "user",
+            "create",
+            "pc-e2e-editor",
+            "pc-e2e-editor@example.test",
+            "--role=editor",
+            "--user_pass=password",
+            "--porcelain"
+        );
+        try {
+            wp("user", "meta", "update", user, "wp_persisted_preferences", '{"core/edit-post":{"welcomeGuide":false}}', "--format=json");
+            await logIn(page, "pc-e2e-editor");
+            await context.addCookies([{ name: "tia_elements_test", value: stub, url: "http://localhost:8000" }]);
+            await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
+            const canvas = page.frameLocator('iframe[name="editor-canvas"]');
+
+            await canvas.getByText("Preview needs TIA Pro access").click();
+            const inspector = page.getByRole("region", { name: "Editor settings" });
+            await expect(inspector.getByText("Asset: First asset")).toBeVisible();
+            await expect(inspector.getByText(`Base Year: ${year}`)).toBeVisible();
+            await expect(inspector.getByRole("combobox", { name: "Asset" })).toHaveCount(0);
+        } finally {
+            wp("user", "delete", user, "--yes");
+        }
+    });
+});

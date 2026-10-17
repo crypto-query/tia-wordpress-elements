@@ -2,11 +2,13 @@
     import { LineChart, type LineSeriesOption } from "echarts/charts";
     import {
         DataZoomSliderComponent,
+        GraphicComponent,
         GridComponent,
         MarkAreaComponent,
         MarkLineComponent,
         TooltipComponent,
         type DataZoomComponentOption,
+        type GraphicComponentOption,
         type GridComponentOption,
         type MarkAreaComponentOption,
         type MarkLineComponentOption,
@@ -17,7 +19,16 @@
     import { Stored } from "../shared/storage.svelte";
     import { EMPTY_MEMORY, isMemory } from "./transforms";
 
-    use([LineChart, GridComponent, MarkLineComponent, MarkAreaComponent, TooltipComponent, DataZoomSliderComponent, CanvasRenderer]);
+    use([
+        LineChart,
+        GridComponent,
+        GraphicComponent,
+        MarkLineComponent,
+        MarkAreaComponent,
+        TooltipComponent,
+        DataZoomSliderComponent,
+        CanvasRenderer
+    ]);
 
     type Option = ComposeOption<
         | LineSeriesOption
@@ -26,6 +37,7 @@
         | MarkAreaComponentOption
         | TooltipComponentOption
         | DataZoomComponentOption
+        | GraphicComponentOption
     >;
 
     /** Shared by every instance in this bundle, so year exclusions update live across them. */
@@ -36,7 +48,7 @@
 </script>
 
 <script lang="ts">
-    import { format, type ECharts } from "echarts/core";
+    import { format, type ECharts, type ElementEvent } from "echarts/core";
     import { ChevronLeft, ChevronRight, Info, RotateCcw } from "lucide-svelte";
     import { onMount, untrack } from "svelte";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
@@ -54,17 +66,23 @@
     import { asinhTicks, toAsinh } from "../shared/asinh";
     import { isObject, type Card as BootCard } from "../shared/boot";
     import { normalise, storedPick, withoutKey } from "../shared/load-rules";
-    import { getAssets, getPredictiveCycles, type Asset, type Curve, type PredictiveCycles, type Selection } from "./api";
+    import { getAssets, getPredictiveCycles, type Asset, type Curve, type CurveData, type PredictiveCycles, type Selection } from "./api";
     import {
+        ACTUAL,
         ATTRIBUTE_KEYS,
+        DAY,
         FULL_ZOOM,
+        NO_DRAG,
         canReset,
+        chartSummary,
         chips,
         curveInfo,
         curveSlots,
         cutoffCase,
         dataRequest,
         dayLabel,
+        dragAnnouncement,
+        dragCurves,
         monthStarts,
         notice,
         pickSelection,
@@ -74,6 +92,7 @@
         tooltipRows,
         zoneLabel,
         type Chip,
+        type Drag,
         type Zoom
     } from "./transforms";
 
@@ -81,6 +100,12 @@
     let { attributes, card, instance }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
 
     const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const KEY_STEPS = new Map<string, Drag>([
+        ["ArrowLeft", { days: -1, percent: 0 }],
+        ["ArrowRight", { days: 1, percent: 0 }],
+        ["ArrowUp", { days: 0, percent: 1 }],
+        ["ArrowDown", { days: 0, percent: -1 }]
+    ]);
 
     const uid = $props.id();
     let root = $state<HTMLDivElement>();
@@ -99,20 +124,32 @@
     let zoomTimer: ReturnType<typeof setTimeout> | undefined;
     let requested: string | null = null;
     let failure = $state.raw<{ kind: ErrorKind; retry: () => void } | null>(null);
+    // Memory only: an asset or Base Year change and Reset clear it.
+    let drag = $state.raw<Drag>(NO_DRAG);
+    let focused = $state(false);
+    let announcement = $state("");
+    // The axis scale at the pointer when a mouse drag starts, so a y axis that rescales under the drag does not feed back.
+    let grab: { from: Drag; y: number; msPerPixel: number; valuePerPixel: number } | null = null;
+    let gripPoints = "";
+    let gripX = 0;
 
     const store = $derived(instance === null ? previewMemory : memory);
     // Excluded years of the asset, by curve id, kept across Base Years and shared with every instance.
     const excluded = $derived(selection ? (store.current.excluded[selection.asset.id] ?? {}) : {});
     const wanted = $derived(selection && dataRequest(selection, excluded));
     const loading = $derived(waiting || request !== null);
-    const resettable = $derived(selection !== null && canReset(hidden, excluded, zoom));
+    const resettable = $derived(selection !== null && canReset(hidden, excluded, zoom, drag));
 
     const firstAt = $derived(shown ? Date.UTC(shown.data.base_year, 0, 1) : 0);
     // The last day comes from the data: a year has 365 or 366 points, or fewer.
     const lastAt = $derived(shown ? (shown.data.curves[0]?.points.at(-1)?.[0] ?? Date.UTC(shown.data.base_year, 11, 31)) : 0);
     const cutoff = $derived(shown?.cutoff ?? null);
     const zone = $derived(cutoffCase(cutoff, firstAt, lastAt));
-    const option = $derived(theme && shown ? chartOption(theme, shown, hidden, log, zoom) : null);
+    const draggable = $derived(
+        !hidden.includes(ACTUAL) &&
+            (shown?.data.curves.some(({ name, points }) => name === ACTUAL && points.some(([, value]) => value !== null)) ?? false)
+    );
+    const option = $derived(theme && shown ? chartOption(theme, shown, hidden, log, zoom, drag, focused && draggable) : null);
     const noneShown = $derived(selection !== null && selection.asset.curves.every(({ name }) => hidden.includes(name)));
 
     // Every pick, a year chip here or in another instance, and Reset change the request; refetch debounces quick changes.
@@ -143,19 +180,132 @@
             }
         };
         echart.on("datazoom", onZoom);
+        // A remounted chart (after Try again) has lost the grip, so its first paint lays it again.
+        gripPoints = "";
+        // Every paint (a new option, a zoom, a resize) may move Actual's pixels, so the grip follows. A paint can run
+        // inside `setOption`, which refuses a nested `setOption`, so the grip waits for it to return.
+        const onRendered = () => queueMicrotask(placeGrip);
+        echart.on("rendered", onRendered);
         return () => {
             if (!echart.isDisposed()) {
                 echart.off("datazoom", onZoom);
+                echart.off("rendered", onRendered);
             }
         };
     });
 
-    function tooltipHtml({ data }: PredictiveCycles, hidden: string[], at: number): string {
+    /**
+     * Lays an invisible, wide polyline over Actual's visible points; dragging it moves Actual. It is laid again only
+     * when the points changed, as each placement renders the chart once more.
+     */
+    function placeGrip() {
+        const echart = chart;
+        if (!echart || echart.isDisposed() || grab) {
+            return;
+        }
+        const actual = draggable && shown ? dragCurves(shown.data.curves, drag).find(({ name }) => name === ACTUAL) : undefined;
+        const points = (actual?.points ?? []).flatMap(([at, value]) => {
+            if (value === null) {
+                return [];
+            }
+            const pixel: number[] = echart.convertToPixel({ gridIndex: 0 }, [at, log ? Math.asinh(value) : value]);
+            return echart.containPixel({ gridIndex: 0 }, pixel) ? [pixel] : [];
+        });
+        const key = JSON.stringify(points);
+        if (key === gripPoints) {
+            return;
+        }
+        gripPoints = key;
+        echart.setOption({
+            graphic: [
+                {
+                    id: "actual-grip",
+                    type: "polyline",
+                    x: 0,
+                    y: 0,
+                    z: 100,
+                    ignore: points.length < 2,
+                    draggable: true,
+                    cursor: "grab",
+                    shape: { points },
+                    style: { stroke: "transparent", fill: "none", lineWidth: 12 },
+                    // The grip covers Actual's line, so it carries the line's hover and value tooltip; the axis
+                    // tooltip hides over an element that has neither data nor a tooltip of its own.
+                    onmousemove: ({ offsetX }: ElementEvent) => {
+                        gripX = offsetX;
+                        emphasise(ACTUAL, true);
+                    },
+                    onmouseout: () => emphasise(ACTUAL, false),
+                    tooltip: { formatter: gripTooltip },
+                    ondragstart: startGrab,
+                    ondrag: moveGrab,
+                    ondragend: endGrab
+                }
+            ]
+        });
+    }
+
+    /** The value tooltip of the day under the pointer. */
+    function gripTooltip(): string {
+        const at: unknown = chart?.convertFromPixel({ xAxisIndex: 0 }, gripX);
+        if (!shown || typeof at !== "number") {
+            return "";
+        }
+        return tooltipHtml(dragCurves(shown.data.curves, drag), hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
+    }
+
+    function startGrab({ offsetX, offsetY }: ElementEvent) {
+        const echart = chart;
+        if (!echart) {
+            return;
+        }
+        const [x, y]: number[] = echart.convertFromPixel({ gridIndex: 0 }, [offsetX, offsetY]);
+        const [x1, y1]: number[] = echart.convertFromPixel({ gridIndex: 0 }, [offsetX + 1, offsetY + 1]);
+        grab = { from: drag, y, msPerPixel: x1 - x, valuePerPixel: y1 - y };
+    }
+
+    /** x snaps to whole days; y is free, in real % on the Log scale too. */
+    function moveGrab({ target }: ElementEvent) {
+        if (!grab) {
+            return;
+        }
+        const real = (value: number) => (log ? Math.sinh(value) : value);
+        drag = {
+            days: grab.from.days + Math.round((target.x * grab.msPerPixel) / DAY),
+            percent: grab.from.percent + real(grab.y + target.y * grab.valuePerPixel) - real(grab.y)
+        };
+    }
+
+    function endGrab() {
+        grab = null;
+        // The grip still sits where the pointer left it; lay it on Actual again.
+        gripPoints = "";
+        placeGrip();
+        announcement = dragAnnouncement(drag);
+    }
+
+    /** Also empties the live region, so the same move after a clear is announced again. */
+    function clearDrag() {
+        drag = NO_DRAG;
+        announcement = "";
+    }
+
+    function moveByKey(event: KeyboardEvent) {
+        const step = KEY_STEPS.get(event.key);
+        if (!step || !draggable) {
+            return;
+        }
+        event.preventDefault();
+        drag = { days: drag.days + step.days, percent: drag.percent + step.percent };
+        announcement = dragAnnouncement(drag);
+    }
+
+    function tooltipHtml(curves: CurveData[], hidden: string[], at: number): string {
         const inZone = cutoff !== null && (zone === "before" || (zone === "inside" && at > cutoff.at));
         return [
             `<div class="font-medium">${dayLabel(at)}</div>`,
             inZone ? `<div class="text-foreground-muted">${zoneLabel(cutoff)}</div>` : "",
-            ...tooltipRows(data.curves, hidden, at).map(
+            ...tooltipRows(curves, hidden, at).map(
                 ({ name, slot, value }) =>
                     `<div class="mt-1 flex items-center gap-2"><span class="size-2.5 rounded-full" style="background-color: var(--chart-${slot})"></span>` +
                     `${format.encodeHTML(name)}<span class="ml-auto pl-4 font-medium tabular-nums">${value}</span></div>`
@@ -168,13 +318,16 @@
         shown: PredictiveCycles,
         hidden: string[],
         log: boolean,
-        zoom: Zoom
+        zoom: Zoom,
+        drag: Drag,
+        focused: boolean
     ): Option {
         const { data } = shown;
-        const slots = curveSlots(data.curves.map(({ name }) => name));
+        const curves = dragCurves(data.curves, drag);
+        const slots = curveSlots(curves.map(({ name }) => name));
         // With no curve shown, every curve stays as an invisible line, so the empty plot keeps its axes in place.
-        const empty = data.curves.every(({ name }) => hidden.includes(name));
-        const drawn = data.curves.flatMap((curve, index) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[index] }]));
+        const empty = curves.every(({ name }) => hidden.includes(name));
+        const drawn = curves.flatMap((curve, index) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[index] }]));
         const ticks = monthStarts(data.base_year);
         const label = theme.axis.axisLabel;
         const helper: LineSeriesOption = { type: "line", data: [], silent: true };
@@ -212,7 +365,7 @@
                 axisPointer: { type: "none" },
                 formatter: (params) => {
                     const [first] = [params].flat();
-                    return first && "axisValue" in first ? tooltipHtml(shown, hidden, Number(first.axisValue)) : "";
+                    return first && "axisValue" in first ? tooltipHtml(curves, hidden, Number(first.axisValue)) : "";
                 }
             },
             dataZoom: [
@@ -257,7 +410,8 @@
                     showSymbol: false,
                     silent: empty,
                     triggerEvent: "line",
-                    lineStyle: { width: 2, opacity: empty ? 0 : 1 },
+                    // With the chart focused, the arrow keys move Actual, so it draws as if hovered.
+                    lineStyle: { width: focused && curve.name === ACTUAL ? 3 : 2, opacity: empty ? 0 : 1 },
                     emphasis: { focus: "series", lineStyle: { width: 3 } },
                     blur: { lineStyle: { opacity: 0.2 } },
                     color: theme.color[slot - 1]
@@ -362,12 +516,14 @@
         // The Base Year is kept by value when the new asset lists it.
         selection = pickSelection({ asset: id, baseYear: selection.baseYear }, assets, new Date());
         zoom = FULL_ZOOM;
+        clearDrag();
         remember();
     }
 
     function pickBaseYear(baseYear: number | null) {
         if (selection && baseYear !== null) {
             selection = { ...selection, baseYear };
+            clearDrag();
             remember();
         }
     }
@@ -403,6 +559,7 @@
         }
         hidden = [];
         zoom = FULL_ZOOM;
+        clearDrag();
         store.set({ ...store.current, excluded: withoutKey(store.current.excluded, selection.asset.id) });
         remember();
     }
@@ -582,9 +739,14 @@
                             {option}
                             bind:chart
                             setOptionOpts={{ replaceMerge: ["series", "yAxis"] }}
-                            class={["h-90 w-full transition-opacity sm:h-120", loading && "opacity-50"]}
+                            class={["h-90 w-full rounded-md transition-opacity sm:h-120", loading && "opacity-50"]}
                             role="group"
-                            aria-label="Predictive Cycles chart, {shown.data.id.toUpperCase()}, Base Year {shown.data.base_year}" />
+                            tabindex={0}
+                            aria-label="Predictive Cycles chart, {shown.data.id.toUpperCase()}, Base Year {shown.data.base_year}"
+                            aria-describedby="{uid}-summary"
+                            onkeydown={moveByKey}
+                            onfocus={() => (focused = true)}
+                            onblur={() => (focused = false)} />
                         {#if loading}
                             <div class="absolute inset-0 flex items-center justify-center">
                                 <Spinner size="lg" tone="muted" label="Loading Predictive Cycles" />
@@ -595,6 +757,11 @@
                             </p>
                         {/if}
                     </div>
+                    <p id="{uid}-summary" class="sr-only">{chartSummary(shown.data.curves, hidden, shown.data.base_year)}</p>
+                    <p aria-live="polite" class="sr-only">{announcement}</p>
+                    {#if draggable}
+                        <p class="mt-2 text-xs text-foreground-muted">Drag Actual, or use the arrow keys</p>
+                    {/if}
                 {/if}
                 {#if selection}
                     {@const picked = selection}

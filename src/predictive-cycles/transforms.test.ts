@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { Asset, Curve, CurveData, Cutoff } from "./api";
 import {
     canReset,
+    chartSummary,
     chips,
     curveInfo,
     curveSlots,
     cutoffCase,
     dataRequest,
     dayLabel,
+    dragAnnouncement,
+    dragCurves,
     isMemory,
     monthStarts,
     notice,
@@ -352,14 +355,103 @@ describe("restore", () => {
 
 describe("canReset", () => {
     it("is false when the view is as loaded", () => {
-        expect(canReset([], { 1: [] }, { start: 0, end: 100 })).toBe(false);
+        expect(canReset([], { 1: [] }, { start: 0, end: 100 }, { days: 0, percent: 0 })).toBe(false);
     });
 
     it.each([
-        ["a hidden curve", ["Bear"], {}, { start: 0, end: 100 }],
-        ["an excluded year", [], { 1: [2018] }, { start: 0, end: 100 }],
-        ["a zoom", [], {}, { start: 0, end: 80 }]
-    ])("is true with %s", (_, hidden, excluded, zoom) => {
-        expect(canReset(hidden, excluded, zoom)).toBe(true);
+        ["a hidden curve", ["Bear"], {}, { start: 0, end: 100 }, { days: 0, percent: 0 }],
+        ["an excluded year", [], { 1: [2018] }, { start: 0, end: 100 }, { days: 0, percent: 0 }],
+        ["a zoom", [], {}, { start: 0, end: 80 }, { days: 0, percent: 0 }],
+        ["a drag in x", [], {}, { start: 0, end: 100 }, { days: -1, percent: 0 }],
+        ["a drag in y", [], {}, { start: 0, end: 100 }, { days: 0, percent: 0.25 }]
+    ])("is true with %s", (_, hidden, excluded, zoom, drag) => {
+        expect(canReset(hidden, excluded, zoom, drag)).toBe(true);
+    });
+});
+
+describe("dragCurves", () => {
+    const day = (date: number) => Date.UTC(2026, 0, date);
+    const curves: CurveData[] = [
+        {
+            id: 0,
+            name: "Actual",
+            points: [
+                [day(1), 1],
+                [day(2), 0],
+                [day(3), null]
+            ]
+        },
+        { id: 1, name: "All", points: [[day(1), 2]] }
+    ];
+
+    it("moves only Actual, by whole days and by percent, and keeps its nulls", () => {
+        expect(dragCurves(curves, { days: 2, percent: -1.5 })).toEqual([
+            {
+                id: 0,
+                name: "Actual",
+                points: [
+                    [day(3), -0.5],
+                    [day(4), -1.5],
+                    [day(5), null]
+                ]
+            },
+            { id: 1, name: "All", points: [[day(1), 2]] }
+        ]);
+    });
+});
+
+describe("dragAnnouncement", () => {
+    it.each([
+        [{ days: 3, percent: 1 }, "Actual moved +3 days, +1.00%"],
+        [{ days: -1, percent: -0.504 }, "Actual moved \u22121 day, \u22120.50%"],
+        [{ days: 0, percent: 0 }, "Actual moved 0 days, 0.00%"]
+    ])("reads %o as %s", (drag, text) => {
+        expect(dragAnnouncement(drag)).toBe(text);
+    });
+});
+
+describe("chartSummary", () => {
+    const day = (month: number, date: number) => Date.UTC(2026, month, date);
+    const curves: CurveData[] = [
+        {
+            id: 0,
+            name: "Actual",
+            points: [
+                [day(9, 9), 3],
+                [day(9, 10), 4],
+                [day(11, 31), null]
+            ]
+        },
+        {
+            id: 1,
+            name: "All",
+            points: [
+                [day(9, 10), 0],
+                [day(11, 31), 5.5]
+            ]
+        },
+        {
+            id: 2,
+            name: "Bear",
+            points: [
+                [day(9, 10), -2],
+                [day(11, 31), null]
+            ]
+        }
+    ];
+
+    it("gives each shown curve's value on Actual's last day and on Dec 31, without nulls", () => {
+        expect(chartSummary(curves, ["Bear"], 2026)).toBe("Oct 10: Actual +4.00%, All 0.00%. Dec 31: All +5.50%.");
+    });
+
+    it("keeps Actual's last day as the date when Actual is hidden", () => {
+        expect(chartSummary(curves, ["Actual"], 2026)).toBe("Oct 10: All 0.00%, Bear \u22122.00%. Dec 31: All +5.50%.");
+    });
+
+    it("gives only Dec 31 when Actual has no value or ends on Dec 31", () => {
+        const empty = curves.map((curve) => (curve.name === "Actual" ? { ...curve, points: [] } : curve));
+        expect(chartSummary(empty, [], 2026)).toBe("Dec 31: All +5.50%.");
+        const full = curves.map((curve) => ({ ...curve, points: [[day(11, 31), 1]] as CurveData["points"] }));
+        expect(chartSummary(full, ["Bear"], 2026)).toBe("Dec 31: Actual +1.00%, All +1.00%.");
     });
 });
