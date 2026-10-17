@@ -10,7 +10,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Pure functions from the data server's asset list and curve table, plus the request check and the cut-off.
  *
- * @phpstan-type Curve array{id: int, name?: string, info?: string, years?: list<int>, static?: list<int>}
+ * @phpstan-type Curve array{id: int, name: string, info?: string, years?: list<int>, static?: list<int>}
  * @phpstan-type Asset array{id: string, name: string, title: string, range: array{begin: int, end: int}, base: string, quote: string, group: string, base_years: list<int>, curves: list<Curve>}
  * @phpstan-type Point array{int, int|float|null}
  * @phpstan-type Data array{id: string, base_year: int, curves: list<array{id: int, name: string, points: list<Point>}>}
@@ -206,13 +206,14 @@ final class TIA_Elements_Predictive_Cycles {
 
 		$list = array();
 		foreach ( $curves as $curve ) {
-			if ( ! is_array( $curve ) || ! is_int( $curve['id'] ?? null ) ) {
+			// The label is the curve's only name: the client keys colour and visibility on it.
+			if ( ! is_array( $curve ) || ! is_int( $curve['id'] ?? null ) || ! is_string( $curve['label'] ?? null ) ) {
 				continue;
 			}
-			$out = array( 'id' => $curve['id'] );
-			if ( is_string( $curve['label'] ?? null ) ) {
-				$out['name'] = $curve['label'];
-			}
+			$out = array(
+				'id'   => $curve['id'],
+				'name' => $curve['label'],
+			);
 			if ( is_string( $curve['info'] ?? null ) ) {
 				$out['info'] = $curve['info'];
 			}

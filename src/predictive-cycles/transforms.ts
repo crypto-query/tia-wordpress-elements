@@ -1,4 +1,7 @@
-import type { Asset, Curve, Cutoff, DataRequest, Selection } from "./api";
+import { isObject } from "../shared/boot";
+import { clamp, storedPick, type InstanceEntry } from "../shared/load-rules";
+import { formatReturn } from "../forward-returns/transforms";
+import type { Asset, Curve, CurveData, Cutoff, DataRequest, Selection } from "./api";
 
 /** Default pick: the asset attribute if listed, else the first; the Base Year attribute, else the current UTC year, else the largest. */
 export function pickSelection(attributes: Record<string, unknown>, assets: Asset[], now: Date): Selection | null {
@@ -118,6 +121,95 @@ export function notice({ date, trial, source }: Cutoff): string {
 }
 
 export const zoneLabel = ({ trial }: Cutoff): string => (trial ? "Available after trial" : "Available after renewal");
+
+/** The tooltip header: "Oct 10 · day 283", in UTC. */
+export function dayLabel(at: number): string {
+    const date = new Date(at);
+    const day = Math.round((at - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86_400_000) + 1;
+    return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} · day ${day}`;
+}
+
+export type TooltipRow = { name: string; slot: number; value: string };
+
+/** One row per shown curve with a value on day `at`, in list order. */
+export function tooltipRows(curves: CurveData[], hidden: string[], at: number): TooltipRow[] {
+    const slots = curveSlots(curves.map(({ name }) => name));
+    return curves.flatMap(({ name, points }, index) => {
+        const value = hidden.includes(name) ? null : (points.find(([day]) => day === at)?.[1] ?? null);
+        return value === null ? [] : [{ name, slot: slots[index], value: formatReturn(value) }];
+    });
+}
+
+/** The Block attributes a stored pick is tied to. */
+export const ATTRIBUTE_KEYS = ["asset", "baseYear"] as const;
+
+/** The x zoom in percent of the year. */
+export type Zoom = { start: number; end: number };
+
+export const FULL_ZOOM: Zoom = { start: 0, end: 100 };
+
+/** One instance's view. Curves are hidden by name, so a hidden curve stays hidden on every asset that has it. */
+export type InstancePick = { asset: string; baseYear: number; hidden: string[]; log: boolean; zoom: Zoom };
+
+/** What `localStorage` keeps: year exclusions per asset for every instance, and each instance's view. */
+export type Memory = { excluded: Record<string, Exclusions>; instances: Record<string, InstanceEntry<InstancePick>> };
+
+export const EMPTY_MEMORY: Memory = { excluded: {}, instances: {} };
+
+const isRecordOf = (value: unknown, check: (entry: unknown) => boolean) => isObject(value) && Object.values(value).every(check);
+
+const isIntegers = (value: unknown) => Array.isArray(value) && value.every((entry) => Number.isInteger(entry));
+
+const isPick = (value: unknown) =>
+    isObject(value) &&
+    typeof value.asset === "string" &&
+    Number.isInteger(value.baseYear) &&
+    Array.isArray(value.hidden) &&
+    value.hidden.every((name) => typeof name === "string") &&
+    typeof value.log === "boolean" &&
+    isObject(value.zoom) &&
+    Number.isFinite(value.zoom.start) &&
+    Number.isFinite(value.zoom.end);
+
+const isEntry = (value: unknown) =>
+    isObject(value) &&
+    isRecordOf(value.attributes, (attribute) => attribute === null || typeof attribute === "string" || typeof attribute === "number") &&
+    isPick(value.pick);
+
+export const isMemory = (value: unknown): value is Memory =>
+    isObject(value) && isRecordOf(value.excluded, (entry) => isRecordOf(entry, isIntegers)) && isRecordOf(value.instances, isEntry);
+
+export type View = { selection: Selection; hidden: string[]; log: boolean; zoom: Zoom };
+
+/**
+ * The view to start with: the stored one unless the attributes changed. A stored asset that is gone falls back to
+ * the attribute rule, and its zoom to the whole year; a stored Base Year that is gone, to the attribute rule.
+ */
+export function restore(
+    attributes: Record<string, unknown>,
+    entry: InstanceEntry<InstancePick> | undefined,
+    assets: Asset[],
+    now: Date
+): View | null {
+    const pick = storedPick(entry, attributes, ATTRIBUTE_KEYS);
+    const asset = pick && assets.find(({ id }) => id === pick.asset);
+    const kept = { hidden: pick?.hidden ?? [], log: pick?.log ?? false };
+    if (!pick || !asset) {
+        const selection = pickSelection(attributes, assets, now);
+        return selection && { selection, ...kept, zoom: FULL_ZOOM };
+    }
+    const baseYear = asset.base_years.includes(pick.baseYear) ? pick.baseYear : attributes.baseYear;
+    const selection = pickSelection({ asset: asset.id, baseYear }, [asset], now);
+    const start = clamp(pick.zoom.start, 0, 100);
+    return selection && { selection, ...kept, zoom: { start, end: clamp(pick.zoom.end, start, 100) } };
+}
+
+/** Reset has something to do: a hidden curve of the asset, an excluded year, or a zoom. */
+export const canReset = (asset: Asset, hidden: string[], excluded: Exclusions, zoom: Zoom): boolean =>
+    asset.curves.some(({ name }) => hidden.includes(name)) ||
+    Object.values(excluded).some((years) => years.length > 0) ||
+    zoom.start > 0 ||
+    zoom.end < 100;
 
 /** Epoch ms of the 12 UTC month starts of `year`. */
 export const monthStarts = (year: number): number[] => Array.from({ length: 12 }, (_, month) => Date.UTC(year, month, 1));

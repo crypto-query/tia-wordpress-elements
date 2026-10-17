@@ -2,7 +2,7 @@ import { get, post } from "../shared/api";
 import { memoize } from "../shared/memo";
 
 /** A curve the asset offers; a year-curve lists its `years`. */
-export type Curve = { id: number; name?: string; info?: string; years?: number[]; static?: number[] };
+export type Curve = { id: number; name: string; info?: string; years?: number[]; static?: number[] };
 
 export type Asset = {
     id: string;

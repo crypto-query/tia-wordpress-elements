@@ -1,24 +1,44 @@
 <script lang="ts" module>
     import { LineChart, type LineSeriesOption } from "echarts/charts";
     import {
+        DataZoomSliderComponent,
         GridComponent,
         MarkAreaComponent,
         MarkLineComponent,
+        TooltipComponent,
+        type DataZoomComponentOption,
         type GridComponentOption,
         type MarkAreaComponentOption,
-        type MarkLineComponentOption
+        type MarkLineComponentOption,
+        type TooltipComponentOption
     } from "echarts/components";
     import { use, type ComposeOption } from "echarts/core";
     import { CanvasRenderer } from "echarts/renderers";
+    import { Stored } from "../shared/storage.svelte";
+    import { EMPTY_MEMORY, isMemory } from "./transforms";
 
-    use([LineChart, GridComponent, MarkLineComponent, MarkAreaComponent, CanvasRenderer]);
+    use([LineChart, GridComponent, MarkLineComponent, MarkAreaComponent, TooltipComponent, DataZoomSliderComponent, CanvasRenderer]);
 
-    type Option = ComposeOption<LineSeriesOption | GridComponentOption | MarkLineComponentOption | MarkAreaComponentOption>;
+    type Option = ComposeOption<
+        | LineSeriesOption
+        | GridComponentOption
+        | MarkLineComponentOption
+        | MarkAreaComponentOption
+        | TooltipComponentOption
+        | DataZoomComponentOption
+    >;
+
+    /** Shared by every instance in this bundle, so year exclusions update live across them. */
+    export const memory = new Stored("tia-elements:predictive-cycles", isMemory, EMPTY_MEMORY);
+
+    /** The editor previews' own exclusions, kept apart from the site's and gone on reload. */
+    export const previewMemory = new Stored(null, isMemory, EMPTY_MEMORY);
 </script>
 
 <script lang="ts">
-    import { ChevronLeft, ChevronRight, Info } from "lucide-svelte";
-    import { onMount } from "svelte";
+    import { format, type ECharts } from "echarts/core";
+    import { ChevronLeft, ChevronRight, Info, RotateCcw } from "lucide-svelte";
+    import { onMount, untrack } from "svelte";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
@@ -27,62 +47,135 @@
     import Chart from "tia-design-system/ui/chart/Chart.svelte";
     import { chartTheme, type ChartTheme } from "tia-design-system/ui/chart/chart-theme";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
+    import Toggle from "tia-design-system/ui/toggle/Toggle.svelte";
     import Tooltip from "tia-design-system/ui/tooltip/Tooltip.svelte";
+    import { withoutKey } from "../forward-returns/transforms";
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
-    import type { Card as BootCard } from "../shared/boot";
+    import { asinhTicks, toAsinh } from "../shared/asinh";
+    import { isObject, type Card as BootCard } from "../shared/boot";
+    import { normalise, storedPick } from "../shared/load-rules";
     import { getAssets, getPredictiveCycles, type Asset, type Curve, type PredictiveCycles, type Selection } from "./api";
     import {
+        ATTRIBUTE_KEYS,
+        FULL_ZOOM,
+        canReset,
         chips,
         curveInfo,
         curveSlots,
         cutoffCase,
         dataRequest,
+        dayLabel,
         monthStarts,
         notice,
         pickSelection,
+        restore,
         stepYear,
         toggleYear,
+        tooltipRows,
         zoneLabel,
         type Chip,
-        type Exclusions
+        type Zoom
     } from "./transforms";
 
-    // `instance` is null in the editor preview; nothing reads it until picks are stored.
-    let { attributes, card }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
+    // `instance` is null in the editor preview, which neither restores nor stores a pick.
+    let { attributes, card, instance }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
 
     const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     const uid = $props.id();
     let root = $state<HTMLDivElement>();
+    let chart = $state<ECharts>();
     let theme = $state.raw<(ChartTheme & { zone: string }) | null>(null);
     let assets = $state.raw<Asset[]>([]);
     let selection = $state.raw<Selection | null>(null);
-    // Excluded years per asset id, kept across Base Years.
-    let exclusions = $state.raw<Record<string, Exclusions>>({});
-    // Ids of the curves hidden on the current asset.
-    let hidden = $state.raw<number[]>([]);
+    // Names of the hidden curves, on every asset.
+    let hidden = $state.raw<string[]>([]);
+    let log = $state(false);
+    let zoom = $state.raw<Zoom>(FULL_ZOOM);
     let shown = $state.raw<PredictiveCycles | null>(null);
     let request = $state.raw<AbortController | null>(null);
     let waiting = $state(false);
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let zoomTimer: ReturnType<typeof setTimeout> | undefined;
+    let requested: string | null = null;
     let failure = $state.raw<{ kind: ErrorKind; retry: () => void } | null>(null);
 
-    const excluded = $derived(selection ? (exclusions[selection.asset.id] ?? {}) : {});
+    const store = $derived(instance === null ? previewMemory : memory);
+    // Excluded years of the asset, by curve id, kept across Base Years and shared with every instance.
+    const excluded = $derived(selection ? (store.current.excluded[selection.asset.id] ?? {}) : {});
+    const wanted = $derived(selection && dataRequest(selection, excluded));
     const loading = $derived(waiting || request !== null);
+    const resettable = $derived(selection !== null && canReset(selection.asset, hidden, excluded, zoom));
 
     const firstAt = $derived(shown ? Date.UTC(shown.data.base_year, 0, 1) : 0);
     // The last day comes from the data: a year has 365 or 366 points, or fewer.
     const lastAt = $derived(shown ? (shown.data.curves[0]?.points.at(-1)?.[0] ?? Date.UTC(shown.data.base_year, 11, 31)) : 0);
     const cutoff = $derived(shown?.cutoff ?? null);
     const zone = $derived(cutoffCase(cutoff, firstAt, lastAt));
-    const option = $derived(theme && shown ? chartOption(theme, shown, hidden) : null);
-    const noneShown = $derived(selection !== null && selection.asset.curves.every(({ id }) => hidden.includes(id)));
+    const option = $derived(theme && shown ? chartOption(theme, shown, hidden, log, zoom) : null);
+    const noneShown = $derived(selection !== null && selection.asset.curves.every(({ name }) => hidden.includes(name)));
 
-    function chartOption(theme: ChartTheme & { zone: string }, { data }: PredictiveCycles, hidden: number[]): Option {
+    // Every pick, a year chip here or in another instance, and Reset change the request; refetch debounces quick changes.
+    $effect(() => {
+        const key = wanted && JSON.stringify(wanted);
+        if (key === null || key === requested) {
+            return;
+        }
+        requested = key;
+        if (untrack(() => shown) === null) {
+            loadData();
+        } else {
+            refetch();
+        }
+    });
+
+    $effect(() => {
+        const echart = chart;
+        if (!echart) {
+            return;
+        }
+        const onZoom = (event: unknown) => {
+            const range: unknown = isObject(event) && Array.isArray(event.batch) ? event.batch[0] : event;
+            if (isObject(range) && typeof range.start === "number" && typeof range.end === "number") {
+                zoom = { start: range.start, end: range.end };
+                clearTimeout(zoomTimer);
+                zoomTimer = setTimeout(remember, 250);
+            }
+        };
+        echart.on("datazoom", onZoom);
+        return () => {
+            if (!echart.isDisposed()) {
+                echart.off("datazoom", onZoom);
+            }
+        };
+    });
+
+    function tooltipHtml({ data }: PredictiveCycles, hidden: string[], at: number): string {
+        const inZone = cutoff !== null && (zone === "before" || (zone === "inside" && at > cutoff.at));
+        return [
+            `<div class="font-medium">${dayLabel(at)}</div>`,
+            inZone ? `<div class="text-foreground-muted">${zoneLabel(cutoff)}</div>` : "",
+            ...tooltipRows(data.curves, hidden, at).map(
+                ({ name, slot, value }) =>
+                    `<div class="mt-1 flex items-center gap-2"><span class="size-2.5 rounded-full" style="background-color: var(--chart-${slot})"></span>` +
+                    `${format.encodeHTML(name)}<span class="ml-auto pl-4 font-medium tabular-nums">${value}</span></div>`
+            )
+        ].join("");
+    }
+
+    function chartOption(
+        theme: ChartTheme & { zone: string },
+        shown: PredictiveCycles,
+        hidden: string[],
+        log: boolean,
+        zoom: Zoom
+    ): Option {
+        const { data } = shown;
         const slots = curveSlots(data.curves.map(({ name }) => name));
         // With no curve shown, every curve stays as an invisible line, so the empty plot keeps its axes in place.
-        const empty = data.curves.every(({ id }) => hidden.includes(id));
+        const empty = data.curves.every(({ name }) => hidden.includes(name));
+        const drawn = data.curves.flatMap((curve, index) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[index] }]));
         const ticks = monthStarts(data.base_year);
         const label = theme.axis.axisLabel;
         const helper: LineSeriesOption = { type: "line", data: [], silent: true };
@@ -111,13 +204,36 @@
             color: theme.color,
             textStyle: theme.textStyle,
             animation: false,
-            grid: { left: 8, right: 16, top: 16, bottom: 8 },
+            grid: { left: 8, right: 16, top: 16, bottom: 64 },
+            tooltip: {
+                ...theme.tooltip,
+                show: !empty,
+                trigger: "axis",
+                formatter: (params) => {
+                    const [first] = [params].flat();
+                    return first && "axisValue" in first ? tooltipHtml(shown, hidden, Number(first.axisValue)) : "";
+                }
+            },
+            dataZoom: [
+                {
+                    ...theme.dataZoom,
+                    type: "slider",
+                    xAxisIndex: 0,
+                    filterMode: "none",
+                    bottom: 8,
+                    height: 24,
+                    start: zoom.start,
+                    end: zoom.end
+                }
+            ],
             xAxis: {
                 ...theme.axis,
                 type: "time",
                 min: firstAt,
                 max: lastAt,
                 splitLine: { show: false },
+                // Only a hovered line or list row draws 3 px; the tooltip's pointer would draw every line so.
+                axisPointer: { triggerEmphasis: false },
                 axisTick: { ...theme.axis.axisTick, customValues: ticks },
                 axisLabel: {
                     ...label,
@@ -126,25 +242,41 @@
                     formatter: (value: number) => MONTHS[new Date(value).getUTCMonth()]
                 }
             },
-            yAxis: { ...theme.axis, type: "value", axisLabel: { ...label, formatter: "{value}%" } },
+            yAxis: log
+                ? logAxis(
+                      theme,
+                      drawn.map(({ curve }) => curve)
+                  )
+                : { ...theme.axis, type: "value", axisLabel: { ...label, formatter: "{value}%" } },
             series: [
-                ...data.curves.flatMap((curve, index): LineSeriesOption[] =>
-                    hidden.includes(curve.id) && !empty
-                        ? []
-                        : [
-                              {
-                                  type: "line",
-                                  name: curve.name,
-                                  data: curve.points,
-                                  showSymbol: false,
-                                  silent: empty,
-                                  lineStyle: { width: 2, opacity: empty ? 0 : 1 },
-                                  color: theme.color[slots[index] - 1]
-                              }
-                          ]
-                ),
+                ...drawn.map(({ curve, slot }): LineSeriesOption => ({
+                    type: "line",
+                    name: curve.name,
+                    data: log ? curve.points.map(([at, value]) => [at, toAsinh(value)]) : curve.points,
+                    showSymbol: false,
+                    silent: empty,
+                    triggerEvent: "line",
+                    lineStyle: { width: 2, opacity: empty ? 0 : 1 },
+                    emphasis: { focus: "series", lineStyle: { width: 3 } },
+                    blur: { lineStyle: { opacity: 0.2 } },
+                    color: theme.color[slot - 1]
+                })),
                 helper
             ]
+        };
+    }
+
+    /** The `asinh` y axis, with its ticks at round values in real %. */
+    function logAxis(theme: ChartTheme, curves: PredictiveCycles["data"]["curves"]): Option["yAxis"] {
+        const values = curves.flatMap(({ points }) => points.flatMap(([, value]) => (value === null ? [] : [value])));
+        const ticks = asinhTicks(Math.min(0, ...values), Math.max(0, ...values)).map((value) => Math.asinh(value));
+        return {
+            ...theme.axis,
+            type: "value",
+            min: ticks[0],
+            max: ticks[ticks.length - 1],
+            axisTick: { ...theme.axis.axisTick, customValues: ticks },
+            axisLabel: { ...theme.axis.axisLabel, customValues: ticks, formatter: (value: number) => `${Math.round(Math.sinh(value))}%` }
         };
     }
 
@@ -152,18 +284,36 @@
         failure = { kind: error instanceof ApiError ? error.kind : "unavailable", retry };
     }
 
+    /** Stores this instance's view; called on user actions only, so a load never overwrites it. */
+    function remember() {
+        clearTimeout(zoomTimer);
+        if (instance === null || !selection) {
+            return;
+        }
+        const pick = { asset: selection.asset.id, baseYear: selection.baseYear, hidden, log, zoom };
+        const entry = { attributes: normalise(attributes, ATTRIBUTE_KEYS), pick };
+        memory.set({ ...memory.current, instances: { ...memory.current.instances, [instance]: entry } });
+    }
+
     async function loadAssets() {
         failure = null;
         try {
             assets = await getAssets();
-            selection = pickSelection(attributes, assets, new Date());
+            const entry = instance === null ? undefined : memory.current.instances[instance];
+            if (instance !== null && entry && !storedPick(entry, attributes, ATTRIBUTE_KEYS)) {
+                // Changed defaults drop the view, so reverting them later does not bring it back.
+                memory.set({ ...memory.current, instances: withoutKey(memory.current.instances, instance) });
+            }
+            const view = restore(attributes, entry, assets, new Date());
+            if (view) {
+                ({ selection, hidden, log, zoom } = view);
+            }
         } catch (error) {
             fail(error, loadAssets);
             return;
         }
-        if (selection) {
-            await loadData();
-        } else {
+        // The request effect loads the data once there is a selection.
+        if (!selection) {
             failure = { kind: "unavailable", retry: loadAssets };
         }
     }
@@ -171,7 +321,7 @@
     async function loadData() {
         clearTimeout(timer);
         waiting = false;
-        const current = selection;
+        const current = wanted;
         if (!current) {
             return;
         }
@@ -180,7 +330,7 @@
         request = own;
         failure = null;
         try {
-            const data = await getPredictiveCycles(dataRequest(current, excluded), own.signal);
+            const data = await getPredictiveCycles(current, own.signal);
             if (request === own) {
                 shown = data;
             }
@@ -210,14 +360,14 @@
         }
         // The Base Year is kept by value when the new asset lists it.
         selection = pickSelection({ asset: id, baseYear: selection.baseYear }, assets, new Date());
-        hidden = [];
-        refetch();
+        zoom = FULL_ZOOM;
+        remember();
     }
 
     function pickBaseYear(baseYear: number | null) {
         if (selection && baseYear !== null) {
             selection = { ...selection, baseYear };
-            refetch();
+            remember();
         }
     }
 
@@ -226,8 +376,35 @@
             return;
         }
         const next = toggleYear(curve, excluded[curve.id] ?? [], year);
-        exclusions = { ...exclusions, [selection.asset.id]: { ...excluded, [curve.id]: next } };
-        refetch();
+        store.set({ ...store.current, excluded: { ...store.current.excluded, [selection.asset.id]: { ...excluded, [curve.id]: next } } });
+    }
+
+    function showCurve(name: string, shown: boolean) {
+        hidden = shown ? hidden.filter((other) => other !== name) : [...hidden, name];
+        remember();
+    }
+
+    function pickLog(pressed: boolean) {
+        log = pressed;
+        remember();
+    }
+
+    /** Draws a shown curve 3 px and fades the others while its list row is hovered. */
+    function emphasise(name: string, on: boolean) {
+        if (!hidden.includes(name)) {
+            chart?.dispatchAction({ type: on ? "highlight" : "downplay", seriesName: name });
+        }
+    }
+
+    function reset() {
+        if (!selection || !resettable) {
+            return;
+        }
+        const { asset } = selection;
+        hidden = hidden.filter((name) => !asset.curves.some((curve) => curve.name === name));
+        zoom = FULL_ZOOM;
+        store.set({ ...store.current, excluded: withoutKey(store.current.excluded, asset.id) });
+        remember();
     }
 
     /** Reads the chart colours once from the tokens on the Block root. */
@@ -241,6 +418,7 @@
         }
         return () => {
             clearTimeout(timer);
+            clearTimeout(zoomTimer);
             request?.abort();
         };
     });
@@ -298,21 +476,18 @@
 
 {#snippet curveRow(curve: Curve, slot: number, baseYear: number)}
     {@const id = `${uid}-curve-${curve.id}`}
-    {@const name = curve.name ?? `Curve ${curve.id}`}
+    {@const name = curve.name}
     {@const info = curveInfo(curve)}
     {@const out = excluded[curve.id] ?? []}
     {@const included = (curve.years ?? []).filter((year) => !out.includes(year))}
-    <li class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+    <li
+        class="flex flex-wrap items-center gap-x-2 gap-y-1.5"
+        onmouseenter={() => emphasise(name, true)}
+        onmouseleave={() => emphasise(name, false)}>
         <span class="flex items-center gap-2">
             <!-- The box sits inside its label, so the whole row is its tap target on touch. -->
             <label for={id} class="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground pointer-coarse:min-h-11">
-                <Checkbox
-                    {id}
-                    size="sm"
-                    bind:checked={
-                        () => !hidden.includes(curve.id),
-                        (checked) => (hidden = checked ? hidden.filter((other) => other !== curve.id) : [...hidden, curve.id])
-                    } />
+                <Checkbox {id} size="sm" bind:checked={() => !hidden.includes(name), (checked) => showCurve(name, checked)} />
                 <span aria-hidden="true" class="-mr-0.5 size-2.5 rounded-full" style:background-color="var(--chart-{slot})"></span>
                 {name}
             </label>
@@ -380,6 +555,15 @@
                             {@render stepper(1, picked)}
                         </div>
                     </div>
+                    <div class="flex items-center gap-2 @2xl:ml-auto @2xl:h-10">
+                        <Toggle variant="outline" size="md" class="rounded-full" bind:pressed={() => log, pickLog}>Log scale</Toggle>
+                        <Button variant="outline-fill" size="sm" aria-disabled={!resettable} onclick={reset}>
+                            {#snippet leadingIcon()}
+                                <RotateCcw class="size-4" aria-hidden="true" />
+                            {/snippet}
+                            Reset
+                        </Button>
+                    </div>
                 </div>
             {/if}
             <div class="flex flex-col px-4 pt-4 pb-5 @lg:px-5">
@@ -396,7 +580,8 @@
                     <div class="relative">
                         <Chart
                             {option}
-                            setOptionOpts={{ replaceMerge: ["series"] }}
+                            bind:chart
+                            setOptionOpts={{ replaceMerge: ["series", "yAxis"] }}
                             class={["h-90 w-full transition-opacity sm:h-120", loading && "opacity-50"]}
                             role="group"
                             aria-label="Predictive Cycles chart, {shown.data.id.toUpperCase()}, Base Year {shown.data.base_year}" />
@@ -413,7 +598,7 @@
                 {/if}
                 {#if selection}
                     {@const picked = selection}
-                    {@const slots = curveSlots(picked.asset.curves.map(({ name }) => name ?? ""))}
+                    {@const slots = curveSlots(picked.asset.curves.map(({ name }) => name))}
                     <ul aria-label="Curves" class="mt-4 flex flex-wrap gap-x-6 gap-y-3">
                         {#each picked.asset.curves as curve, index (curve.id)}
                             {@render curveRow(curve, slots[index], picked.baseYear)}

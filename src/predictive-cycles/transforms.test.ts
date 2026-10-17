@@ -1,17 +1,23 @@
 import { describe, expect, it } from "vitest";
-import type { Asset, Curve, Cutoff } from "./api";
+import type { Asset, Curve, CurveData, Cutoff } from "./api";
 import {
+    canReset,
     chips,
     curveInfo,
     curveSlots,
     cutoffCase,
     dataRequest,
+    dayLabel,
+    isMemory,
     monthStarts,
     notice,
     pickSelection,
+    restore,
     stepYear,
     toggleYear,
-    zoneLabel
+    tooltipRows,
+    zoneLabel,
+    type InstancePick
 } from "./transforms";
 
 const asset = (id: string, base_years: number[]): Asset => ({
@@ -185,24 +191,26 @@ describe("chips", () => {
     });
 
     it("gives no chips to a curve without years", () => {
-        expect(chips({ id: 2, static: [20, 60] }, 2026)).toEqual([]);
+        expect(chips({ id: 2, name: "20 & 60", static: [20, 60] }, 2026)).toEqual([]);
     });
 });
 
 describe("curveInfo", () => {
     it("adds the years after the upstream info", () => {
         expect(curveInfo(bear)).toBe("Average returns for the bear years\nYears: 2014, 2018, 2022");
-        expect(curveInfo({ id: 3, info: "Election years", static: [2016, 2020] })).toBe("Election years\nYears: 2016, 2020");
+        expect(curveInfo({ id: 3, name: "Y4 Election", info: "Election years", static: [2016, 2020] })).toBe(
+            "Election years\nYears: 2016, 2020"
+        );
     });
 
     it("adds the offsets after the upstream info", () => {
         expect(curveInfo(decades)).toBe("Average returns for the selected years\nOffsets: 10, 20, 30 years before the Base Year");
-        expect(curveInfo({ id: 2, static: [20, 60] })).toBe("Offsets: 20, 60 years before the Base Year");
+        expect(curveInfo({ id: 2, name: "20 & 60", static: [20, 60] })).toBe("Offsets: 20, 60 years before the Base Year");
     });
 
     it("keeps the info as it is for a curve without years", () => {
-        expect(curveInfo({ id: 0, info: "Actual returns for the year" })).toBe("Actual returns for the year");
-        expect(curveInfo({ id: 0 })).toBe("");
+        expect(curveInfo({ id: 0, name: "Actual", info: "Actual returns for the year" })).toBe("Actual returns for the year");
+        expect(curveInfo({ id: 0, name: "Actual" })).toBe("");
     });
 });
 
@@ -229,5 +237,137 @@ describe("stepYear", () => {
     it("gives null at the bounds", () => {
         expect(stepYear(years, 2024, -1)).toBeNull();
         expect(stepYear(years, 2027, 1)).toBeNull();
+    });
+});
+
+describe("dayLabel", () => {
+    it("reads the UTC date and the day of the year", () => {
+        expect(dayLabel(Date.UTC(2026, 9, 10))).toBe("Oct 10 \u00b7 day 283");
+        expect(dayLabel(Date.UTC(2024, 11, 31))).toBe("Dec 31 \u00b7 day 366");
+        expect(dayLabel(Date.UTC(2026, 0, 1))).toBe("Jan 1 \u00b7 day 1");
+    });
+});
+
+describe("tooltipRows", () => {
+    const at = Date.UTC(2026, 0, 2);
+    const curve = (name: string, value: number | null): CurveData => ({
+        id: 0,
+        name,
+        points: [
+            [Date.UTC(2026, 0, 1), 9],
+            [at, value]
+        ]
+    });
+
+    it("lists each shown curve with a value in list order, a real 0 as 0.00%", () => {
+        const curves = [curve("Actual", 3.214), curve("Bear", 0), curve("All", null), curve("Bull", -2.1), curve("Halving", 1)];
+        expect(tooltipRows(curves, ["Bull"], at)).toEqual([
+            { name: "Actual", slot: 1, value: "+3.21%" },
+            { name: "Bear", slot: 9, value: "0.00%" },
+            { name: "Halving", slot: 11, value: "+1.00%" }
+        ]);
+    });
+});
+
+describe("isMemory", () => {
+    const pick: InstancePick = { asset: "btc", baseYear: 2026, hidden: ["All"], log: true, zoom: { start: 10, end: 90 } };
+    const good = {
+        excluded: { eth: { 1: [2018], 2: [10, 20] } },
+        instances: { "1:0": { attributes: { asset: null, baseYear: 2026 }, pick } }
+    };
+
+    it("takes the stored shape", () => {
+        expect(isMemory(good)).toBe(true);
+        expect(isMemory({ excluded: {}, instances: {} })).toBe(true);
+    });
+
+    it.each([
+        ["a list", []],
+        ["an exclusion that is not a list", { ...good, excluded: { eth: { 1: 2018 } } }],
+        ["a hidden curve by id", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, hidden: [1] } } } }],
+        ["a zoom without an end", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, zoom: { start: 0 } } } } }],
+        ["Log as a string", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, log: "true" } } } }]
+    ])("refuses %s", (_, value) => {
+        expect(isMemory(value)).toBe(false);
+    });
+});
+
+describe("restore", () => {
+    const attributes = { asset: null, baseYear: 2026 };
+    const pick: InstancePick = { asset: "eth", baseYear: 2024, hidden: ["All"], log: true, zoom: { start: 20, end: 60 } };
+    const entry = { attributes, pick };
+
+    it("takes the attribute rule with nothing stored", () => {
+        expect(restore(attributes, undefined, assets, now)).toEqual({
+            selection: { asset: btc, baseYear: 2026 },
+            hidden: [],
+            log: false,
+            zoom: { start: 0, end: 100 }
+        });
+    });
+
+    it("takes the stored view when the attributes did not change", () => {
+        expect(restore({ baseYear: 2026 }, entry, assets, now)).toEqual({
+            selection: { asset: eth, baseYear: 2024 },
+            hidden: ["All"],
+            log: true,
+            zoom: { start: 20, end: 60 }
+        });
+    });
+
+    it("drops the stored view when the attributes changed", () => {
+        expect(restore({ baseYear: 2025 }, entry, assets, now)).toEqual({
+            selection: { asset: btc, baseYear: 2025 },
+            hidden: [],
+            log: false,
+            zoom: { start: 0, end: 100 }
+        });
+    });
+
+    it("falls back to the attribute asset and the whole year when the stored asset is gone, and keeps the rest", () => {
+        expect(restore(attributes, { attributes, pick: { ...pick, asset: "doge" } }, assets, now)).toEqual({
+            selection: { asset: btc, baseYear: 2026 },
+            hidden: ["All"],
+            log: true,
+            zoom: { start: 0, end: 100 }
+        });
+    });
+
+    it("falls back to the attribute Base Year when the stored one is gone", () => {
+        const gone = { attributes: { asset: null, baseYear: 2024 }, pick: { ...pick, baseYear: 2019 } };
+        expect(restore({ baseYear: 2024 }, gone, assets, now)?.selection).toEqual({ asset: eth, baseYear: 2024 });
+    });
+
+    it("clamps the stored zoom", () => {
+        expect(restore(attributes, { attributes, pick: { ...pick, zoom: { start: -5, end: 140 } } }, assets, now)?.zoom).toEqual({
+            start: 0,
+            end: 100
+        });
+        expect(restore(attributes, { attributes, pick: { ...pick, zoom: { start: 70, end: 30 } } }, assets, now)?.zoom).toEqual({
+            start: 70,
+            end: 70
+        });
+    });
+});
+
+describe("canReset", () => {
+    const withCurves = {
+        ...btc,
+        curves: [
+            { id: 0, name: "Actual" },
+            { id: 1, name: "All" }
+        ]
+    };
+
+    it("is false when the view is as loaded", () => {
+        expect(canReset(withCurves, ["Bear"], { 1: [] }, { start: 0, end: 100 })).toBe(false);
+    });
+
+    it.each([
+        ["a hidden curve of the asset", ["All"], {}, { start: 0, end: 100 }],
+        ["an excluded year", [], { 1: [2018] }, { start: 0, end: 100 }],
+        ["a zoom", [], {}, { start: 0, end: 80 }]
+    ])("is true with %s", (_, hidden, excluded, zoom) => {
+        expect(canReset(withCurves, hidden, excluded, zoom)).toBe(true);
     });
 });

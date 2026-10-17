@@ -1,14 +1,18 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { userEvent } from "@vitest/browser/context";
+import { getInstanceByDom } from "echarts/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../shared/api";
 import { getAssets, getPredictiveCycles, type Asset, type Cutoff, type DataRequest, type PredictiveCycles as Data } from "./api";
-import PredictiveCycles from "./PredictiveCycles.svelte";
+import PredictiveCycles, { memory } from "./PredictiveCycles.svelte";
+import { EMPTY_MEMORY } from "./transforms";
 
 vi.mock("./api", () => ({ getAssets: vi.fn(), getPredictiveCycles: vi.fn() }));
 
 afterEach(() => {
     cleanup();
+    memory.set(EMPTY_MEMORY);
+    localStorage.clear();
     vi.mocked(getAssets).mockReset();
     vi.mocked(getPredictiveCycles).mockReset();
 });
@@ -260,6 +264,112 @@ describe("PredictiveCycles", () => {
             await waitFor(() =>
                 expect(lastRequest()).toMatchObject({ base_year: 2024, curves: [{ id: 0 }, { id: 1 }, { id: 2, years: [10] }] })
             );
+        });
+
+        const resetButton = () => screen.getByRole("button", { name: "Reset" });
+        const stored = () => memory.current.instances["1:0"]?.pick;
+
+        /** Zooms the way the slider does, so the chart sends its `datazoom` event. */
+        async function zoomTo(start: number, end: number) {
+            const group = await screen.findByRole("group", { name: /^Predictive Cycles chart/ });
+            getInstanceByDom(group)?.dispatchAction({ type: "dataZoom", start, end });
+        }
+
+        it("keeps a hidden curve hidden by name on every asset that has it", async () => {
+            await open([asset, eth], { baseYear: 2025 });
+            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
+
+            await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
+            await userEvent.click(await screen.findByRole("option", { name: "Ethereum" }));
+            expect(screen.getByRole("checkbox", { name: "Actual" })).not.toBeChecked();
+            expect(screen.getByRole("checkbox", { name: "Bear" })).toBeChecked();
+            expect(stored()).toMatchObject({ asset: "eth", baseYear: 2025, hidden: ["Actual"] });
+        });
+
+        it("stores the Log scale", async () => {
+            await open([asset]);
+            const toggle = screen.getByRole("button", { name: "Log scale" });
+            expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+            await fireEvent.click(toggle);
+            expect(toggle).toHaveAttribute("aria-pressed", "true");
+            expect(stored()?.log).toBe(true);
+            expect(JSON.parse(localStorage.getItem("tia-elements:predictive-cycles") ?? "null")).toEqual(memory.current);
+        });
+
+        it("stores the zoom after a pause, keeps it on a Base Year change and resets it on an asset change", async () => {
+            await open([asset, eth], { baseYear: 2025 });
+            await zoomTo(20, 60);
+            expect(stored()).toBeUndefined();
+            await waitFor(() => expect(stored()?.zoom).toEqual({ start: 20, end: 60 }));
+
+            await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
+            expect(stored()).toMatchObject({ baseYear: 2026, zoom: { start: 20, end: 60 } });
+
+            await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
+            await userEvent.click(await screen.findByRole("option", { name: "Ethereum" }));
+            expect(stored()).toMatchObject({ asset: "eth", zoom: { start: 0, end: 100 } });
+        });
+
+        it("restores the stored view, and drops it when the attributes changed", async () => {
+            const pick = { asset: "eth", baseYear: 2024, hidden: ["Bear"], log: true, zoom: { start: 10, end: 50 } };
+            memory.set({ ...EMPTY_MEMORY, instances: { "1:0": { attributes: { asset: null, baseYear: 2026 }, pick } } });
+            await open([asset, eth]);
+
+            await screen.findByRole("group", { name: "Predictive Cycles chart, ETH, Base Year 2024" });
+            expect(screen.getByRole("checkbox", { name: "Bear" })).not.toBeChecked();
+            expect(screen.getByRole("button", { name: "Log scale" })).toHaveAttribute("aria-pressed", "true");
+            expect(resetButton()).toHaveAttribute("aria-disabled", "false");
+            cleanup();
+
+            await open([asset, eth], { baseYear: 2025 });
+            await screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2025" });
+            expect(memory.current.instances).toEqual({});
+        });
+
+        it("resets curves, the asset's exclusions and the zoom, and keeps asset, Base Year and Log", async () => {
+            memory.set({ ...EMPTY_MEMORY, excluded: { btc: { 1: [2018] } } });
+            await open([eth], { baseYear: 2025 });
+            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+
+            await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
+            await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
+            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+
+            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
+            await fireEvent.click(screen.getByRole("checkbox", { name: "2018" }));
+            await zoomTo(20, 60);
+            expect(resetButton()).toHaveAttribute("aria-disabled", "false");
+
+            await fireEvent.click(resetButton());
+            expect(screen.getByRole("checkbox", { name: "Actual" })).toBeChecked();
+            expect(screen.getByRole("checkbox", { name: "2018" })).toBeChecked();
+            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+            expect(memory.current.excluded).toEqual({ btc: { 1: [2018] } });
+            expect(stored()).toEqual({ asset: "eth", baseYear: 2024, hidden: [], log: true, zoom: { start: 0, end: 100 } });
+            await waitFor(() =>
+                expect(lastRequest()).toMatchObject({
+                    base_year: 2024,
+                    curves: [{ id: 0 }, { id: 1, years: [2014, 2018, 2022] }, { id: 2 }]
+                })
+            );
+        });
+
+        it("shares year exclusions live with the other instances", async () => {
+            await open([eth], { baseYear: 2025 });
+            render(PredictiveCycles, { ...props, attributes: { baseYear: 2025 }, instance: "1:1" });
+            await waitFor(() => expect(screen.getAllByRole("checkbox", { name: "2018" })).toHaveLength(2));
+
+            await fireEvent.click(screen.getAllByRole("checkbox", { name: "2018" })[0]);
+            for (const chip of screen.getAllByRole("checkbox", { name: "2018" })) {
+                expect(chip).not.toBeChecked();
+            }
+            await waitFor(() =>
+                expect(
+                    vi.mocked(getPredictiveCycles).mock.calls.filter(([request]) => request.curves[1]?.years?.length === 2)
+                ).toHaveLength(2)
+            );
+            expect(memory.current.excluded).toEqual({ eth: { 1: [2018] } });
         });
 
         it("explains each curve with its info and years", async () => {

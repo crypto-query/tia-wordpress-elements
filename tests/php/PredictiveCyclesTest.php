@@ -150,11 +150,12 @@ final class PredictiveCyclesTest extends TestCase {
 	}
 
 	/**
-	 * Malformed upstream items and curves are skipped; a payload without `assets` gives none.
+	 * Malformed upstream items and curves, a curve without a label too, are skipped; a payload without `assets` gives none.
 	 */
 	public function test_assets_skip_malformed(): void {
 		$bad_curves             = self::upstream_asset( 'eth', 'Ethereum' );
 		$bad_curves['curves'][] = array( 'label' => 'No id' );
+		$bad_curves['curves'][] = array( 'id' => 9 );
 		$bad_curves['curves'][] = 'Actual';
 		$no_years               = self::upstream_asset( 'xau', 'Gold' );
 		unset( $no_years['base_years'] );
