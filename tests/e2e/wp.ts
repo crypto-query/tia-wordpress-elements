@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 
 /** Runs wp-cli on the Docker site and returns its trimmed output. */
@@ -29,6 +29,8 @@ export function restoreOption({ name, json }: OptionSnapshot): void {
 /** Logs a user in through the login form; seeded users (`bun run wp:seed`) have the password `password`. */
 export async function logIn(page: Page, login: string, password = "password") {
     await page.goto("/wp-login.php");
+    // WordPress focuses and selects the username 200 ms after load; a later fill would land in it.
+    await expect(page.getByLabel("Username or Email Address")).toBeFocused();
     await page.getByLabel("Username or Email Address").fill(login);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Log In" }).click();

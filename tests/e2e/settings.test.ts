@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { restoreOption, snapshotOption, wp, type OptionSnapshot } from "./wp";
+import { logIn, restoreOption, snapshotOption, wp, type OptionSnapshot } from "./wp";
 
 test.describe.configure({ mode: "serial" });
 
@@ -14,10 +14,7 @@ test.afterAll(() => {
 });
 
 async function openSettings(page: Page) {
-    await page.goto("/wp-login.php");
-    await page.getByLabel("Username or Email Address").fill("admin");
-    await page.getByLabel("Password", { exact: true }).fill("admin");
-    await page.getByRole("button", { name: "Log In" }).click();
+    await logIn(page, "admin", "admin");
 
     await page.goto("/wp-admin/options-general.php?page=tia-elements-settings");
 }
