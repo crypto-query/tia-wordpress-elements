@@ -3,8 +3,13 @@ import type { Asset, Curve, CurveData, Cutoff } from "./api";
 import {
     canReset,
     chartSummary,
+    chipGroups,
+    chipTooltip,
     chips,
-    curveInfo,
+    lineKind,
+    onlyRecent,
+    onlyRecentDisabled,
+    shortName,
     curveSlots,
     cutoffCase,
     dataRequest,
@@ -19,6 +24,8 @@ import {
     stepYear,
     toggleYear,
     tooltipRows,
+    yearCount,
+    yearsTitle,
     zoneLabel,
     type InstancePick
 } from "./transforms";
@@ -98,6 +105,66 @@ describe("curveSlots", () => {
         const names = [...known, "Decade offsets", "20 & 60", "Bear", "Bull", "Halving", "Mystery"];
         expect(curveSlots(names).at(-1)).toBe(1);
         expect(curveSlots([...names, "Other"]).at(-1)).toBe(2);
+    });
+});
+
+const curve = (id: number, name: string, extra: Partial<Curve> = {}): Curve => ({ id, name, ...extra });
+const names = (groups: Curve[][]) => groups.map((group) => group.map(({ name }) => name));
+
+describe("chipGroups", () => {
+    it("orders the BTC curves by role, not by the server order", () => {
+        const server = ["Halving", "Y4 Election", "Bull", "All", "Y2 Midterm", "Actual", "Bear", "Y3 Pre-election", "Y1 Post-election"];
+        expect(names(chipGroups(server.map((name, id) => curve(id, name))))).toEqual([
+            ["Actual"],
+            ["All"],
+            ["Y1 Post-election", "Y2 Midterm", "Y3 Pre-election", "Y4 Election"],
+            ["Bear", "Bull", "Halving"]
+        ]);
+    });
+
+    it("orders the SPX curves by role, with 20 & 60 after All", () => {
+        const server = ["Decade offsets", "Y3 Pre-election", "20 & 60", "Actual", "Y1 Post-election", "All", "Y4 Election", "Y2 Midterm"];
+        expect(names(chipGroups(server.map((name, id) => curve(id, name))))).toEqual([
+            ["Actual"],
+            ["All", "20 & 60"],
+            ["Y1 Post-election", "Y2 Midterm", "Y3 Pre-election", "Y4 Election"],
+            ["Decade offsets"]
+        ]);
+    });
+
+    it("puts unknown curves at the end of group 2 in server order, and leaves out empty groups", () => {
+        const server = ["Mystery", "Bull", "All", "Other", "Actual"];
+        expect(names(chipGroups(server.map((name, id) => curve(id, name))))).toEqual([["Actual"], ["All", "Mystery", "Other"], ["Bull"]]);
+    });
+});
+
+describe("shortName", () => {
+    it.each([
+        ["Y1 Post-election", "Y1 Post"],
+        ["Y2 Midterm", "Y2 Mid"],
+        ["Y3 Pre-election", "Y3 Pre"],
+        ["Y4 Election", "Y4 Elect"],
+        ["20 & 60", "20 & 60"],
+        ["Decade offsets", "Decade offsets"],
+        ["Mystery", "Mystery"]
+    ])("shows %s as %s", (name, short) => {
+        expect(shortName(name)).toBe(short);
+    });
+});
+
+describe("lineKind", () => {
+    it.each([
+        ["Actual", "actual"],
+        ["Bear", "set"],
+        ["Bull", "set"],
+        ["Halving", "set"],
+        ["Decade offsets", "set"],
+        ["All", "plain"],
+        ["20 & 60", "plain"],
+        ["Y2 Midterm", "plain"],
+        ["Mystery", "plain"]
+    ])("draws %s as %s", (name, kind) => {
+        expect(lineKind(name)).toBe(kind);
     });
 });
 
@@ -252,22 +319,104 @@ describe("chips", () => {
     });
 });
 
-describe("curveInfo", () => {
-    it("adds the years after the upstream info", () => {
-        expect(curveInfo(bear)).toBe("Average returns for the bear years\nYears: 2014, 2018, 2022");
-        expect(curveInfo({ id: 3, name: "Y4 Election", info: "Election years", static: [2016, 2020] })).toBe(
-            "Election years\nYears: 2016, 2020"
-        );
+describe("yearCount", () => {
+    it("counts the included years out of all years before the Base Year", () => {
+        expect(yearCount(halving, 2026, [])).toEqual({ included: 4, of: 4 });
+        expect(yearCount(halving, 2026, [2012, 2020])).toEqual({ included: 2, of: 4 });
     });
 
-    it("adds the offsets after the upstream info", () => {
-        expect(curveInfo(decades)).toBe("Average returns for the selected years\nOffsets: 10, 20, 30 years before the Base Year");
-        expect(curveInfo({ id: 2, name: "20 & 60", static: [20, 60] })).toBe("Offsets: 20, 60 years before the Base Year");
+    it("leaves out years not before the Base Year, excluded or not", () => {
+        expect(yearCount(halving, 2020, [])).toEqual({ included: 2, of: 2 });
+        expect(yearCount(halving, 2020, [2012, 2024])).toEqual({ included: 1, of: 2 });
     });
 
-    it("keeps the info as it is for a curve without years", () => {
-        expect(curveInfo({ id: 0, name: "Actual", info: "Actual returns for the year" })).toBe("Actual returns for the year");
-        expect(curveInfo({ id: 0, name: "Actual" })).toBe("");
+    it("counts every offset", () => {
+        expect(yearCount(decades, 2026, [20])).toEqual({ included: 2, of: 3 });
+    });
+
+    it("is zero of zero for a curve without editable years", () => {
+        expect(yearCount({ id: 2, name: "20 & 60", static: [20, 60] }, 2026, [])).toEqual({ included: 0, of: 0 });
+    });
+});
+
+describe("chipTooltip", () => {
+    const range = (from: number, to: number, step = 1) =>
+        Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, index) => from + index * step);
+
+    it("gives the full name and the info as a sentence", () => {
+        const actual = curve(0, "Actual", { info: "actual returns for the year" });
+        expect(chipTooltip(actual, 2026, [])).toEqual(["Actual", "Actual returns for the year."]);
+        expect(chipTooltip({ ...actual, info: "Actual returns." }, 2026, [])).toEqual(["Actual", "Actual returns."]);
+    });
+
+    it("leaves out empty info", () => {
+        expect(chipTooltip(curve(0, "Actual"), 2026, [])).toEqual(["Actual"]);
+        expect(chipTooltip(curve(0, "Actual", { info: " " }), 2026, [])).toEqual(["Actual"]);
+    });
+
+    it("lists fixed calendar years before the Base Year", () => {
+        const y4 = curve(6, "Y4 Election", { info: "election years", static: [2012, 2016, 2020, 2024] });
+        expect(chipTooltip(y4, 2026, [])).toEqual(["Y4 Election", "Election years.", "Fixed: 2012 · 2016 · 2020 · 2024"]);
+        expect(chipTooltip(y4, 2024, [])[2]).toBe("Fixed: 2012 · 2016 · 2020");
+    });
+
+    it("gives more than 8 fixed years as a range", () => {
+        const all = curve(1, "All", { static: range(1950, 2025) });
+        expect(chipTooltip(all, 2025, [])).toEqual(["All", "Fixed: 1950–2024 (75 years)"]);
+    });
+
+    it("gives fixed offsets as years before the Base Year", () => {
+        expect(chipTooltip(curve(8, "20 & 60", { static: [20, 60] }), 2026, [])).toEqual([
+            "20 & 60",
+            "Fixed: 20 · 60 years before the Base Year"
+        ]);
+    });
+
+    it("counts the included years of a year set", () => {
+        const bull = curve(10, "Bull", { info: "bull years", years: [2011, 2012, 2013, 2015, 2016, 2017, 2019, 2020, 2021, 2023] });
+        expect(chipTooltip(bull, 2026, [2011, 2015])).toEqual(["Bull", "Bull years.", "Years: 8 of 10 included"]);
+    });
+
+    it("counts the included offsets of Decade offsets", () => {
+        const decade = curve(7, "Decade offsets", { years: range(10, 80, 10) });
+        expect(chipTooltip(decade, 2026, [40])).toEqual(["Decade offsets", "Offsets: 7 of 8 included"]);
+    });
+});
+
+describe("onlyRecent", () => {
+    const bull = curve(10, "Bull", { years: [2011, 2012, 2013, 2015, 2016, 2017, 2019, 2020, 2021, 2023] });
+
+    it("excludes every year but the 5 most recent", () => {
+        expect(onlyRecent(bull, 2026)).toEqual([2011, 2012, 2013, 2015, 2016]);
+        expect(onlyRecent(bull, 2026, 2)).toEqual([2011, 2012, 2013, 2015, 2016, 2017, 2019, 2020]);
+    });
+
+    it("keeps the most recent years before the Base Year, and excludes the ones not before it", () => {
+        expect(onlyRecent(bull, 2020)).toEqual([2011, 2012, 2020, 2021, 2023]);
+    });
+
+    it("keeps the smallest offsets, the most recent years", () => {
+        const decade = curve(7, "Decade offsets", { years: [10, 20, 30, 40, 50, 60, 70, 80] });
+        expect(onlyRecent(decade, 2026)).toEqual([60, 70, 80]);
+    });
+
+    it("is disabled when the curve has 5 available years or fewer", () => {
+        expect(onlyRecentDisabled(bull, 2026)).toBe(false);
+        expect(onlyRecentDisabled(bull, 2017)).toBe(true);
+        expect(onlyRecentDisabled(bull, 2019)).toBe(false);
+        expect(onlyRecentDisabled(halving, 2026)).toBe(true);
+        expect(onlyRecentDisabled(bull, 2026, 10)).toBe(true);
+    });
+});
+
+describe("yearsTitle", () => {
+    it.each([
+        ["Bull", "Bull years"],
+        ["Bear", "Bear years"],
+        ["Halving", "Halving years"],
+        ["Decade offsets", "Decade offset years"]
+    ])("titles the %s popover %s", (name, title) => {
+        expect(yearsTitle(name)).toBe(title);
     });
 });
 

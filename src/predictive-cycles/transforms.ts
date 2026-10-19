@@ -59,13 +59,55 @@ export function chips({ years = [] }: Curve, baseYear: number, excluded: number[
     });
 }
 
-/** Upstream `info` as it is, then the years or offsets the curve averages. */
-export function curveInfo({ info, years, static: fixed }: Curve): string {
-    const values = years ?? fixed ?? [];
-    const list = values.join(", ");
-    const tail = values.length === 0 ? "" : isOffsets(values) ? `Offsets: ${list} years before the Base Year` : `Years: ${list}`;
-    return [info, tail].filter(Boolean).join("\n");
+/** The years of a year-curve upstream can average: every offset, and calendar years before the Base Year. */
+const availableYears = ({ years = [] }: Curve, baseYear: number) => years.filter((value) => isOffsets(years) || value < baseYear);
+
+/** The badge "8/10" and summary "8 of 10 included": available years only. */
+export function yearCount(curve: Curve, baseYear: number, excluded: number[]): { included: number; of: number } {
+    const available = availableYears(curve, baseYear);
+    return { included: available.filter((value) => !excluded.includes(value)).length, of: available.length };
 }
+
+/** The exclusions that keep only the `count` most recent available years; the smallest offsets are the most recent. */
+export function onlyRecent(curve: Curve, baseYear: number, count = 5): number[] {
+    const { years = [] } = curve;
+    const kept = availableYears(curve, baseYear)
+        .sort((a, b) => (isOffsets(years) ? a - b : b - a))
+        .slice(0, count);
+    return years.filter((value) => !kept.includes(value));
+}
+
+/** "Only recent" has nothing to drop: `count` available years or fewer. */
+export const onlyRecentDisabled = (curve: Curve, baseYear: number, count = 5): boolean => availableYears(curve, baseYear).length <= count;
+
+export const yearsTitle = (name: string): string => (name === "Decade offsets" ? "Decade offset years" : `${name} years`);
+
+const sentence = (text: string) => {
+    const trimmed = text.trim();
+    return trimmed && `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}${trimmed.endsWith(".") ? "" : "."}`;
+};
+
+function yearsLine(curve: Curve, baseYear: number, excluded: number[]): string {
+    const { years, static: fixed = [] } = curve;
+    if (years) {
+        const { included, of } = yearCount(curve, baseYear, excluded);
+        return `${isOffsets(years) ? "Offsets" : "Years"}: ${included} of ${of} included`;
+    }
+    if (fixed.length > 0 && isOffsets(fixed)) {
+        return `Fixed: ${fixed.join(" \u00b7 ")} years before the Base Year`;
+    }
+    const before = fixed.filter((year) => year < baseYear);
+    if (before.length === 0) {
+        return "";
+    }
+    const list =
+        before.length > 8 ? `${Math.min(...before)}\u2013${Math.max(...before)} (${before.length} years)` : before.join(" \u00b7 ");
+    return `Fixed: ${list}`;
+}
+
+/** The chip tooltip lines: the full name, the upstream `info` as a sentence, and the years when the curve has them. */
+export const chipTooltip = (curve: Curve, baseYear: number, excluded: number[]): string[] =>
+    [curve.name, sentence(curve.info ?? ""), yearsLine(curve, baseYear, excluded)].filter(Boolean);
 
 /** Excludes or includes one year of a year-curve; a locked chip stays as it is. */
 export function toggleYear(curve: Curve, baseYear: number, excluded: number[], year: number): number[] {
@@ -76,26 +118,47 @@ export function toggleYear(curve: Curve, baseYear: number, excluded: number[], y
     return chip.included ? [...excluded, year] : excluded.filter((other) => other !== year);
 }
 
-const SLOTS: ReadonlyMap<string, number> = new Map([
-    ["Actual", 1],
-    ["All", 2],
-    ["Y1 Post-election", 3],
-    ["Y2 Midterm", 4],
-    ["Y3 Pre-election", 5],
-    ["Y4 Election", 6],
-    ["Decade offsets", 7],
-    ["20 & 60", 8],
-    ["20", 8],
-    ["Bear", 9],
-    ["Bull", 10],
-    ["Halving", 11]
+/** A curve's role, by its exact upstream name: its `--chart-n` slot, its chip group, and its chip name if shorter. */
+type Role = { slot: number; group: number; short?: string };
+
+/** In chip order: groups ascending, then the fixed order inside each group. */
+const ROLES: ReadonlyMap<string, Role> = new Map([
+    ["Actual", { slot: 1, group: 1 }],
+    ["All", { slot: 2, group: 2 }],
+    ["20 & 60", { slot: 8, group: 2 }],
+    ["20", { slot: 8, group: 2 }],
+    ["Y1 Post-election", { slot: 3, group: 3, short: "Y1 Post" }],
+    ["Y2 Midterm", { slot: 4, group: 3, short: "Y2 Mid" }],
+    ["Y3 Pre-election", { slot: 5, group: 3, short: "Y3 Pre" }],
+    ["Y4 Election", { slot: 6, group: 3, short: "Y4 Elect" }],
+    ["Bear", { slot: 9, group: 4 }],
+    ["Bull", { slot: 10, group: 4 }],
+    ["Halving", { slot: 11, group: 4 }],
+    ["Decade offsets", { slot: 7, group: 4 }]
 ]);
+
+const ORDER = [...ROLES.keys()];
+
+/** The non-empty chip groups in order; a curve with no known role ends group 2, in server order. */
+export function chipGroups(curves: Curve[]): Curve[][] {
+    const rank = ({ name }: Curve) => (ROLES.has(name) ? ORDER.indexOf(name) : ORDER.length);
+    return [1, 2, 3, 4]
+        .map((group) => curves.filter(({ name }) => (ROLES.get(name)?.group ?? 2) === group).sort((a, b) => rank(a) - rank(b)))
+        .filter((members) => members.length > 0);
+}
+
+/** The chip name: shorter for Y1 to Y4, else the upstream name. */
+export const shortName = (name: string): string => ROLES.get(name)?.short ?? name;
+
+/** Actual draws thicker, a year set (group 4) dashed, every other curve plain. */
+export const lineKind = (name: string): "actual" | "set" | "plain" =>
+    name === ACTUAL ? "actual" : ROLES.get(name)?.group === 4 ? "set" : "plain";
 
 /** The `--chart-n` slot of each curve, by its exact upstream name. An unknown name takes the first unused slot, else `index mod 11`. */
 export function curveSlots(names: string[]): number[] {
-    const used = new Set(names.flatMap((name) => SLOTS.get(name) ?? []));
+    const used = new Set(names.flatMap((name) => ROLES.get(name)?.slot ?? []));
     return names.map((name, index) => {
-        const known = SLOTS.get(name);
+        const known = ROLES.get(name)?.slot;
         if (known !== undefined) {
             return known;
         }

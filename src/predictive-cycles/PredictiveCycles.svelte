@@ -49,15 +49,18 @@
 
 <script lang="ts">
     import { format, type ECharts, type ElementEvent } from "echarts/core";
-    import { ChevronLeft, ChevronRight, Info, RotateCcw } from "lucide-svelte";
+    import { mergeProps } from "bits-ui";
+    import { Check, ChevronDown, ChevronLeft, ChevronRight, Lock, RotateCcw } from "lucide-svelte";
     import { onMount, untrack } from "svelte";
+    import { MediaQuery } from "svelte/reactivity";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
-    import Checkbox from "tia-design-system/ui/checkbox/Checkbox.svelte";
     import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
     import Chart from "tia-design-system/ui/chart/Chart.svelte";
     import { chartTheme, type ChartTheme } from "tia-design-system/ui/chart/chart-theme";
+    import Kbd from "tia-design-system/ui/kbd/Kbd.svelte";
+    import Popover from "tia-design-system/ui/popover/Popover.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
     import Toggle from "tia-design-system/ui/toggle/Toggle.svelte";
     import Tooltip from "tia-design-system/ui/tooltip/Tooltip.svelte";
@@ -75,21 +78,28 @@
         NO_DRAG,
         canReset,
         chartSummary,
+        chipGroups,
+        chipTooltip,
         chips,
-        curveInfo,
         curveSlots,
         cutoffCase,
         dataRequest,
         dayLabel,
         dragAnnouncement,
         dragCurves,
+        lineKind,
         monthStarts,
         notice,
+        onlyRecent,
+        onlyRecentDisabled,
         pickSelection,
         restore,
+        shortName,
         stepYear,
         toggleYear,
         tooltipRows,
+        yearCount,
+        yearsTitle,
         zoneLabel,
         type Chip,
         type Drag,
@@ -132,6 +142,13 @@
     let grab: { from: Drag; y: number; msPerPixel: number; valuePerPixel: number } | null = null;
     let gripPoints = "";
     let gripX = 0;
+    let width = $state(0);
+    // The one open panel: "help", a curve id for its year popover, or none.
+    let openPanel = $state<"help" | number | null>(null);
+    let fade = $state.raw({ left: false, right: false });
+    const coarse = new MediaQuery("(pointer: coarse)");
+    // Below the `@lg` container step, panels open as bottom sheets.
+    const narrow = $derived(width > 0 && width < 512);
 
     const store = $derived(instance === null ? previewMemory : memory);
     // Excluded years of the asset, by curve id, kept across Base Years and shared with every instance.
@@ -390,7 +407,7 @@
                 min: firstAt,
                 max: lastAt,
                 splitLine: { show: false },
-                // Only a hovered line or list row draws 3 px; the tooltip's pointer would draw every line so.
+                // Only a hovered line or chip draws thicker; the tooltip's pointer would draw every line so.
                 axisPointer: { triggerEmphasis: false },
                 axisTick: { ...theme.axis.axisTick, customValues: ticks },
                 axisLabel: {
@@ -407,19 +424,29 @@
                   )
                 : { ...theme.axis, type: "value", axisLabel: { ...label, formatter: "{value}%" } },
             series: [
-                ...drawn.map(({ curve, slot }): LineSeriesOption => ({
-                    type: "line",
-                    name: curve.name,
-                    data: log ? curve.points.map(([at, value]) => [at, toAsinh(value)]) : curve.points,
-                    showSymbol: false,
-                    silent: empty,
-                    triggerEvent: "line",
-                    // With the chart focused, the arrow keys move Actual, so it draws as if hovered.
-                    lineStyle: { width: focused && curve.name === ACTUAL ? 3 : 2, opacity: empty ? 0 : 1 },
-                    emphasis: { focus: "series", lineStyle: { width: 3 } },
-                    blur: { lineStyle: { opacity: 0.2 } },
-                    color: theme.color[slot - 1]
-                })),
+                ...drawn.map(({ curve, slot }): LineSeriesOption => {
+                    const kind = lineKind(curve.name);
+                    const hovered = kind === "actual" ? 4 : 3;
+                    return {
+                        type: "line",
+                        name: curve.name,
+                        data: log ? curve.points.map(([at, value]) => [at, toAsinh(value)]) : curve.points,
+                        showSymbol: false,
+                        silent: empty,
+                        triggerEvent: "line",
+                        // A year set can equal a solid curve (BTC Bear and Y2), so its dashes draw on top of it.
+                        z: kind === "set" ? 3 : 2,
+                        lineStyle: {
+                            // With the chart focused, the arrow keys move Actual, so it draws as if hovered.
+                            width: kind === "actual" ? (focused ? 4 : 3) : 2,
+                            type: kind === "set" ? "dashed" : "solid",
+                            opacity: empty ? 0 : 1
+                        },
+                        emphasis: { focus: "series", lineStyle: { width: hovered } },
+                        blur: { lineStyle: { opacity: 0.2 } },
+                        color: theme.color[slot - 1]
+                    };
+                }),
                 helper
             ]
         };
@@ -532,12 +559,46 @@
         }
     }
 
-    function pickYear(curve: Curve, year: number) {
-        if (!selection) {
-            return;
+    function setExcluded(curve: Curve, next: number[]) {
+        if (selection) {
+            store.set({
+                ...store.current,
+                excluded: { ...store.current.excluded, [selection.asset.id]: { ...excluded, [curve.id]: next } }
+            });
         }
-        const next = toggleYear(curve, selection.baseYear, excluded[curve.id] ?? [], year);
-        store.set({ ...store.current, excluded: { ...store.current.excluded, [selection.asset.id]: { ...excluded, [curve.id]: next } } });
+    }
+
+    function pickYear(curve: Curve, year: number) {
+        if (selection) {
+            setExcluded(curve, toggleYear(curve, selection.baseYear, excluded[curve.id] ?? [], year));
+        }
+    }
+
+    /** Opening a panel closes the other; a late close of a panel already replaced changes nothing. */
+    function setPanel(panel: "help" | number, open: boolean) {
+        if (open) {
+            openPanel = panel;
+        } else if (openPanel === panel) {
+            openPanel = null;
+        }
+    }
+
+    /** Fades the chip row's edges where chips are scrolled out of sight. */
+    function edgeFade(scroller: HTMLDivElement) {
+        const update = () => {
+            const { scrollLeft, clientWidth, scrollWidth } = scroller;
+            fade = { left: scrollLeft > 2, right: scrollLeft + clientWidth < scrollWidth - 2 };
+        };
+        const observer = new ResizeObserver(update);
+        observer.observe(scroller);
+        for (const child of scroller.children) {
+            observer.observe(child);
+        }
+        scroller.addEventListener("scroll", update, { passive: true });
+        return () => {
+            observer.disconnect();
+            scroller.removeEventListener("scroll", update);
+        };
     }
 
     function showCurve(name: string, shown: boolean) {
@@ -550,7 +611,7 @@
         remember();
     }
 
-    /** Draws a shown curve 3 px and fades the others while its list row is hovered. */
+    /** Draws a shown curve thicker and fades the others while its chip is hovered or focused. */
     function emphasise(name: string, on: boolean) {
         if (!hidden.includes(name)) {
             chart?.dispatchAction({ type: on ? "highlight" : "downplay", seriesName: name });
@@ -613,101 +674,242 @@
     </Button>
 {/snippet}
 
-{#snippet chip(curve: Curve, { value, text, name, included, lock }: Chip, props: Record<string, unknown> = {})}
+{#snippet yearToggle(curve: Curve, { value, text, name, included, lock }: Chip, props: Record<string, unknown> = {})}
     <button
         {...props}
         type="button"
-        role="checkbox"
-        aria-checked={included}
+        aria-pressed={included}
         aria-label={name === text ? undefined : name}
         aria-disabled={lock ? "true" : undefined}
         class={[
-            "min-h-6 rounded-full border border-border-input px-2 text-xs font-medium tabular-nums pointer-coarse:min-h-11 pointer-coarse:px-3",
+            "flex items-center justify-center gap-0.75 rounded-md border text-sm font-semibold tabular-nums pointer-coarse:h-11",
+            narrow ? "h-11" : "h-8",
             lock === "unavailable"
-                ? "border-dotted text-foreground-subtle opacity-50"
+                ? "cursor-not-allowed border-dotted border-border-input bg-background-subtle text-foreground-subtle"
                 : included
-                  ? "bg-surface text-foreground"
-                  : "border-dashed text-foreground-subtle",
-            lock ? "cursor-not-allowed" : "cursor-pointer hover:border-border-input-hover"
+                  ? "border-(--chip)/55 bg-(--chip)/15 text-foreground"
+                  : "cursor-pointer border-border bg-surface text-foreground-subtle line-through hover:border-border-input",
+            lock === "last" && "cursor-not-allowed",
+            included && !lock && "cursor-pointer hover:border-(--chip)"
         ]}
         onclick={() => {
             if (!lock) {
                 pickYear(curve, value);
             }
         }}>
+        {#if lock === "last"}
+            <Lock class="size-2.5 text-foreground-muted" aria-hidden="true" />
+        {/if}
         {text}
     </button>
 {/snippet}
 
-{#snippet curveRow(curve: Curve, slot: number, baseYear: number)}
-    {@const id = `${uid}-curve-${curve.id}`}
-    {@const name = curve.name}
-    {@const info = curveInfo(curve)}
-    <li
-        class="flex flex-wrap items-center gap-x-2 gap-y-1.5"
-        onmouseenter={() => emphasise(name, true)}
-        onmouseleave={() => emphasise(name, false)}>
-        <span class="flex items-center gap-2">
-            <!-- The box sits inside its label, so the whole row is its tap target on touch. -->
-            <label for={id} class="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground pointer-coarse:min-h-11">
-                <Checkbox {id} size="sm" bind:checked={() => !hidden.includes(name), (checked) => showCurve(name, checked)} />
-                <span aria-hidden="true" class="-mr-0.5 size-2.5 rounded-full" style:background-color="var(--chart-{slot})"></span>
-                {name}
-            </label>
-            {#if info}
-                <Tooltip content={info} class="max-w-72 whitespace-pre-line" portalTarget={root}>
+{#snippet swatch(kind: "actual" | "set" | "plain", on: boolean)}
+    <!-- The line in the chart, drawn small: dashed for a year set, thicker for Actual, hollow when hidden. -->
+    <span aria-hidden="true" class="flex w-4 shrink-0 gap-0.5">
+        {#each kind === "set" ? [0, 1, 2] : [0] as dash (dash)}
+            <span
+                class={[
+                    "flex-1 rounded-full",
+                    kind === "actual" ? "h-1.25" : "h-0.75",
+                    on ? "bg-(--chip)" : "border border-(--chip) bg-surface"
+                ]}>
+            </span>
+        {/each}
+    </span>
+{/snippet}
+
+{#snippet yearPanel(curve: Curve, baseYear: number, own: number[])}
+    {@const count = yearCount(curve, baseYear, own)}
+    {@const recentOff = onlyRecentDisabled(curve, baseYear, 5)}
+    <p class="text-xs font-semibold text-foreground-muted tabular-nums">{count.included} of {count.of} included</p>
+    <div role="group" aria-label={yearsTitle(curve.name)} class="grid grid-cols-5 gap-1.5">
+        {#each chips(curve, baseYear, own) as one (one.value)}
+            {#if one.lock}
+                <Tooltip
+                    content={one.lock === "last" ? "At least one year must stay included" : `${one.text} is not before the Base Year`}
+                    portalTarget={root}>
                     {#snippet trigger({ props })}
-                        <button
-                            {...props}
-                            type="button"
-                            aria-label="About {name}"
-                            class="grid size-6 cursor-help place-items-center rounded-full text-foreground-muted hover:text-foreground pointer-coarse:size-11">
-                            <Info class="size-4" aria-hidden="true" />
-                        </button>
+                        {@render yearToggle(curve, one, props)}
                     {/snippet}
                 </Tooltip>
+            {:else}
+                {@render yearToggle(curve, one)}
             {/if}
-        </span>
+        {/each}
+    </div>
+    <div class="mt-1 flex gap-2">
+        {#each [{ label: "Include all", off: own.length === 0, next: () => [] }, { label: "Only recent 5", off: recentOff, next: () => onlyRecent(curve, baseYear, 5) }] as action (action.label)}
+            <Button
+                variant="outline"
+                size="sm"
+                class={["pointer-coarse:h-11", narrow && "h-11"]}
+                aria-disabled={action.off}
+                onclick={() => {
+                    if (!action.off) {
+                        setExcluded(curve, action.next());
+                    }
+                }}>
+                {action.label}
+            </Button>
+        {/each}
+    </div>
+    <p class="mt-1 border-t border-border-muted pt-2 text-2xs text-foreground-subtle">At least one year must stay included</p>
+{/snippet}
+
+{#snippet curveChip(curve: Curve, slot: number, baseYear: number)}
+    {@const name = curve.name}
+    {@const on = !hidden.includes(name)}
+    {@const own = excluded[curve.id] ?? []}
+    {@const tint = on
+        ? "border-(--chip)/45 bg-(--chip)/10 hover:border-(--chip)/80"
+        : "border-border bg-surface text-foreground-subtle hover:border-border-input"}
+    {@const base = "inline-flex h-7.5 shrink-0 cursor-pointer items-center border whitespace-nowrap pointer-coarse:h-11"}
+    {@const hover = {
+        onmouseenter: () => emphasise(name, true),
+        onmouseleave: () => emphasise(name, false),
+        onfocus: () => emphasise(name, true),
+        onblur: () => emphasise(name, false)
+    }}
+    <span class="flex shrink-0" style:--chip="var(--chart-{slot})">
+        <Tooltip
+            content={chipTooltip(curve, baseYear, own).join("\n")}
+            class="max-w-72 whitespace-pre-line *:first-line:font-semibold"
+            portalTarget={root}>
+            {#snippet trigger({ props })}
+                <button
+                    {...mergeProps(props, hover, { onclick: () => showCurve(name, !on) })}
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={shortName(name) === name ? undefined : name}
+                    class={[
+                        base,
+                        tint,
+                        "gap-1 pl-1.75 text-sm font-medium",
+                        on && "text-foreground",
+                        curve.years ? "rounded-l-full pr-1.75" : "rounded-full pr-2.5"
+                    ]}>
+                    <Check class={on ? "size-3" : "invisible size-3"} aria-hidden="true" />
+                    {@render swatch(lineKind(name), on)}
+                    {shortName(name)}
+                </button>
+            {/snippet}
+        </Tooltip>
         {#if curve.years}
-            <span class="flex flex-wrap gap-1">
-                {#each chips(curve, baseYear, excluded[curve.id]) as one (one.value)}
-                    {#if one.lock}
-                        <Tooltip
-                            content={one.lock === "last"
-                                ? "At least one year must stay included"
-                                : `${one.text} is not before the Base Year`}
-                            portalTarget={root}>
-                            {#snippet trigger({ props })}
-                                {@render chip(curve, one, props)}
-                            {/snippet}
-                        </Tooltip>
-                    {:else}
-                        {@render chip(curve, one)}
-                    {/if}
-                {/each}
-            </span>
+            {@const count = yearCount(curve, baseYear, own)}
+            <Popover
+                title={yearsTitle(name)}
+                sheet={narrow}
+                portalTarget={root}
+                bind:open={() => openPanel === curve.id, (open) => setPanel(curve.id, open)}>
+                {#snippet trigger({ props })}
+                    <button
+                        {...mergeProps(props, hover)}
+                        type="button"
+                        aria-label="{yearsTitle(name)}: {count.included} of {count.of} included. Edit years"
+                        class={[
+                            base,
+                            tint,
+                            "group -ml-px gap-0.75 rounded-r-full pr-2 pl-1.5 text-xs font-semibold",
+                            on && "text-foreground-muted aria-expanded:bg-(--chip)/20"
+                        ]}>
+                        <span
+                            class={[
+                                "min-w-7.5 rounded-full border px-1.5 text-center leading-4.5 tabular-nums",
+                                count.included < count.of
+                                    ? "border-foreground bg-foreground text-surface"
+                                    : on
+                                      ? "border-(--chip)/45 bg-surface"
+                                      : "border-border bg-surface"
+                            ]}>
+                            {count.included}/{count.of}
+                        </span>
+                        <ChevronDown class="size-3 transition-transform group-aria-expanded:rotate-180" aria-hidden="true" />
+                    </button>
+                {/snippet}
+                <!-- The panel is portalled out of the chip, so it sets the curve colour again. -->
+                <div class="flex flex-col gap-2" style:--chip="var(--chart-{slot})">
+                    {@render yearPanel(curve, baseYear, own)}
+                </div>
+            </Popover>
         {/if}
-    </li>
+    </span>
+{/snippet}
+
+{#snippet helpItem(title: string, text: string)}
+    <li><span class="block text-sm font-semibold text-foreground">{title}</span>{text}</li>
+{/snippet}
+
+{#snippet help()}
+    <Popover
+        title="How to use this chart"
+        sheet={narrow}
+        align="end"
+        class={narrow ? undefined : "w-85"}
+        portalTarget={root}
+        bind:open={() => openPanel === "help", (open) => setPanel("help", open)}>
+        {#snippet trigger({ props })}
+            <!-- Outside the "Curves" group, last in the row: pushed to the right end, or scrolled to on a narrow card. -->
+            <button
+                {...props}
+                type="button"
+                aria-label="How to use this chart"
+                class="ml-auto grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-sm font-semibold text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background pointer-coarse:size-11">
+                ?
+            </button>
+        {/snippet}
+        <ul class="grid gap-2 text-xs/normal text-foreground-muted">
+            {@render helpItem(
+                "Show or hide a line",
+                coarse.current ? "Tap its chip." : "Click its chip. Hover a chip to highlight its line."
+            )}
+            <li>
+                <span class="block text-sm font-semibold text-foreground">Change the years</span>
+                Open the year badge, for example
+                <span class="rounded-full border border-border px-1.5 font-semibold text-foreground tabular-nums">8/10</span>, on Bear,
+                Bull, Halving or Decade offsets. This changes the average and loads data again. At least one year stays included.
+            </li>
+            <li>
+                <span class="block text-sm font-semibold text-foreground">Move Actual</span>
+                {#if coarse.current}
+                    Drag the Actual line.
+                {:else}
+                    Drag the Actual line, or focus the chart and use
+                    <span class="whitespace-nowrap"><Kbd>←</Kbd> <Kbd>→</Kbd> (1 day)</span>
+                    or
+                    <span class="whitespace-nowrap"><Kbd>↑</Kbd> <Kbd>↓</Kbd> (1 %)</span>.
+                {/if}
+            </li>
+            {@render helpItem("Zoom", "Drag the handles of the slider under the chart.")}
+            {@render helpItem("Log scale", "Makes large moves easier to compare.")}
+            {@render helpItem(
+                "Reset",
+                "Shows all lines and includes all years again. It does not change the asset, the Base Year or Log scale."
+            )}
+        </ul>
+    </Popover>
 {/snippet}
 
 <!-- Positioned, so panels portalled here are placed from it; floating-ui misplaces them by the admin bar's html margin otherwise. -->
-<div bind:this={root} class="relative" {@attach readTheme}>
+<div bind:this={root} bind:clientWidth={width} class="relative" {@attach readTheme}>
     {#if card}
         <AccessCard feature="Predictive Cycles" {card} />
     {:else}
         <Card padding="none" class="@container flex flex-col">
             {#if selection}
                 {@const picked = selection}
-                <div class="flex flex-col gap-4 border-b border-border-muted px-4 py-5 @lg:px-5 @2xl:flex-row @2xl:items-end">
-                    <Combobox
-                        label="Asset"
-                        class="@lg:w-64"
-                        searchPlaceholder="Search assets…"
-                        items={assets.map((asset) => ({ value: asset.id, label: asset.name, group: asset.group }))}
-                        portalTarget={root}
-                        value={picked.asset.id}
-                        onValueChange={pickAsset} />
-                    <div class="flex flex-col gap-1.5">
+                <div class="flex flex-wrap items-end gap-4 border-b border-border-muted px-4 py-5 @lg:px-5">
+                    <div class="w-full @2xl:w-auto">
+                        <Combobox
+                            label="Asset"
+                            class="@lg:w-64"
+                            searchPlaceholder="Search assets…"
+                            items={assets.map((asset) => ({ value: asset.id, label: asset.name, group: asset.group }))}
+                            portalTarget={root}
+                            value={picked.asset.id}
+                            onValueChange={pickAsset} />
+                    </div>
+                    <div class="flex flex-col items-center gap-1.5">
                         <span id="{uid}-base-year" class="text-sm font-medium text-foreground">Base Year</span>
                         <div role="group" aria-labelledby="{uid}-base-year" class="flex items-center gap-1">
                             {@render stepper(-1, picked)}
@@ -720,18 +922,52 @@
                             {@render stepper(1, picked)}
                         </div>
                     </div>
-                    <div class="flex items-center gap-2 @2xl:ml-auto @2xl:h-10">
+                    <div class="ml-auto flex h-10 items-center gap-2 pointer-coarse:h-11">
                         <Toggle variant="outline" size="md" class="rounded-full" bind:pressed={() => log, pickLog}>Log scale</Toggle>
-                        <Button variant="outline-fill" size="sm" aria-disabled={!resettable} onclick={reset}>
+                        <!-- Below 24rem the row no longer fits on one line, so Reset keeps only its icon. -->
+                        <Button
+                            variant="outline-fill"
+                            size="sm"
+                            class="@max-sm:w-9 @max-sm:px-0"
+                            aria-label="Reset"
+                            aria-disabled={!resettable}
+                            onclick={reset}>
                             {#snippet leadingIcon()}
                                 <RotateCcw class="size-4" aria-hidden="true" />
                             {/snippet}
-                            Reset
+                            <span class="@max-sm:sr-only">Reset</span>
                         </Button>
                     </div>
                 </div>
             {/if}
             <div class="flex flex-col px-4 pt-4 pb-5 @lg:px-5">
+                {#if shown && cutoff && zone !== "none"}
+                    <p class="mb-3 text-sm text-foreground-muted">{notice(cutoff)}</p>
+                {/if}
+                {#if selection}
+                    {@const picked = selection}
+                    {@const slots = curveSlots(picked.asset.curves.map(({ name }) => name))}
+                    <!-- Spans the card's full width, so the fade sits at the card edge; the padding keeps focus rings unclipped. -->
+                    <div
+                        {@attach edgeFade}
+                        class={[
+                            "-mx-4 mb-1 flex scroll-px-10 scrollbar-none items-center gap-1 overflow-x-auto px-4 py-1 @lg:-mx-5 @lg:px-5 [&::-webkit-scrollbar]:hidden",
+                            fade.left && "mask-l-from-[calc(100%-1.5rem)]",
+                            fade.right && "mask-r-from-[calc(100%-2.25rem)]"
+                        ]}>
+                        <div role="group" aria-label="Curves" class="flex shrink-0 items-center gap-1">
+                            {#each chipGroups(picked.asset.curves) as group, index (group[0].id)}
+                                {#if index > 0}
+                                    <span aria-hidden="true" class="mx-0.75 h-5 w-px shrink-0 bg-border"></span>
+                                {/if}
+                                {#each group as curve (curve.id)}
+                                    {@render curveChip(curve, slots[picked.asset.curves.indexOf(curve)], picked.baseYear)}
+                                {/each}
+                            {/each}
+                        </div>
+                        {@render help()}
+                    </div>
+                {/if}
                 {#if failure}
                     {@render problem(failure)}
                 {:else if !shown || !option}
@@ -739,9 +975,6 @@
                         <Spinner size="lg" tone="muted" label="Loading Predictive Cycles" />
                     </div>
                 {:else}
-                    {#if cutoff && zone !== "none"}
-                        <p class="mb-3 text-sm text-foreground-muted">{notice(cutoff)}</p>
-                    {/if}
                     <div class="relative" aria-busy={loading ? "true" : undefined}>
                         <Chart
                             {option}
@@ -767,18 +1000,6 @@
                     </div>
                     <p id="{uid}-summary" class="sr-only">{chartSummary(shown.data.curves, hidden, shown.data.base_year)}</p>
                     <p aria-live="polite" class="sr-only">{announcement}</p>
-                    {#if draggable}
-                        <p class="mt-2 text-xs text-foreground-muted">Drag Actual, or use the arrow keys</p>
-                    {/if}
-                {/if}
-                {#if selection}
-                    {@const picked = selection}
-                    {@const slots = curveSlots(picked.asset.curves.map(({ name }) => name))}
-                    <ul aria-label="Curves" class="mt-4 flex flex-wrap gap-x-6 gap-y-3">
-                        {#each picked.asset.curves as curve, index (curve.id)}
-                            {@render curveRow(curve, slots[index], picked.baseYear)}
-                        {/each}
-                    </ul>
                 {/if}
             </div>
         </Card>

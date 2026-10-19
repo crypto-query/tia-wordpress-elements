@@ -63,6 +63,7 @@ const data = (cutoff: Cutoff | null): Data => ({
 const cutoff = (at: number, trial: boolean, source: Cutoff["source"]): Cutoff => ({ at, date: "July 1, 2026", trial, source });
 
 const chart = () => screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2026" });
+const chip = (name: string) => screen.getByRole("button", { name });
 
 describe("PredictiveCycles", () => {
     it("shows the spinner, then the chart for the picked asset and Base Year", async () => {
@@ -145,24 +146,24 @@ describe("PredictiveCycles", () => {
             return chart();
         }
 
-        it("is one Tab stop that tells its curves' values and how to drag", async () => {
+        it("is one Tab stop after the chips that tells its curves' values, with no visible hint", async () => {
             const group = await open();
-            screen.getByRole("button", { name: "Reset" }).focus();
+            screen.getByRole("button", { name: "How to use this chart" }).focus();
             await userEvent.tab();
             expect(group).toHaveFocus();
             await userEvent.tab();
-            expect(screen.getByRole("checkbox", { name: "Actual" })).toHaveFocus();
+            expect(group).not.toHaveFocus();
 
             expect(group).toHaveAccessibleDescription("Jul 1: Actual +4.00%, All +2.00%.");
-            expect(screen.getByText("Drag Actual, or use the arrow keys")).toBeVisible();
+            expect(screen.queryByText("Drag Actual, or use the arrow keys")).not.toBeInTheDocument();
             expect(screen.queryByRole("table")).not.toBeInTheDocument();
         });
 
         it("moves Actual a day or a percent per arrow key, draws it thicker with focus, and Reset clears it", async () => {
             const group = await open();
-            expect(actualSeries(group)?.lineStyle.width).toBe(2);
+            expect(actualSeries(group)?.lineStyle.width).toBe(3);
             group.focus();
-            await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(3));
+            await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(4));
             expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
 
             await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}{ArrowUp}{ArrowUp}{ArrowDown}");
@@ -177,7 +178,7 @@ describe("PredictiveCycles", () => {
             await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 4), Math.asinh(1.5)]));
 
             group.blur();
-            await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(2));
+            await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(3));
             await fireEvent.click(screen.getByRole("button", { name: "Reset" }));
             expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
             await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), Math.asinh(0.5)]));
@@ -244,13 +245,12 @@ describe("PredictiveCycles", () => {
 
         it("does nothing while Actual is hidden", async () => {
             const group = await open();
-            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
-            expect(screen.queryByText("Drag Actual, or use the arrow keys")).not.toBeInTheDocument();
+            await fireEvent.click(chip("Actual"));
             expect(group).toHaveAccessibleDescription("Jul 1: All +2.00%.");
 
             group.focus();
             await userEvent.keyboard("{ArrowRight}");
-            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
+            await fireEvent.click(chip("Actual"));
             expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), 0.5]);
         });
 
@@ -281,14 +281,45 @@ describe("PredictiveCycles", () => {
                 { id: 2, name: "Decade offsets", years: [10, 20] }
             ]
         };
+        /** BTC's curves, in a server order unlike the chip order. */
+        const btc: Asset = {
+            ...asset,
+            curves: [
+                { id: 0, name: "Actual" },
+                { id: 1, name: "Bull", years: [2011, 2012, 2013, 2015, 2016, 2017, 2019, 2020, 2021, 2023] },
+                { id: 2, name: "All" },
+                { id: 3, name: "Y2 Midterm" },
+                { id: 4, name: "Bear", years: [2014, 2018, 2022] },
+                { id: 5, name: "Y1 Post-election" },
+                { id: 6, name: "Halving", years: [2012, 2016, 2020, 2024] },
+                { id: 7, name: "Y4 Election" },
+                { id: 8, name: "Y3 Pre-election" }
+            ]
+        };
+        const spx: Asset = {
+            ...asset,
+            id: "spx",
+            name: "S&P 500",
+            title: "S&P 500",
+            curves: [
+                { id: 0, name: "Actual" },
+                { id: 1, name: "Decade offsets", years: [10, 20, 30, 40, 50, 60, 70, 80] },
+                { id: 2, name: "Y1 Post-election" },
+                { id: 3, name: "Y2 Midterm" },
+                { id: 4, name: "Y3 Pre-election" },
+                { id: 5, name: "Y4 Election" },
+                { id: 6, name: "20 & 60", static: [20, 60] },
+                { id: 7, name: "All" }
+            ]
+        };
         /** Answers with the requested asset and Base Year, every curve a flat line. */
-        const answer = ({ id, base_year, curves }: DataRequest): Data => ({
+        const answer = (assets: Asset[], { id, base_year, curves }: DataRequest): Data => ({
             data: {
                 id,
                 base_year,
                 curves: curves.map((curve) => ({
                     id: curve.id,
-                    name: [asset, eth].find((one) => one.id === id)?.curves[curve.id]?.name ?? "",
+                    name: assets.find((one) => one.id === id)?.curves[curve.id]?.name ?? "",
                     points: [[Date.UTC(base_year, 0, 1), 1]]
                 }))
             },
@@ -298,7 +329,7 @@ describe("PredictiveCycles", () => {
 
         async function open(assets: Asset[], attributes: Record<string, unknown> = { baseYear: 2026 }) {
             vi.mocked(getAssets).mockResolvedValue(assets);
-            vi.mocked(getPredictiveCycles).mockImplementation(async (request) => answer(request));
+            vi.mocked(getPredictiveCycles).mockImplementation(async (request) => answer(assets, request));
             render(PredictiveCycles, { ...props, attributes });
             await screen.findByRole("group", { name: /^Predictive Cycles chart/ });
         }
@@ -356,15 +387,149 @@ describe("PredictiveCycles", () => {
             await screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2026" });
         });
 
+        /** The chips' full names in DOM order, with "|" for each divider between groups. */
+        const chipRow = () =>
+            [...screen.getByRole("group", { name: "Curves" }).children].map((child) => {
+                const toggle = child.querySelector("[aria-pressed]");
+                return child.getAttribute("aria-hidden") === "true"
+                    ? "|"
+                    : (toggle?.getAttribute("aria-label") ?? toggle?.textContent.trim());
+            });
+
+        it.each([
+            [btc, "Actual | All | Y1 Post-election Y2 Midterm Y3 Pre-election Y4 Election | Bear Bull Halving"],
+            [spx, "Actual | All 20 & 60 | Y1 Post-election Y2 Midterm Y3 Pre-election Y4 Election | Decade offsets"]
+        ])("orders the chips of $id in fixed groups, with short Y names", async (picked, row) => {
+            await open([picked]);
+            expect(chipRow().join(" ")).toBe(row);
+            expect(chip("Y2 Midterm")).toHaveTextContent("Y2 Mid");
+            expect(chip("Actual")).toBePressed();
+            const help = screen.getByRole("button", { name: "How to use this chart" });
+            expect(screen.getByRole("group", { name: "Curves" })).not.toContainElement(help);
+            expect(screen.queryByRole("list", { name: "Curves" })).not.toBeInTheDocument();
+        });
+
+        it("shows and hides a line with its chip, without a fetch", async () => {
+            await open([btc]);
+            type Series = { name: string; lineStyle: { type: string; width: number } };
+            const series = () =>
+                getInstanceByDom(screen.getByRole("group", { name: /^Predictive Cycles chart/ }))?.getOption().series as Series[];
+            expect(series().find(({ name }) => name === "Bull")?.lineStyle).toMatchObject({ type: "dashed", width: 2 });
+            expect(series().find(({ name }) => name === "All")?.lineStyle).toMatchObject({ type: "solid", width: 2 });
+
+            await fireEvent.click(chip("Bull"));
+            expect(chip("Bull")).not.toBePressed();
+            await waitFor(() => expect(series().map(({ name }) => name)).not.toContain("Bull"));
+            await fireEvent.click(chip("Bull"));
+            expect(chip("Bull")).toBePressed();
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            expect(getPredictiveCycles).toHaveBeenCalledOnce();
+        });
+
+        const badge = (name: RegExp) => screen.getByRole("button", { name });
+        const years = (name: string) => screen.findByRole("dialog", { name });
+
+        it("opens the year popover from the badge, and a year toggle refetches", async () => {
+            await open([btc]);
+            const bull = badge(/^Bull years: 10 of 10 included\. Edit years$/);
+            expect(bull).toHaveTextContent("10/10");
+            expect(bull).toHaveAttribute("aria-expanded", "false");
+
+            await fireEvent.click(bull);
+            const dialog = await years("Bull years");
+            expect(bull).toHaveAttribute("aria-expanded", "true");
+            expect(bull).toHaveAttribute("aria-controls", dialog.id);
+            expect(within(dialog).getByText("10 of 10 included")).toBeInTheDocument();
+            expect(within(dialog).getByText("At least one year must stay included")).toBeInTheDocument();
+
+            await fireEvent.click(within(dialog).getByRole("button", { name: "2013" }));
+            expect(within(dialog).getByRole("button", { name: "2013" })).not.toBePressed();
+            expect(within(dialog).getByText("9 of 10 included")).toBeInTheDocument();
+            expect(bull).toHaveAccessibleName("Bull years: 9 of 10 included. Edit years");
+            await waitFor(() =>
+                expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2011, 2012, 2015, 2016, 2017, 2019, 2020, 2021, 2023] })
+            );
+        });
+
+        it("keeps the chips and year badges when the data is unavailable", async () => {
+            vi.mocked(getAssets).mockResolvedValue([btc]);
+            vi.mocked(getPredictiveCycles).mockRejectedValue(new ApiError("unavailable"));
+            render(PredictiveCycles, props);
+
+            expect(await screen.findByRole("alert")).toHaveTextContent("This data is not available right now.");
+            expect(screen.getByRole("group", { name: "Curves" })).toContainElement(badge(/^Bull years: 10 of 10 included/));
+        });
+
+        it("keeps only the recent 5 years, and includes all again", async () => {
+            await open([btc]);
+            await fireEvent.click(badge(/^Bull years/));
+            const dialog = await years("Bull years");
+            const includeAll = within(dialog).getByRole("button", { name: "Include all" });
+            const recent = within(dialog).getByRole("button", { name: "Only recent 5" });
+            expect(includeAll).toHaveAttribute("aria-disabled", "true");
+
+            await fireEvent.click(recent);
+            expect(within(dialog).getByText("5 of 10 included")).toBeInTheDocument();
+            expect(within(dialog).getByRole("button", { name: "2016" })).not.toBePressed();
+            expect(includeAll).toHaveAttribute("aria-disabled", "false");
+            await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2017, 2019, 2020, 2021, 2023] }));
+
+            await fireEvent.click(includeAll);
+            expect(within(dialog).getByText("10 of 10 included")).toBeInTheDocument();
+            await waitFor(() => expect(lastRequest()?.curves[1]?.years).toHaveLength(10));
+
+            await fireEvent.click(badge(/^Halving years/));
+            const halving = await years("Halving years");
+            expect(within(halving).getByRole("button", { name: "Only recent 5" })).toHaveAttribute("aria-disabled", "true");
+        });
+
+        it("closes the year popover when help opens, and the other way round", async () => {
+            await open([btc]);
+            const help = screen.getByRole("button", { name: "How to use this chart" });
+            await fireEvent.click(badge(/^Bull years/));
+            await years("Bull years");
+
+            await fireEvent.click(help);
+            const panel = await screen.findByRole("dialog", { name: "How to use this chart" });
+            await waitFor(() => expect(screen.queryByRole("dialog", { name: "Bull years" })).not.toBeInTheDocument());
+            expect(
+                within(panel)
+                    .getAllByRole("listitem")
+                    .map((item) => item.firstElementChild?.textContent)
+            ).toEqual(["Show or hide a line", "Change the years", "Move Actual", "Zoom", "Log scale", "Reset"]);
+            expect(within(panel).getAllByText("←")[0].tagName).toBe("KBD");
+
+            await fireEvent.click(badge(/^Bull years/));
+            await years("Bull years");
+            await waitFor(() => expect(screen.queryByRole("dialog", { name: "How to use this chart" })).not.toBeInTheDocument());
+            expect(help).toHaveAttribute("aria-expanded", "false");
+        });
+
+        it("returns focus to the trigger on Esc", async () => {
+            await open([btc]);
+            const help = screen.getByRole("button", { name: "How to use this chart" });
+            await userEvent.click(help);
+            await screen.findByRole("dialog", { name: "How to use this chart" });
+            await userEvent.keyboard("{Escape}");
+            await waitFor(() => expect(help).toHaveFocus());
+
+            const bull = badge(/^Bull years/);
+            await userEvent.click(bull);
+            await years("Bull years");
+            await userEvent.keyboard("{Escape}");
+            await waitFor(() => expect(bull).toHaveFocus());
+            await waitFor(() => expect(screen.queryByRole("dialog", { name: "Bull years" })).not.toBeInTheDocument());
+        });
+
         it("shows and hides curves locally, never disabled, and asks for one when none shows", async () => {
             await open([asset]);
-            const actual = screen.getByRole("checkbox", { name: "Actual" });
-            const all = screen.getByRole("checkbox", { name: "All" });
-            expect(actual).toBeChecked();
+            const actual = chip("Actual");
+            const all = chip("All");
+            expect(actual).toBePressed();
 
             await fireEvent.click(actual);
             await fireEvent.click(all);
-            expect(actual).not.toBeChecked();
+            expect(actual).not.toBePressed();
             expect(all).toBeEnabled();
             expect(screen.getByText("Select a curve to show")).toBeInTheDocument();
 
@@ -374,52 +539,60 @@ describe("PredictiveCycles", () => {
             expect(getPredictiveCycles).toHaveBeenCalledOnce();
         });
 
-        it("excludes a year with its chip, refetches, and keeps the last year included", async () => {
-            await open([eth], { baseYear: 2025 });
-            const chip = (name: string) => screen.getByRole("checkbox", { name });
+        /** Opens the year popover of the badge named `name` and returns its year toggle getter. */
+        async function openYears(name: RegExp, title: string) {
+            await fireEvent.click(badge(name));
+            const dialog = await years(title);
+            return (year: string) => within(dialog).getByRole("button", { name: year });
+        }
 
-            await fireEvent.click(chip("2018"));
-            expect(chip("2018")).not.toBeChecked();
+        it("excludes a year with its toggle, refetches, and keeps the last year included", async () => {
+            await open([eth], { baseYear: 2025 });
+            const year = await openYears(/^Bear years/, "Bear years");
+
+            await fireEvent.click(year("2018"));
+            expect(year("2018")).not.toBePressed();
             await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2014, 2022] }));
 
-            await fireEvent.click(chip("2014"));
-            expect(chip("2022")).toHaveAttribute("aria-disabled", "true");
-            await fireEvent.click(chip("2022"));
-            expect(chip("2022")).toBeChecked();
+            await fireEvent.click(year("2014"));
+            expect(year("2022")).toHaveAttribute("aria-disabled", "true");
+            await fireEvent.click(year("2022"));
+            expect(year("2022")).toBePressed();
             await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2022] }));
 
-            await fireEvent.click(chip("2018"));
-            expect(chip("2022")).not.toHaveAttribute("aria-disabled", "true");
+            await fireEvent.click(year("2018"));
+            expect(year("2022")).not.toHaveAttribute("aria-disabled", "true");
         });
 
         it("makes a year at or after the Base Year unavailable, still sends it, and frees it on a newer Base Year", async () => {
             const halving = { id: 1, name: "Halving", years: [2012, 2016, 2020, 2024] };
             await open([{ ...eth, base_years: [2025, 2024], curves: [eth.curves[0], halving] }], { baseYear: 2024 });
-            const chip = (name: string) => screen.getByRole("checkbox", { name });
-            expect(chip("2024")).toHaveAttribute("aria-disabled", "true");
-            await userEvent.hover(chip("2024"));
+            const year = await openYears(/^Halving years: 3 of 3 included/, "Halving years");
+            expect(year("2024")).toHaveAttribute("aria-disabled", "true");
+            await userEvent.hover(year("2024"));
             expect(await screen.findByText("2024 is not before the Base Year")).toBeInTheDocument();
 
-            await fireEvent.click(chip("2024"));
-            await fireEvent.click(chip("2012"));
-            await fireEvent.click(chip("2016"));
-            expect(chip("2024")).toBeChecked();
-            expect(chip("2020")).toHaveAttribute("aria-disabled", "true");
+            await fireEvent.click(year("2024"));
+            await fireEvent.click(year("2012"));
+            await fireEvent.click(year("2016"));
+            expect(year("2024")).toBePressed();
+            expect(year("2020")).toHaveAttribute("aria-disabled", "true");
             await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2020, 2024] }));
 
             await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
-            expect(chip("2024")).not.toHaveAttribute("aria-disabled");
-            expect(chip("2020")).not.toHaveAttribute("aria-disabled");
+            expect(year("2024")).not.toHaveAttribute("aria-disabled");
+            expect(year("2020")).not.toHaveAttribute("aria-disabled");
         });
 
         it("labels decade-offset chips with the year they mean, and relabels on a Base Year change", async () => {
             await open([eth], { baseYear: 2025 });
-            expect(screen.getByRole("checkbox", { name: "2015 (10 years before 2025)" })).toHaveTextContent("2015");
+            const year = await openYears(/^Decade offset years/, "Decade offset years");
+            expect(year("2015 (10 years before 2025)")).toHaveTextContent("2015");
 
-            await fireEvent.click(screen.getByRole("checkbox", { name: "2005 (20 years before 2025)" }));
+            await fireEvent.click(year("2005 (20 years before 2025)"));
             await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
-            expect(screen.getByRole("checkbox", { name: "2014 (10 years before 2024)" })).toBeChecked();
-            expect(screen.getByRole("checkbox", { name: "2004 (20 years before 2024)" })).not.toBeChecked();
+            expect(year("2014 (10 years before 2024)")).toBePressed();
+            expect(year("2004 (20 years before 2024)")).not.toBePressed();
             await waitFor(() =>
                 expect(lastRequest()).toMatchObject({ base_year: 2024, curves: [{ id: 0 }, { id: 1 }, { id: 2, years: [10] }] })
             );
@@ -436,12 +609,12 @@ describe("PredictiveCycles", () => {
 
         it("keeps a hidden curve hidden by name on every asset that has it", async () => {
             await open([asset, eth], { baseYear: 2025 });
-            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
+            await fireEvent.click(chip("Actual"));
 
             await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
             await userEvent.click(await screen.findByRole("option", { name: "Ethereum" }));
-            expect(screen.getByRole("checkbox", { name: "Actual" })).not.toBeChecked();
-            expect(screen.getByRole("checkbox", { name: "Bear" })).toBeChecked();
+            expect(chip("Actual")).not.toBePressed();
+            expect(chip("Bear")).toBePressed();
             expect(stored()).toMatchObject({ asset: "eth", baseYear: 2025, hidden: ["Actual"] });
         });
 
@@ -476,7 +649,7 @@ describe("PredictiveCycles", () => {
             await open([asset, eth]);
 
             await screen.findByRole("group", { name: "Predictive Cycles chart, ETH, Base Year 2024" });
-            expect(screen.getByRole("checkbox", { name: "Bear" })).not.toBeChecked();
+            expect(chip("Bear")).not.toBePressed();
             expect(screen.getByRole("button", { name: "Log scale" })).toHaveAttribute("aria-pressed", "true");
             expect(resetButton()).toHaveAttribute("aria-disabled", "false");
             cleanup();
@@ -495,14 +668,15 @@ describe("PredictiveCycles", () => {
             await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
             expect(resetButton()).toHaveAttribute("aria-disabled", "true");
 
-            await fireEvent.click(screen.getByRole("checkbox", { name: "Actual" }));
-            await fireEvent.click(screen.getByRole("checkbox", { name: "2018" }));
+            await fireEvent.click(chip("Actual"));
+            const year = await openYears(/^Bear years/, "Bear years");
+            await fireEvent.click(year("2018"));
             await zoomTo(20, 60);
             expect(resetButton()).toHaveAttribute("aria-disabled", "false");
 
             await fireEvent.click(resetButton());
-            expect(screen.getByRole("checkbox", { name: "Actual" })).toBeChecked();
-            expect(screen.getByRole("checkbox", { name: "2018" })).toBeChecked();
+            expect(chip("Actual")).toBePressed();
+            expect(year("2018")).toBePressed();
             expect(resetButton()).toHaveAttribute("aria-disabled", "true");
             expect(memory.current.excluded).toEqual({ btc: { 1: [2018] } });
             expect(stored()).toEqual({ asset: "eth", baseYear: 2024, hidden: [], log: true, zoom: { start: 0, end: 100 } });
@@ -516,7 +690,7 @@ describe("PredictiveCycles", () => {
 
         it("shows a curve hidden on another asset again on Reset", async () => {
             await open([asset, eth], { baseYear: 2025 });
-            await fireEvent.click(screen.getByRole("checkbox", { name: "All" }));
+            await fireEvent.click(chip("All"));
             await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
             await userEvent.click(await screen.findByRole("option", { name: "Ethereum" }));
             expect(resetButton()).toHaveAttribute("aria-disabled", "false");
@@ -529,11 +703,13 @@ describe("PredictiveCycles", () => {
         it("shares year exclusions live with the other instances", async () => {
             await open([eth], { baseYear: 2025 });
             render(PredictiveCycles, { ...props, attributes: { baseYear: 2025 }, instance: "1:1" });
-            await waitFor(() => expect(screen.getAllByRole("checkbox", { name: "2018" })).toHaveLength(2));
+            const badges = () => screen.getAllByRole("button", { name: /^Bear years/ });
+            await waitFor(() => expect(badges()).toHaveLength(2));
 
-            await fireEvent.click(screen.getAllByRole("checkbox", { name: "2018" })[0]);
-            for (const chip of screen.getAllByRole("checkbox", { name: "2018" })) {
-                expect(chip).not.toBeChecked();
+            await fireEvent.click(badges()[0]);
+            await fireEvent.click(within(await years("Bear years")).getByRole("button", { name: "2018" }));
+            for (const one of badges()) {
+                expect(one).toHaveAccessibleName("Bear years: 2 of 3 included. Edit years");
             }
             await waitFor(() =>
                 expect(
@@ -543,13 +719,13 @@ describe("PredictiveCycles", () => {
             expect(memory.current.excluded).toEqual({ eth: { 1: [2018] } });
         });
 
-        it("explains each curve with its info and years", async () => {
+        it("explains each curve on its chip with its name, info and years", async () => {
             await open([eth], { baseYear: 2025 });
 
-            screen.getByRole("button", { name: "About Bear" }).focus();
-            expect(await screen.findByText(/Years: 2014, 2018, 2022/)).toHaveTextContent(
-                "Average returns for the bear years Years: 2014, 2018, 2022"
-            );
+            chip("Bear").focus();
+            const tip = await screen.findByText(/Years: 3 of 3 included/);
+            expect(tip).toHaveTextContent("Bear Average returns for the bear years. Years: 3 of 3 included");
+            expect(tip.textContent).toMatch(/^Bear\n/);
         });
     });
 });

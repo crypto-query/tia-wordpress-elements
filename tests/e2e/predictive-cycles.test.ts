@@ -179,7 +179,7 @@ test("a Member sees the spinner, then the chart", async ({ page, context }) => {
     await expect(block(page).getByRole("group", { name: `Predictive Cycles chart, BTC, Base Year ${year}` })).toBeVisible();
 });
 
-test("a year chip refetches without its year, and the Base Year stepper refetches the older year", async ({ page, context }) => {
+test("a year toggle refetches without its year, and the Base Year stepper refetches the older year", async ({ page, context }) => {
     await logIn(page, "fx-pro-active");
     const bearId = (await assets(page)).find(({ id }) => id === "btc")?.curves.find(({ name }) => name === "Bear")?.id;
     if (bearId === undefined) throw new Error("the stub lists a Bear curve on btc");
@@ -188,18 +188,19 @@ test("a year chip refetches without its year, and the Base Year stepper refetche
     const year = new Date().getUTCFullYear();
     await expect(block(page).getByRole("group", { name: `Predictive Cycles chart, BTC, Base Year ${year}` })).toBeVisible();
 
-    const bear = block(page)
-        .getByRole("listitem")
-        .filter({ has: page.getByRole("checkbox", { name: "Bear", exact: true }) });
+    await block(page).getByRole("button", { name: "Bear years: 3 of 3 included. Edit years" }).click();
+    const bear = block(page).getByRole("group", { name: "Bear years" });
     const posted = page.waitForResponse(
         (response) => response.url().includes("predictive-cycles") && response.request().method() === "POST"
     );
-    await bear.getByRole("checkbox", { name: "2018" }).click();
+    await bear.getByRole("button", { name: "2018" }).click();
     const response = await posted;
     expect(response.status()).toBe(200);
     const body = response.request().postDataJSON() as { curves: Curve[] };
     expect(body.curves.find(({ id }) => id === bearId)).toEqual({ id: bearId, years: [2014, 2022] });
-    await expect(bear.getByRole("checkbox", { name: "2018" })).toHaveAttribute("aria-checked", "false");
+    await expect(bear.getByRole("button", { name: "2018" })).toHaveAttribute("aria-pressed", "false");
+    await page.keyboard.press("Escape");
+    await expect(block(page).getByRole("button", { name: "Bear years: 2 of 3 included. Edit years" })).toBeFocused();
 
     await block(page).getByRole("button", { name: "Older Base Year" }).click();
     await expect(block(page).getByRole("group", { name: `Predictive Cycles chart, BTC, Base Year ${year - 1}` })).toBeVisible();
@@ -275,7 +276,7 @@ test.describe("the editor", () => {
         await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
         const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-predictive-cycles");
 
-        await preview.getByText("Drag Actual, or use the arrow keys").click();
+        await preview.getByRole("group", { name: "Curves" }).click();
         const inspector = page.getByRole("region", { name: "Editor settings" });
         await expect(inspector.getByRole("combobox", { name: "Asset" })).toHaveValue("");
         await inspector.getByRole("combobox", { name: "Base Year" }).selectOption(String(year - 1));
