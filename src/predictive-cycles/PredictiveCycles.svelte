@@ -90,8 +90,6 @@
         lineKind,
         monthStarts,
         notice,
-        onlyRecent,
-        onlyRecentDisabled,
         pickSelection,
         restore,
         shortName,
@@ -675,33 +673,35 @@
 {/snippet}
 
 {#snippet yearToggle(curve: Curve, { value, text, name, included, lock }: Chip, props: Record<string, unknown> = {})}
-    <button
+    <!-- A locked year stays focusable for its tooltip, so it is `aria-disabled`, not `disabled`, and its click changes nothing. -->
+    <Toggle
         {...props}
-        type="button"
-        aria-pressed={included}
+        variant="outline"
+        size="sm"
         aria-label={name === text ? undefined : name}
         aria-disabled={lock ? "true" : undefined}
+        bind:pressed={
+            () => included,
+            () => {
+                if (!lock) {
+                    pickYear(curve, value);
+                }
+            }
+        }
         class={[
-            "flex items-center justify-center gap-0.75 rounded-md border text-sm font-semibold tabular-nums pointer-coarse:h-11",
+            "gap-0.75 px-0 tabular-nums pointer-coarse:h-11",
             narrow ? "h-11" : "h-8",
             lock === "unavailable"
-                ? "cursor-not-allowed border-dotted border-border-input bg-background-subtle text-foreground-subtle"
-                : included
-                  ? "border-(--chip)/55 bg-(--chip)/15 text-foreground"
-                  : "cursor-pointer border-border bg-surface text-foreground-subtle line-through hover:border-border-input",
+                ? "cursor-not-allowed border-dotted data-[state=on]:border-border-input data-[state=on]:bg-background-subtle data-[state=on]:enabled:text-foreground-subtle"
+                : "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-background-muted data-[state=on]:border-(--chip)/55 data-[state=on]:bg-(--chip)/15 data-[state=on]:enabled:text-foreground",
             lock === "last" && "cursor-not-allowed",
-            included && !lock && "cursor-pointer hover:border-(--chip)"
-        ]}
-        onclick={() => {
-            if (!lock) {
-                pickYear(curve, value);
-            }
-        }}>
+            !lock && "data-[state=on]:hover:border-(--chip)"
+        ]}>
         {#if lock === "last"}
             <Lock class="size-2.5 text-foreground-muted" aria-hidden="true" />
         {/if}
         {text}
-    </button>
+    </Toggle>
 {/snippet}
 
 {#snippet swatch(kind: "actual" | "set" | "plain", on: boolean)}
@@ -721,7 +721,6 @@
 
 {#snippet yearPanel(curve: Curve, baseYear: number, own: number[])}
     {@const count = yearCount(curve, baseYear, own)}
-    {@const recentOff = onlyRecentDisabled(curve, baseYear, 5)}
     <p class="text-xs font-semibold text-foreground-muted tabular-nums">{count.included} of {count.of} included</p>
     <div role="group" aria-label={yearsTitle(curve.name)} class="grid grid-cols-5 gap-1.5">
         {#each chips(curve, baseYear, own) as one (one.value)}
@@ -738,22 +737,6 @@
             {/if}
         {/each}
     </div>
-    <div class="mt-1 flex gap-2">
-        {#each [{ label: "Include all", off: own.length === 0, next: () => [] }, { label: "Only recent 5", off: recentOff, next: () => onlyRecent(curve, baseYear, 5) }] as action (action.label)}
-            <Button
-                variant="outline"
-                size="sm"
-                class={["pointer-coarse:h-11", narrow && "h-11"]}
-                aria-disabled={action.off}
-                onclick={() => {
-                    if (!action.off) {
-                        setExcluded(curve, action.next());
-                    }
-                }}>
-                {action.label}
-            </Button>
-        {/each}
-    </div>
     <p class="mt-1 border-t border-border-muted pt-2 text-2xs text-foreground-subtle">At least one year must stay included</p>
 {/snippet}
 
@@ -761,10 +744,6 @@
     {@const name = curve.name}
     {@const on = !hidden.includes(name)}
     {@const own = excluded[curve.id] ?? []}
-    {@const tint = on
-        ? "border-(--chip)/45 bg-(--chip)/10 hover:border-(--chip)/80"
-        : "border-border bg-surface text-foreground-subtle hover:border-border-input"}
-    {@const base = "inline-flex h-7.5 shrink-0 cursor-pointer items-center border whitespace-nowrap pointer-coarse:h-11"}
     {@const hover = {
         onmouseenter: () => emphasise(name, true),
         onmouseleave: () => emphasise(name, false),
@@ -777,22 +756,22 @@
             class="max-w-72 whitespace-pre-line *:first-line:font-semibold"
             portalTarget={root}>
             {#snippet trigger({ props })}
-                <button
-                    {...mergeProps(props, hover, { onclick: () => showCurve(name, !on) })}
-                    type="button"
-                    aria-pressed={on}
+                <Toggle
+                    {...mergeProps(props, hover)}
+                    variant="outline"
+                    size="sm"
                     aria-label={shortName(name) === name ? undefined : name}
+                    bind:pressed={() => on, (next) => showCurve(name, next)}
                     class={[
-                        base,
-                        tint,
-                        "gap-1 pl-1.75 text-sm font-medium",
-                        on && "text-foreground",
-                        curve.years ? "rounded-l-full pr-1.75" : "rounded-full pr-2.5"
+                        "shrink-0 gap-1 pl-1.75 font-medium pointer-coarse:h-11",
+                        "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-background-muted",
+                        "data-[state=on]:border-(--chip)/45 data-[state=on]:bg-(--chip)/10 data-[state=on]:hover:border-(--chip) data-[state=on]:enabled:text-foreground",
+                        curve.years ? "rounded-l-full rounded-r-none pr-1.75" : "rounded-full pr-2.5"
                     ]}>
                     <Check class={on ? "size-3" : "invisible size-3"} aria-hidden="true" />
                     {@render swatch(lineKind(name), on)}
                     {shortName(name)}
-                </button>
+                </Toggle>
             {/snippet}
         </Tooltip>
         {#if curve.years}
@@ -802,16 +781,30 @@
                 sheet={narrow}
                 portalTarget={root}
                 bind:open={() => openPanel === curve.id, (open) => setPanel(curve.id, open)}>
+                {#snippet actions()}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class={["pointer-coarse:h-11", narrow && "h-11"]}
+                        aria-disabled={own.length === 0}
+                        onclick={() => {
+                            if (own.length > 0) {
+                                setExcluded(curve, []);
+                            }
+                        }}>
+                        Include all
+                    </Button>
+                {/snippet}
                 {#snippet trigger({ props })}
                     <button
                         {...mergeProps(props, hover)}
                         type="button"
                         aria-label="{yearsTitle(name)}: {count.included} of {count.of} included. Edit years"
                         class={[
-                            base,
-                            tint,
-                            "group -ml-px gap-0.75 rounded-r-full pr-2 pl-1.5 text-xs font-semibold",
-                            on && "text-foreground-muted aria-expanded:bg-(--chip)/20"
+                            "group -ml-px inline-flex h-7.5 shrink-0 cursor-pointer items-center gap-0.75 rounded-r-full border pr-2 pl-1.5 text-xs font-semibold whitespace-nowrap pointer-coarse:h-11",
+                            on
+                                ? "border-(--chip)/45 bg-(--chip)/10 text-foreground-muted hover:border-(--chip) aria-expanded:bg-background-muted"
+                                : "border-border bg-surface text-foreground-subtle hover:border-border-input"
                         ]}>
                         <span
                             class={[

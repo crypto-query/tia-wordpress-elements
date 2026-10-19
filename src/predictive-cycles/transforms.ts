@@ -68,18 +68,6 @@ export function yearCount(curve: Curve, baseYear: number, excluded: number[]): {
     return { included: available.filter((value) => !excluded.includes(value)).length, of: available.length };
 }
 
-/** The exclusions that keep only the `count` most recent available years; the smallest offsets are the most recent. */
-export function onlyRecent(curve: Curve, baseYear: number, count = 5): number[] {
-    const { years = [] } = curve;
-    const kept = availableYears(curve, baseYear)
-        .sort((a, b) => (isOffsets(years) ? a - b : b - a))
-        .slice(0, count);
-    return years.filter((value) => !kept.includes(value));
-}
-
-/** "Only recent" has nothing to drop: `count` available years or fewer. */
-export const onlyRecentDisabled = (curve: Curve, baseYear: number, count = 5): boolean => availableYears(curve, baseYear).length <= count;
-
 export const yearsTitle = (name: string): string => (name === "Decade offsets" ? "Decade offset years" : `${name} years`);
 
 const sentence = (text: string) => {

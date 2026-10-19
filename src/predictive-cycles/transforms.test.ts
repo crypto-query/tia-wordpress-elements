@@ -7,8 +7,6 @@ import {
     chipTooltip,
     chips,
     lineKind,
-    onlyRecent,
-    onlyRecentDisabled,
     shortName,
     curveSlots,
     cutoffCase,
@@ -380,32 +378,6 @@ describe("chipTooltip", () => {
     it("counts the included offsets of Decade offsets", () => {
         const decade = curve(7, "Decade offsets", { years: range(10, 80, 10) });
         expect(chipTooltip(decade, 2026, [40])).toEqual(["Decade offsets", "Offsets: 7 of 8 included"]);
-    });
-});
-
-describe("onlyRecent", () => {
-    const bull = curve(10, "Bull", { years: [2011, 2012, 2013, 2015, 2016, 2017, 2019, 2020, 2021, 2023] });
-
-    it("excludes every year but the 5 most recent", () => {
-        expect(onlyRecent(bull, 2026)).toEqual([2011, 2012, 2013, 2015, 2016]);
-        expect(onlyRecent(bull, 2026, 2)).toEqual([2011, 2012, 2013, 2015, 2016, 2017, 2019, 2020]);
-    });
-
-    it("keeps the most recent years before the Base Year, and excludes the ones not before it", () => {
-        expect(onlyRecent(bull, 2020)).toEqual([2011, 2012, 2020, 2021, 2023]);
-    });
-
-    it("keeps the smallest offsets, the most recent years", () => {
-        const decade = curve(7, "Decade offsets", { years: [10, 20, 30, 40, 50, 60, 70, 80] });
-        expect(onlyRecent(decade, 2026)).toEqual([60, 70, 80]);
-    });
-
-    it("is disabled when the curve has 5 available years or fewer", () => {
-        expect(onlyRecentDisabled(bull, 2026)).toBe(false);
-        expect(onlyRecentDisabled(bull, 2017)).toBe(true);
-        expect(onlyRecentDisabled(bull, 2019)).toBe(false);
-        expect(onlyRecentDisabled(halving, 2026)).toBe(true);
-        expect(onlyRecentDisabled(bull, 2026, 10)).toBe(true);
     });
 });
 

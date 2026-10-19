@@ -460,27 +460,30 @@ describe("PredictiveCycles", () => {
             expect(screen.getByRole("group", { name: "Curves" })).toContainElement(badge(/^Bull years: 10 of 10 included/));
         });
 
-        it("keeps only the recent 5 years, and includes all again", async () => {
+        it("puts Include all right of the popover title, and includes every year again", async () => {
             await open([btc]);
             await fireEvent.click(badge(/^Bull years/));
             const dialog = await years("Bull years");
             const includeAll = within(dialog).getByRole("button", { name: "Include all" });
-            const recent = within(dialog).getByRole("button", { name: "Only recent 5" });
+            // The header row holds the title and, after it, the action; the layout itself is the design system's to test.
+            const title = within(dialog).getByRole("heading", { name: "Bull years" });
+            expect(title.parentElement).toContainElement(includeAll);
+            expect(title.compareDocumentPosition(includeAll) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(title.parentElement).not.toContainElement(within(dialog).getByRole("button", { name: "2011" }));
+            expect(within(dialog).queryByRole("button", { name: "Only recent 5" })).not.toBeInTheDocument();
             expect(includeAll).toHaveAttribute("aria-disabled", "true");
 
-            await fireEvent.click(recent);
-            expect(within(dialog).getByText("5 of 10 included")).toBeInTheDocument();
-            expect(within(dialog).getByRole("button", { name: "2016" })).not.toBePressed();
+            await fireEvent.click(within(dialog).getByRole("button", { name: "2013" }));
+            await fireEvent.click(within(dialog).getByRole("button", { name: "2016" }));
+            expect(within(dialog).getByText("8 of 10 included")).toBeInTheDocument();
             expect(includeAll).toHaveAttribute("aria-disabled", "false");
-            await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2017, 2019, 2020, 2021, 2023] }));
+            await waitFor(() => expect(lastRequest()?.curves[1]?.years).toHaveLength(8));
 
             await fireEvent.click(includeAll);
             expect(within(dialog).getByText("10 of 10 included")).toBeInTheDocument();
+            expect(within(dialog).getByRole("button", { name: "2013" })).toBePressed();
+            expect(includeAll).toHaveAttribute("aria-disabled", "true");
             await waitFor(() => expect(lastRequest()?.curves[1]?.years).toHaveLength(10));
-
-            await fireEvent.click(badge(/^Halving years/));
-            const halving = await years("Halving years");
-            expect(within(halving).getByRole("button", { name: "Only recent 5" })).toHaveAttribute("aria-disabled", "true");
         });
 
         it("closes the year popover when help opens, and the other way round", async () => {
@@ -556,8 +559,10 @@ describe("PredictiveCycles", () => {
 
             await fireEvent.click(year("2014"));
             expect(year("2022")).toHaveAttribute("aria-disabled", "true");
+            expect(year("2022")).toBeEnabled();
             await fireEvent.click(year("2022"));
-            expect(year("2022")).toBePressed();
+            expect(year("2022")).toHaveAttribute("aria-pressed", "true");
+            expect(screen.getByText("1 of 3 included")).toBeInTheDocument();
             await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2022] }));
 
             await fireEvent.click(year("2018"));
