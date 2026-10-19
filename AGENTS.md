@@ -29,7 +29,7 @@
   ```
   Give every later command an explicit `cd` into it — the shell's cwd stays in the main checkout. `git worktree remove` once the branch merges.
 - **Docker site and worktrees**: the Docker site mounts the main checkout, so every worktree is already inside the container. Before `bun run test:e2e` or a browser pass from a worktree, run `bun run wp:use` in that worktree. It deactivates the active copy and activates the worktree's copy through a symlink `wp-content/plugins/tia-wordpress-elements--<branch>`. Only one copy is active at a time. Run `bun run wp:use` in the main checkout to switch back. Switch back before you remove a worktree, or the site keeps a broken symlink. The e2e smoke test fails when the active copy is not the one of the checkout it runs from.
-- **Dev site**: assume the Docker site (`.devcontainer/compose.yaml`) is already running at `http://localhost:8000` (admin / admin). Never start, restart, or manage its containers. `bun run wp:use` and `bun run wp:seed` are the only changes you make to it.
+- **Dev site**: assume the Docker site (`.devcontainer/compose.yaml`) is already running at `http://localhost:8000` (admin / admin). Never start, restart, or manage its containers. `scripts/wp-cli.sh` keeps its own idle helper container, `tia-wordpress-elements-wp-cli`, and replaces it when needed; leave that to the script. `bun run wp:use` and `bun run wp:seed` are the only changes you make to it.
 
 ## Operating rules
 
