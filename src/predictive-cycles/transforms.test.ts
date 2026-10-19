@@ -169,6 +169,7 @@ describe("monthStarts", () => {
 
 const bear: Curve = { id: 9, name: "Bear", info: "Average returns for the bear years", years: [2014, 2018, 2022] };
 const decades: Curve = { id: 7, name: "Decade offsets", info: "Average returns for the selected years", years: [10, 20, 30] };
+const halving: Curve = { id: 11, name: "Halving", years: [2012, 2016, 2020, 2024] };
 
 describe("dataRequest", () => {
     it("sends every curve, a year-curve with only its included years", () => {
@@ -185,16 +186,69 @@ describe("dataRequest", () => {
 
 describe("chips", () => {
     it("labels a year chip with its year", () => {
-        expect(chips(bear, 2026)[0]).toEqual({ value: 2014, text: "2014", name: "2014" });
+        expect(chips(bear, 2026)[0]).toEqual({ value: 2014, text: "2014", name: "2014", included: true, lock: null });
     });
 
     it("labels a decade-offset chip with the year it means at the Base Year", () => {
-        expect(chips(decades, 2026)[0]).toEqual({ value: 10, text: "2016", name: "2016 (10 years before 2026)" });
+        expect(chips(decades, 2026)[0]).toEqual({
+            value: 10,
+            text: "2016",
+            name: "2016 (10 years before 2026)",
+            included: true,
+            lock: null
+        });
         expect(chips(decades, 2025).map(({ text }) => text)).toEqual(["2015", "2005", "1995"]);
     });
 
     it("gives no chips to a curve without years", () => {
         expect(chips({ id: 2, name: "20 & 60", static: [20, 60] }, 2026)).toEqual([]);
+    });
+
+    const locks = (curve: Curve, baseYear: number, excluded: number[]) =>
+        chips(curve, baseYear, excluded).map(({ value, included, lock }) => [value, included, lock]);
+
+    it("locks a year at or after the Base Year, and the last included year before it", () => {
+        expect(locks(halving, 2024, [2012, 2016])).toEqual([
+            [2012, false, null],
+            [2016, false, null],
+            [2020, true, "last"],
+            [2024, true, "unavailable"]
+        ]);
+    });
+
+    it("locks no last year when every included year is at or after the Base Year", () => {
+        expect(locks(halving, 2016, [2012])).toEqual([
+            [2012, false, null],
+            [2016, true, "unavailable"],
+            [2020, true, "unavailable"],
+            [2024, true, "unavailable"]
+        ]);
+    });
+
+    it("leaves an excluded year at or after the Base Year free to include", () => {
+        expect(locks(halving, 2024, [2012, 2024])).toEqual([
+            [2012, false, null],
+            [2016, true, null],
+            [2020, true, null],
+            [2024, false, null]
+        ]);
+    });
+
+    it("frees a year once the Base Year is after it", () => {
+        expect(locks(halving, 2025, [2012, 2016])).toEqual([
+            [2012, false, null],
+            [2016, false, null],
+            [2020, true, null],
+            [2024, true, null]
+        ]);
+    });
+
+    it("never makes an offset chip unavailable", () => {
+        expect(locks(decades, 2026, [10, 20])).toEqual([
+            [10, false, null],
+            [20, false, null],
+            [30, true, "last"]
+        ]);
     });
 });
 
@@ -219,12 +273,23 @@ describe("curveInfo", () => {
 
 describe("toggleYear", () => {
     it("excludes an included year and includes an excluded one", () => {
-        expect(toggleYear(bear, [], 2018)).toEqual([2018]);
-        expect(toggleYear(bear, [2018, 2014], 2018)).toEqual([2014]);
+        expect(toggleYear(bear, 2026, [], 2018)).toEqual([2018]);
+        expect(toggleYear(bear, 2026, [2018, 2014], 2018)).toEqual([2014]);
     });
 
     it("keeps the last included year", () => {
-        expect(toggleYear(bear, [2014, 2022], 2018)).toEqual([2014, 2022]);
+        expect(toggleYear(bear, 2026, [2014, 2022], 2018)).toEqual([2014, 2022]);
+    });
+
+    it("keeps the last included year before the Base Year, and leaves the later years as they are", () => {
+        expect(toggleYear(halving, 2024, [2012, 2016], 2020)).toEqual([2012, 2016]);
+        expect(toggleYear(halving, 2024, [2012, 2016], 2024)).toEqual([2012, 2016]);
+    });
+
+    it("always includes an excluded year, also one at or after the Base Year", () => {
+        expect(toggleYear(halving, 2016, [2012], 2012)).toEqual([]);
+        expect(toggleYear(halving, 2024, [2012, 2016], 2016)).toEqual([2012]);
+        expect(toggleYear(halving, 2024, [2012, 2016, 2024], 2024)).toEqual([2012, 2016]);
     });
 });
 

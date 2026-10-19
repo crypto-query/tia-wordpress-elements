@@ -40,16 +40,22 @@ export function dataRequest({ asset, baseYear }: Selection, excluded: Exclusions
 /** Upstream lists calendar years, or offsets before the Base Year as small numbers (Decade offsets, "20 & 60"). */
 const isOffsets = (values: number[]) => values.every((value) => value < 1000);
 
-export type Chip = { value: number; text: string; name: string };
+/** An included chip that cannot toggle: the last one before the Base Year, or a calendar year not before it (upstream drops those). */
+export type ChipLock = "last" | "unavailable" | null;
 
-/** One chip per year of a year-curve. An offset chip shows the year it means at the Base Year. */
-export function chips({ years = [] }: Curve, baseYear: number): Chip[] {
-    if (!isOffsets(years)) {
-        return years.map((year) => ({ value: year, text: String(year), name: String(year) }));
-    }
-    return years.map((offset) => {
-        const year = baseYear - offset;
-        return { value: offset, text: String(year), name: `${year} (${offset} years before ${baseYear})` };
+export type Chip = { value: number; text: string; name: string; included: boolean; lock: ChipLock };
+
+/** One chip per year of a year-curve. An offset chip shows the year it means at the Base Year and is never unavailable. */
+export function chips({ years = [] }: Curve, baseYear: number, excluded: number[] = []): Chip[] {
+    const offsets = isOffsets(years);
+    const available = (value: number) => offsets || value < baseYear;
+    const counted = years.filter((value) => available(value) && !excluded.includes(value));
+    return years.map((value) => {
+        const included = !excluded.includes(value);
+        const lock = !included ? null : !available(value) ? "unavailable" : counted.length === 1 ? "last" : null;
+        const year = offsets ? baseYear - value : value;
+        const name = offsets ? `${year} (${value} years before ${baseYear})` : String(year);
+        return { value, text: String(year), name, included, lock };
     });
 }
 
@@ -61,13 +67,13 @@ export function curveInfo({ info, years, static: fixed }: Curve): string {
     return [info, tail].filter(Boolean).join("\n");
 }
 
-/** Excludes or includes one year of a year-curve; the last included year stays. */
-export function toggleYear({ years = [] }: Curve, excluded: number[], year: number): number[] {
-    if (excluded.includes(year)) {
-        return excluded.filter((other) => other !== year);
+/** Excludes or includes one year of a year-curve; a locked chip stays as it is. */
+export function toggleYear(curve: Curve, baseYear: number, excluded: number[], year: number): number[] {
+    const chip = chips(curve, baseYear, excluded).find(({ value }) => value === year);
+    if (!chip || chip.lock) {
+        return excluded;
     }
-    const included = years.filter((other) => !excluded.includes(other));
-    return included.length > 1 ? [...excluded, year] : excluded;
+    return chip.included ? [...excluded, year] : excluded.filter((other) => other !== year);
 }
 
 const SLOTS: ReadonlyMap<string, number> = new Map([

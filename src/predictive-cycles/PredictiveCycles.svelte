@@ -536,7 +536,7 @@
         if (!selection) {
             return;
         }
-        const next = toggleYear(curve, excluded[curve.id] ?? [], year);
+        const next = toggleYear(curve, selection.baseYear, excluded[curve.id] ?? [], year);
         store.set({ ...store.current, excluded: { ...store.current.excluded, [selection.asset.id]: { ...excluded, [curve.id]: next } } });
     }
 
@@ -613,21 +613,25 @@
     </Button>
 {/snippet}
 
-{#snippet chip(curve: Curve, { value, text, name }: Chip, included: boolean, locked: boolean, props: Record<string, unknown> = {})}
+{#snippet chip(curve: Curve, { value, text, name, included, lock }: Chip, props: Record<string, unknown> = {})}
     <button
         {...props}
         type="button"
         role="checkbox"
         aria-checked={included}
         aria-label={name === text ? undefined : name}
-        aria-disabled={locked ? "true" : undefined}
+        aria-disabled={lock ? "true" : undefined}
         class={[
-            "min-h-6 rounded-full border px-2 text-xs font-medium tabular-nums pointer-coarse:min-h-11 pointer-coarse:px-3",
-            included ? "border-border-input bg-surface text-foreground" : "border-dashed border-border-input text-foreground-subtle",
-            locked ? "cursor-not-allowed" : "cursor-pointer hover:border-border-input-hover"
+            "min-h-6 rounded-full border border-border-input px-2 text-xs font-medium tabular-nums pointer-coarse:min-h-11 pointer-coarse:px-3",
+            lock === "unavailable"
+                ? "border-dotted text-foreground-subtle opacity-50"
+                : included
+                  ? "bg-surface text-foreground"
+                  : "border-dashed text-foreground-subtle",
+            lock ? "cursor-not-allowed" : "cursor-pointer hover:border-border-input-hover"
         ]}
         onclick={() => {
-            if (!locked) {
+            if (!lock) {
                 pickYear(curve, value);
             }
         }}>
@@ -639,8 +643,6 @@
     {@const id = `${uid}-curve-${curve.id}`}
     {@const name = curve.name}
     {@const info = curveInfo(curve)}
-    {@const out = excluded[curve.id] ?? []}
-    {@const included = (curve.years ?? []).filter((year) => !out.includes(year))}
     <li
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5"
         onmouseenter={() => emphasise(name, true)}
@@ -668,17 +670,19 @@
         </span>
         {#if curve.years}
             <span class="flex flex-wrap gap-1">
-                {#each chips(curve, baseYear) as one (one.value)}
-                    {@const on = !out.includes(one.value)}
-                    {#if on && included.length === 1}
-                        <!-- Only the one locked chip per curve mounts a Tooltip. -->
-                        <Tooltip content="At least one year must stay included" portalTarget={root}>
+                {#each chips(curve, baseYear, excluded[curve.id]) as one (one.value)}
+                    {#if one.lock}
+                        <Tooltip
+                            content={one.lock === "last"
+                                ? "At least one year must stay included"
+                                : `${one.text} is not before the Base Year`}
+                            portalTarget={root}>
                             {#snippet trigger({ props })}
-                                {@render chip(curve, one, on, true, props)}
+                                {@render chip(curve, one, props)}
                             {/snippet}
                         </Tooltip>
                     {:else}
-                        {@render chip(curve, one, on, false)}
+                        {@render chip(curve, one)}
                     {/if}
                 {/each}
             </span>
@@ -738,7 +742,7 @@
                     {#if cutoff && zone !== "none"}
                         <p class="mb-3 text-sm text-foreground-muted">{notice(cutoff)}</p>
                     {/if}
-                    <div class="relative">
+                    <div class="relative" aria-busy={loading ? "true" : undefined}>
                         <Chart
                             {option}
                             bind:chart
@@ -752,7 +756,7 @@
                             onfocus={() => (focused = true)}
                             onblur={() => (focused = false)} />
                         {#if loading}
-                            <div class="absolute inset-0 flex items-center justify-center">
+                            <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
                                 <Spinner size="lg" tone="muted" label="Loading Predictive Cycles" />
                             </div>
                         {:else if noneShown}

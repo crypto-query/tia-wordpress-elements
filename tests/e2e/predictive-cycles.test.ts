@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { logIn, restoreOption, snapshotOption, wp, type OptionSnapshot } from "./wp";
 
-type Curve = { id: number; years?: number[]; static?: number[] };
+type Curve = { id: number; name: string; years?: number[]; static?: number[] };
 type Asset = { id: string; base_years: number[]; curves: Curve[] };
 type Cutoff = { at: number; date: string; trial: boolean; source: "tia-pro" | "indicator-suite" };
 type Data = { data: { curves: { points: [number, number | null][] }[] }; cutoff: Cutoff | null };
@@ -181,6 +181,8 @@ test("a Member sees the spinner, then the chart", async ({ page, context }) => {
 
 test("a year chip refetches without its year, and the Base Year stepper refetches the older year", async ({ page, context }) => {
     await logIn(page, "fx-pro-active");
+    const bearId = (await assets(page)).find(({ id }) => id === "btc")?.curves.find(({ name }) => name === "Bear")?.id;
+    if (bearId === undefined) throw new Error("the stub lists a Bear curve on btc");
     await context.addCookies([{ name: "tia_elements_test", value: stub, url: "http://localhost:8000" }]);
     await page.goto("/predictive-cycles/");
     const year = new Date().getUTCFullYear();
@@ -196,7 +198,7 @@ test("a year chip refetches without its year, and the Base Year stepper refetche
     const response = await posted;
     expect(response.status()).toBe(200);
     const body = response.request().postDataJSON() as { curves: Curve[] };
-    expect(body.curves.find(({ id }) => id === 6)).toEqual({ id: 6, years: [2014, 2022] });
+    expect(body.curves.find(({ id }) => id === bearId)).toEqual({ id: bearId, years: [2014, 2022] });
     await expect(bear.getByRole("checkbox", { name: "2018" })).toHaveAttribute("aria-checked", "false");
 
     await block(page).getByRole("button", { name: "Older Base Year" }).click();

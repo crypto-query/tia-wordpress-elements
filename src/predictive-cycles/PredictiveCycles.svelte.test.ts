@@ -330,6 +330,8 @@ describe("PredictiveCycles", () => {
             });
             await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
             await waitFor(() => expect(getPredictiveCycles).toHaveBeenCalledTimes(2));
+            const busy = () => screen.getByRole("group", { name: /^Predictive Cycles chart/ }).closest("[aria-busy]");
+            expect(busy()).toHaveAttribute("aria-busy", "true");
 
             await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
             await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
@@ -337,6 +339,7 @@ describe("PredictiveCycles", () => {
             expect(first?.aborted).toBe(true);
             await screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2024" });
             expect(getPredictiveCycles).toHaveBeenCalledTimes(3);
+            expect(busy()).toBeNull();
         });
 
         it("keeps the Base Year by value across assets, else falls back", async () => {
@@ -387,6 +390,26 @@ describe("PredictiveCycles", () => {
 
             await fireEvent.click(chip("2018"));
             expect(chip("2022")).not.toHaveAttribute("aria-disabled", "true");
+        });
+
+        it("makes a year at or after the Base Year unavailable, still sends it, and frees it on a newer Base Year", async () => {
+            const halving = { id: 1, name: "Halving", years: [2012, 2016, 2020, 2024] };
+            await open([{ ...eth, base_years: [2025, 2024], curves: [eth.curves[0], halving] }], { baseYear: 2024 });
+            const chip = (name: string) => screen.getByRole("checkbox", { name });
+            expect(chip("2024")).toHaveAttribute("aria-disabled", "true");
+            await userEvent.hover(chip("2024"));
+            expect(await screen.findByText("2024 is not before the Base Year")).toBeInTheDocument();
+
+            await fireEvent.click(chip("2024"));
+            await fireEvent.click(chip("2012"));
+            await fireEvent.click(chip("2016"));
+            expect(chip("2024")).toBeChecked();
+            expect(chip("2020")).toHaveAttribute("aria-disabled", "true");
+            await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2020, 2024] }));
+
+            await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
+            expect(chip("2024")).not.toHaveAttribute("aria-disabled");
+            expect(chip("2020")).not.toHaveAttribute("aria-disabled");
         });
 
         it("labels decade-offset chips with the year they mean, and relabels on a Base Year change", async () => {
