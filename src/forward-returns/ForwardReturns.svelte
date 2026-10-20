@@ -12,10 +12,13 @@
 <script lang="ts">
     import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-svelte";
     import { onMount } from "svelte";
+    import { MediaQuery } from "svelte/reactivity";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
     import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
+    import Kbd from "tia-design-system/ui/kbd/Kbd.svelte";
+    import Popover from "tia-design-system/ui/popover/Popover.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
     import Toggle from "tia-design-system/ui/toggle/Toggle.svelte";
     import ToggleGroup from "tia-design-system/ui/toggle/ToggleGroup.svelte";
@@ -58,6 +61,10 @@
 
     const uid = $props.id();
     let root = $state<HTMLDivElement>();
+    let width = $state(0);
+    const coarse = new MediaQuery("(pointer: coarse)");
+    // Below the `@lg` container step, the help opens as a bottom sheet.
+    const narrow = $derived(width > 0 && width < 512);
     let assets = $state.raw<Asset[]>([]);
     let selection = $state.raw<Selection | null>(null);
     // The table on screen; headers and rows both come from it, so a refetch never mixes old data with new headers.
@@ -439,7 +446,7 @@
         aria-disabled={locked ? "true" : undefined}
         class={[
             "grid w-full min-w-20 items-center rounded-md border text-center text-md font-medium whitespace-nowrap pointer-coarse:min-h-11",
-            state === "partial" ? "border-dotted border-foreground-muted" : "border-transparent",
+            state === "partial" ? "border-dashed border-foreground-muted" : "border-transparent",
             state === "counted" || (state === "partial" && !exclusions.years.includes(year))
                 ? tones[toneOf(value)]
                 : "text-foreground-muted",
@@ -503,6 +510,55 @@
     </div>
 {/snippet}
 
+{#snippet helpItem(title: string, text: string)}
+    <li><span class="block text-sm font-semibold text-foreground">{title}</span>{text}</li>
+{/snippet}
+
+{#snippet help()}
+    {@const act = coarse.current ? "Tap" : "Click"}
+    <Popover title="How to use this table" sheet={narrow} align="end" class={narrow ? undefined : "w-85"} portalTarget={root}>
+        {#snippet trigger({ props })}
+            <button
+                {...props}
+                type="button"
+                aria-label="How to use this table"
+                class="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-sm font-semibold text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background @max-lg:size-11 @max-lg:text-base pointer-coarse:size-11">
+                ?
+            </button>
+        {/snippet}
+        <ul class="grid gap-2 text-xs/normal text-foreground-muted">
+            {@render helpItem("Exclude a return", `${act} a cell. It stops counting in the results below. ${act} it again to include it.`)}
+            {@render helpItem("Exclude a year", `${act} the year. The whole row stops counting.`)}
+            {@render helpItem("Holding Period", "How long each return is held: 1, 3, 6 or 12 months.")}
+            <li>
+                <span class="block text-sm font-semibold text-foreground">Entry Months</span>
+                With a Holding Period longer than a month, the
+                <span class="whitespace-nowrap"><Kbd>‹</Kbd> <Kbd>›</Kbd></span>
+                arrows in the top-left corner shift the start month.
+            </li>
+            <li>
+                <span class="block text-sm font-semibold text-foreground">Partial</span>
+                A cell with a dashed border
+                <span class="rounded-md border border-dashed border-foreground-muted px-1.5 font-medium text-foreground tabular-nums"
+                    >+1.00%</span> is still running. It is not counted.
+            </li>
+            {@render helpItem("Results", "Wins are counted returns above 0. Returns is Wins as a share of Totals.")}
+            {#if !coarse.current}
+                <li>
+                    <span class="block text-sm font-semibold text-foreground">Keyboard</span>
+                    Tab into the table. Use
+                    <span class="whitespace-nowrap"><Kbd>←</Kbd> <Kbd>→</Kbd> <Kbd>↑</Kbd> <Kbd>↓</Kbd></span>
+                    to move, <Kbd>Home</Kbd> and <Kbd>End</Kbd> to jump, and <Kbd>Space</Kbd> to exclude or include.
+                </li>
+            {/if}
+            {@render helpItem(
+                "Reset",
+                "Includes everything again and moves the Entry Months back. It keeps the asset and the Holding Period."
+            )}
+        </ul>
+    </Popover>
+{/snippet}
+
 {#snippet loading()}
     <div class="flex min-h-80 items-center justify-center">
         <Spinner size="lg" tone="muted" label="Loading Forward Returns" />
@@ -510,7 +566,7 @@
 {/snippet}
 
 <!-- Positioned, so panels portalled here are placed from it; floating-ui misplaces them by the admin bar's html margin otherwise. -->
-<div bind:this={root} class="relative">
+<div bind:this={root} bind:clientWidth={width} class="relative">
     {#if card}
         <AccessCard feature="Forward Returns" {card} />
     {:else}
@@ -557,12 +613,20 @@
                                 {/each}
                             </ToggleGroup>
                         </div>
-                        <Button variant="outline-fill" size="sm" class="@max-lg:w-full" aria-disabled={!changed} onclick={reset}>
-                            {#snippet leadingIcon()}
-                                <RotateCcw class="size-4" aria-hidden="true" />
-                            {/snippet}
-                            Reset
-                        </Button>
+                        <div class="flex items-center gap-2 @max-lg:w-full">
+                            <Button
+                                variant="outline-fill"
+                                size="sm"
+                                class="@max-lg:h-11 @max-lg:flex-1 pointer-coarse:h-11"
+                                aria-disabled={!changed}
+                                onclick={reset}>
+                                {#snippet leadingIcon()}
+                                    <RotateCcw class="size-4" aria-hidden="true" />
+                                {/snippet}
+                                Reset
+                            </Button>
+                            {@render help()}
+                        </div>
                     </div>
                 </div>
             {/if}

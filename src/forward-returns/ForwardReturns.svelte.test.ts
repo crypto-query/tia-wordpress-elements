@@ -312,10 +312,36 @@ describe("ForwardReturns", () => {
         await fireEvent.click(partial);
         expect(partial).toHaveAttribute("aria-checked", "false");
         expect(result("Totals")).toEqual(["1", "1"]);
+        expect(partial).toHaveClass("border-dashed");
 
         expect(partial).not.toHaveClass("text-foreground-muted");
         await userEvent.click(screen.getByRole("checkbox", { name: `Count ${next}` }));
         expect(partial).toHaveClass("text-foreground-muted");
+    });
+
+    it('opens the help from the "?" after Reset, and Esc closes it and returns focus', async () => {
+        vi.mocked(getAssets).mockResolvedValue([asset]);
+        vi.mocked(getForwardReturns).mockResolvedValue(data);
+        render(ForwardReturns, props);
+        await screen.findByRole("grid");
+
+        const help = screen.getByRole("button", { name: "How to use this table" });
+        expect(screen.getByRole("button", { name: "Reset" }).nextElementSibling).toBe(help);
+        expect(help).toHaveAttribute("aria-expanded", "false");
+        await userEvent.click(help);
+        const panel = await screen.findByRole("dialog", { name: "How to use this table" });
+        expect(help).toHaveAttribute("aria-expanded", "true");
+        expect(help).toHaveAttribute("aria-controls", panel.id);
+        expect(
+            within(panel)
+                .getAllByRole("listitem")
+                .map((item) => item.firstElementChild?.textContent)
+        ).toEqual(["Exclude a return", "Exclude a year", "Holding Period", "Entry Months", "Partial", "Results", "Keyboard", "Reset"]);
+        expect(within(panel).getByText("Space").tagName).toBe("KBD");
+
+        await userEvent.keyboard("{Escape}");
+        await waitFor(() => expect(help).toHaveFocus());
+        await waitFor(() => expect(screen.queryByRole("dialog", { name: "How to use this table" })).not.toBeInTheDocument());
     });
 
     it("Reset includes everything and sets the Entry Offset to 0", async () => {
@@ -394,7 +420,7 @@ describe("ForwardReturns", () => {
         const focused = () => document.activeElement;
         const press = (key: string) => userEvent.keyboard(`{${key}}`);
         async function tabIntoGrid() {
-            screen.getByRole("button", { name: "Reset" }).focus();
+            screen.getByRole("button", { name: "How to use this table" }).focus();
             await userEvent.tab();
         }
 
