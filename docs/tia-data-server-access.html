@@ -150,8 +150,8 @@
     <body>
         <h1>TIA data server access for TIA WordPress Elements</h1>
         <p class="meta">
-            Changed 2026-10-09 · Consumer: <code>wordpress-elements</code> plugin on <code>tiainvestor.com</code> (future) · Data server:
-            Dokku app <code>tia-data-server-prod</code> on <code>contabo</code>
+            Changed 2026-10-09, updated 2026-10-20 (Mitja's work IP added) · Consumer: <code>wordpress-elements</code> plugin on
+            <code>tiainvestor.com</code> (future) · Data server: Dokku app <code>tia-data-server-prod</code> on <code>contabo</code>
         </p>
 
         <!-- 1 -->
@@ -264,15 +264,16 @@
                 <text x="22" y="117" class="tm">egress, fallback:</text>
                 <text x="22" y="132" class="ts">IPv4 145.14.147.195</text>
 
-                <!-- Mitja static IP -->
-                <rect x="10" y="155" width="270" height="52" rx="8" fill="#f6f6f7" stroke="#999" />
-                <text x="22" y="177" class="tb">Mitja's static IP</text>
-                <text x="22" y="195" class="ts">212.85.161.117</text>
+                <!-- Mitja's IPs -->
+                <rect x="10" y="155" width="270" height="70" rx="8" fill="#f6f6f7" stroke="#999" />
+                <text x="22" y="177" class="tb">Mitja's IPs</text>
+                <text x="22" y="195" class="ts">212.85.161.117 (static)</text>
+                <text x="22" y="213" class="ts">84.255.212.201 (work)</text>
 
                 <!-- Everyone else -->
-                <rect x="10" y="222" width="270" height="52" rx="8" fill="#fbeaea" stroke="#b3261e" />
-                <text x="22" y="244" class="tb">Everyone else</text>
-                <text x="22" y="262" class="t">browsers, scanners, other hosts</text>
+                <rect x="10" y="240" width="270" height="52" rx="8" fill="#fbeaea" stroke="#b3261e" />
+                <text x="22" y="262" class="tb">Everyone else</text>
+                <text x="22" y="280" class="t">browsers, scanners, other hosts</text>
 
                 <!-- Dokku apps -->
                 <rect x="10" y="345" width="270" height="70" rx="8" fill="#f6f6f7" stroke="#999" />
@@ -281,7 +282,7 @@
                 <text x="22" y="403" class="ts">http://host.docker.internal:8080</text>
 
                 <!-- Cloudflare -->
-                <rect x="310" y="28" width="125" height="246" rx="8" fill="#fff6e0" stroke="#c78a00" />
+                <rect x="310" y="28" width="125" height="264" rx="8" fill="#fff6e0" stroke="#c78a00" />
                 <text x="322" y="52" class="tb">Cloudflare</text>
                 <text x="322" y="72" class="t">proxied DNS</text>
                 <text x="322" y="90" class="t">HTTPS</text>
@@ -290,8 +291,8 @@
 
                 <!-- Arrows sources -> Cloudflare -->
                 <line x1="280" y1="84" x2="308" y2="84" stroke="#1f5fa8" stroke-width="2" marker-end="url(#arr)" />
-                <line x1="280" y1="181" x2="308" y2="181" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
-                <line x1="280" y1="248" x2="308" y2="248" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="280" y1="190" x2="308" y2="190" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
+                <line x1="280" y1="266" x2="308" y2="266" stroke="#444" stroke-width="1.5" marker-end="url(#arr)" />
 
                 <!-- nginx -->
                 <rect x="460" y="28" width="235" height="387" rx="8" fill="#f6f6f7" stroke="#555" />
@@ -463,6 +464,12 @@
                     <td class="ok">verified 200</td>
                 </tr>
                 <tr>
+                    <td><code>84.255.212.201</code></td>
+                    <td>Mitja's work IP (T-2, likely static, IPv4 only)</td>
+                    <td>Cloudflare</td>
+                    <td class="ok">verified 200</td>
+                </tr>
+                <tr>
                     <td><code>172.17.0.0/16</code></td>
                     <td>Dokku apps on contabo, e.g. <code>tia-indicators-prod</code></td>
                     <td>direct, <code>http://host.docker.internal:8080</code></td>
@@ -590,7 +597,9 @@
                     </td>
                 </tr>
                 <tr>
-                    <td>Local development from Mitja's static IP <code>212.85.161.117</code></td>
+                    <td>
+                        Local development from Mitja's static IP <code>212.85.161.117</code> or Mitja's work IP <code>84.255.212.201</code>
+                    </td>
                     <td class="ok">200</td>
                     <td>Works with the production URL.</td>
                 </tr>
@@ -844,6 +853,34 @@ echo is_wp_error( $r ) ? $r-&gt;get_error_message() : wp_remote_retrieve_respons
             </li>
             <li>Run the check in section 8, step 3. Expect <code>200</code>.</li>
         </ol>
+        <h3>Example: Mitja's work IP</h3>
+        <p>
+            On 2026-10-20 this command added Mitja's work IP after the static IP entry. A <code>GET /forecast_curves_assets</code> from the
+            work machine then changed from <code>403</code> to <code>200</code>.
+        </p>
+        <ol>
+            <li>
+                Connect to contabo:
+                <pre><code>ssh -t mitja@contabo</code></pre>
+            </li>
+            <li>
+                Add the entry:
+                <pre><code>sudo sed -i '/"212\.85\.161\.117"/a # Mitja work IP\nif ($remote_addr = "84.255.212.201") { set $tia_deny 0; }' /home/dokku/tia-data-server-prod/nginx.conf.d/allowlist.conf</code></pre>
+                Or, to remove the entry later:
+                <pre><code>sudo sed -i '/^# Mitja work IP$/d; /"84\.255\.212\.201"/d' /home/dokku/tia-data-server-prod/nginx.conf.d/allowlist.conf</code></pre>
+            </li>
+            <li>
+                Check the result. After the add, the work IP lines show. After the remove, only the static IP lines show:
+                <pre><code>grep -n -A1 "Mitja" /home/dokku/tia-data-server-prod/nginx.conf.d/allowlist.conf</code></pre>
+            </li>
+            <li>
+                Test and apply:
+                <pre><code>sudo nginx -t &amp;&amp; sudo systemctl reload nginx</code></pre>
+            </li>
+            <li>
+                From the work network, call the data server. Expect <code>200</code> after the add and <code>403</code> after the remove.
+            </li>
+        </ol>
 
         <!-- 11 -->
         <h2>11. Known risks (accepted)</h2>
@@ -865,6 +902,17 @@ echo is_wp_error( $r ) ? $r-&gt;get_error_message() : wp_remote_retrieve_respons
                     <td>IPv6 can change</td>
                     <td>If Hostinger changes the site's IPv6 address, the plugin gets <code>403</code>.</td>
                     <td>Log <code>403</code> in the plugin. Follow section 9.</td>
+                </tr>
+                <tr>
+                    <td>Work IP may not be static</td>
+                    <td>
+                        The network admin and the T-2 contract do not confirm <code>84.255.212.201</code> as static. If the address changes
+                        or the office uses a failover uplink, calls from work get <code>403</code>.
+                    </td>
+                    <td>
+                        The PTR <code>84-255-212-201.static.t-2.net</code> and the assigned block <code>84.255.212.192/27</code> suggest a
+                        static address. If it changes, remove the old entry and add the new one (section 10).
+                    </td>
                 </tr>
                 <tr>
                     <td>Cloudflare ranges are hard-coded</td>
