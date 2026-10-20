@@ -446,7 +446,7 @@
         aria-disabled={locked ? "true" : undefined}
         class={[
             "grid w-full min-w-20 items-center rounded-md border text-center text-md font-medium whitespace-nowrap pointer-coarse:min-h-11",
-            state === "partial" ? "border-dashed border-foreground-muted" : "border-transparent",
+            state === "partial" ? "border-dashed border-border-input" : "border-transparent",
             state === "counted" || (state === "partial" && !exclusions.years.includes(year))
                 ? tones[toneOf(value)]
                 : "text-foreground-muted",
@@ -539,7 +539,7 @@
             <li>
                 <span class="block text-sm font-semibold text-foreground">Partial</span>
                 A cell with a dashed border
-                <span class="rounded-md border border-dashed border-foreground-muted px-1.5 font-medium text-foreground tabular-nums"
+                <span class="rounded-md border border-dashed border-border-input px-1.5 font-medium text-foreground tabular-nums"
                     >+1.00%</span> is still running. It is not counted.
             </li>
             {@render helpItem("Results", "Wins are counted returns above 0. Returns is Wins as a share of Totals.")}
