@@ -693,7 +693,7 @@
             narrow ? "h-11" : "h-8",
             lock === "unavailable"
                 ? "cursor-not-allowed border-dotted data-[state=on]:border-border-input data-[state=on]:bg-background-subtle data-[state=on]:enabled:text-foreground-subtle"
-                : "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-background-muted data-[state=on]:border-(--chip)/55 data-[state=on]:bg-(--chip)/15 data-[state=on]:enabled:text-foreground",
+                : "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-background-muted data-[state=on]:border-[color-mix(in_srgb,var(--chip)_55%,var(--popover-background))] data-[state=on]:bg-[color-mix(in_srgb,var(--chip)_15%,var(--popover-background))] data-[state=on]:enabled:text-foreground",
             lock === "last" && "cursor-not-allowed",
             !lock && "data-[state=on]:hover:border-(--chip)"
         ]}>
@@ -764,8 +764,8 @@
                     bind:pressed={() => on, (next) => showCurve(name, next)}
                     class={[
                         "shrink-0 gap-1 pl-1.75 font-medium pointer-coarse:h-11",
-                        "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-background-muted",
-                        "data-[state=on]:border-(--chip)/45 data-[state=on]:bg-(--chip)/10 data-[state=on]:hover:border-(--chip) data-[state=on]:enabled:text-foreground",
+                        "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-surface not-data-[state=on]:enabled:hover:text-foreground-subtle",
+                        "data-[state=on]:border-[color-mix(in_srgb,var(--chip)_45%,var(--card-background))] data-[state=on]:bg-[color-mix(in_srgb,var(--chip)_10%,var(--card-background))] data-[state=on]:hover:border-(--chip) data-[state=on]:enabled:text-foreground",
                         curve.years ? "rounded-l-full rounded-r-none pr-1.75" : "rounded-full pr-2.5"
                     ]}>
                     <Check class={on ? "size-3" : "invisible size-3"} aria-hidden="true" />
@@ -803,7 +803,7 @@
                         class={[
                             "group -ml-px inline-flex h-7.5 shrink-0 cursor-pointer items-center gap-0.75 rounded-r-full border pr-2 pl-1.5 text-xs font-semibold whitespace-nowrap pointer-coarse:h-11",
                             on
-                                ? "border-(--chip)/45 bg-(--chip)/10 text-foreground-muted hover:border-(--chip) aria-expanded:bg-background-muted"
+                                ? "border-[color-mix(in_srgb,var(--chip)_45%,var(--card-background))] bg-[color-mix(in_srgb,var(--chip)_10%,var(--card-background))] text-foreground-muted hover:border-(--chip) aria-expanded:bg-background-muted"
                                 : "border-border bg-surface text-foreground-subtle hover:border-border-input"
                         ]}>
                         <span
@@ -812,7 +812,7 @@
                                 count.included < count.of
                                     ? "border-foreground bg-foreground text-surface"
                                     : on
-                                      ? "border-(--chip)/45 bg-surface"
+                                      ? "border-[color-mix(in_srgb,var(--chip)_45%,var(--card-background))] bg-surface"
                                       : "border-border bg-surface"
                             ]}>
                             {count.included}/{count.of}
