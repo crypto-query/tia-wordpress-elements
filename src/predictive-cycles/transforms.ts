@@ -282,13 +282,20 @@ export type Drag = { days: number; percent: number };
 
 export const NO_DRAG: Drag = { days: 0, percent: 0 };
 
-/** The curves with Actual moved by the drag, its values resampled on Actual's own dates. */
-export const dragCurves = (curves: CurveData[], { days, percent }: Drag): CurveData[] =>
+/**
+ * The curves with Actual moved by the drag, its values resampled on Actual's own dates. Actual's last value moves by
+ * `percent`; every other value moves by the same amount in the view's units, real % or `asinh` on `log`.
+ */
+export const dragCurves = (curves: CurveData[], { days, percent }: Drag, log: boolean): CurveData[] =>
     curves.map((curve) => {
         if (curve.name !== ACTUAL) {
             return curve;
         }
         const values = new Map(curve.points);
+        const anchor = curve.points.findLast(([, value]) => value !== null)?.[1] ?? 0;
+        const shift = Math.asinh(anchor + percent) - Math.asinh(anchor);
+        // sinh(asinh(v)) is not exact, so no y move keeps the values as they are.
+        const move = (value: number) => (log && percent !== 0 ? Math.sinh(Math.asinh(value) + shift) : value + percent);
         const first = curve.points[0]?.[0] ?? 0;
         const last = curve.points.at(-1)?.[0] ?? 0;
         return {
@@ -298,7 +305,7 @@ export const dragCurves = (curves: CurveData[], { days, percent }: Drag): CurveD
                 // A date missing from the grid, such as a market holiday, takes the last value before it.
                 const inGap = !values.has(from) && from > first && from < last;
                 const value = (inGap ? curve.points.findLast(([day]) => day < from)?.[1] : values.get(from)) ?? null;
-                return [at, value === null ? null : value + percent];
+                return [at, value === null ? null : move(value)];
             })
         };
     });

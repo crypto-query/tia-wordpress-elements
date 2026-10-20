@@ -48,7 +48,7 @@
 </script>
 
 <script lang="ts">
-    import { format, type ECharts, type ElementEvent } from "echarts/core";
+    import { Axis, format, type ECharts, type ElementEvent } from "echarts/core";
     import { mergeProps } from "bits-ui";
     import { Check, ChevronDown, ChevronLeft, ChevronRight, Lock, RotateCcw } from "lucide-svelte";
     import { onMount, untrack } from "svelte";
@@ -116,6 +116,8 @@
         ["ArrowDown", { days: 0, percent: -1 }]
     ]);
 
+    const GRID = { left: 8, right: 16, top: 16, bottom: 64 };
+
     const uid = $props.id();
     let root = $state<HTMLDivElement>();
     let chart = $state<ECharts>();
@@ -135,10 +137,12 @@
     let failure = $state.raw<{ kind: ErrorKind; retry: () => void } | null>(null);
     // Memory only: an asset or Base Year change and Reset clear it.
     let drag = $state.raw<Drag>(NO_DRAG);
+    // The y axis extent while a move runs, in axis units; an axis that rescales mid-move makes every line jump.
+    let yRange = $state.raw<{ min: number; max: number; interval?: number } | null>(null);
     let focused = $state(false);
     let announcement = $state("");
     // The axis scale at the pointer when a mouse drag starts, so a y axis that rescales under the drag does not feed back.
-    let grab: { from: Drag; y: number; msPerPixel: number; valuePerPixel: number } | null = null;
+    let grab: { from: Drag; anchor: number; msPerPixel: number; valuePerPixel: number } | null = null;
     let gripPoints = "";
     let gripX = 0;
     let width = $state(0);
@@ -165,7 +169,7 @@
         !hidden.includes(ACTUAL) &&
             (shown?.data.curves.some(({ name, points }) => name === ACTUAL && points.some(([, value]) => value !== null)) ?? false)
     );
-    const option = $derived(theme && shown ? chartOption(theme, shown, hidden, log, zoom, drag, focused && draggable) : null);
+    const option = $derived(theme && shown ? chartOption(theme, shown, hidden, log, zoom, drag, focused && draggable, yRange) : null);
     const noneShown = $derived(selection !== null && selection.asset.curves.every(({ name }) => hidden.includes(name)));
 
     // Every pick, a year chip here or in another instance, and Reset change the request; refetch debounces quick changes.
@@ -219,7 +223,7 @@
         if (!echart || echart.isDisposed() || grab) {
             return;
         }
-        const actual = draggable && shown ? dragCurves(shown.data.curves, drag).find(({ name }) => name === ACTUAL) : undefined;
+        const actual = draggable && shown ? dragCurves(shown.data.curves, drag, log).find(({ name }) => name === ACTUAL) : undefined;
         const points = (actual?.points ?? []).flatMap(([at, value]) => {
             if (value === null) {
                 return [];
@@ -270,7 +274,7 @@
         if (!shown || typeof at !== "number") {
             return "";
         }
-        const values = tooltipHtml(dragCurves(shown.data.curves, drag), hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
+        const values = tooltipHtml(dragCurves(shown.data.curves, drag, log), hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
         return grab ? values : `${values}<div class="mt-2 text-foreground-muted">Drag to move, or use the arrow keys</div>`;
     }
 
@@ -281,23 +285,44 @@
         }
         const [x, y]: number[] = echart.convertFromPixel({ gridIndex: 0 }, [offsetX, offsetY]);
         const [x1, y1]: number[] = echart.convertFromPixel({ gridIndex: 0 }, [offsetX + 1, offsetY + 1]);
-        grab = { from: drag, y, msPerPixel: x1 - x, valuePerPixel: y1 - y };
+        // Actual's last unmoved value, the point `drag.percent` moves.
+        const anchor = shown?.data.curves.find(({ name }) => name === ACTUAL)?.points.findLast(([, value]) => value !== null)?.[1] ?? 0;
+        grab = { from: drag, anchor, msPerPixel: x1 - x, valuePerPixel: y1 - y };
+        freezeY();
     }
 
-    /** x snaps to whole days; y is free, in real % on the Log scale too. */
+    function freezeY() {
+        const echart = chart;
+        if (echart && !yRange) {
+            // No public API exposes the tick interval, so this reads it from the internal axis model, which ECharts leaves untyped.
+            const axis: unknown = echart["getModel"]().getComponent("yAxis", 0)?.axis;
+            const ticks = axis instanceof Axis ? axis.scale.getTicks() : [];
+            // toPrecision drops the float noise of the subtraction, which would show in the labels.
+            const interval = ticks.length > 1 ? Number((ticks[1].value - ticks[0].value).toPrecision(12)) : undefined;
+            yRange = {
+                min: echart.convertFromPixel({ yAxisIndex: 0 }, echart.getHeight() - GRID.bottom),
+                max: echart.convertFromPixel({ yAxisIndex: 0 }, GRID.top),
+                ...(interval && { interval })
+            };
+        }
+    }
+
+    /** x snaps to whole days; y moves the anchor by the pointer's move in axis units, so the line follows rigidly. */
     function moveGrab({ target }: ElementEvent) {
         if (!grab) {
             return;
         }
-        const real = (value: number) => (log ? Math.sinh(value) : value);
+        const [real, axis] = log ? [Math.sinh, Math.asinh] : [(value: number) => value, (value: number) => value];
+        const { from, anchor } = grab;
         drag = {
-            days: grab.from.days + Math.round((target.x * grab.msPerPixel) / DAY),
-            percent: grab.from.percent + real(grab.y + target.y * grab.valuePerPixel) - real(grab.y)
+            days: from.days + Math.round((target.x * grab.msPerPixel) / DAY),
+            percent: real(axis(anchor + from.percent) + target.y * grab.valuePerPixel) - anchor
         };
     }
 
     function endGrab() {
         grab = null;
+        yRange = null;
         // The grip still sits where the pointer left it; lay it on Actual again.
         gripPoints = "";
         placeGrip();
@@ -307,6 +332,7 @@
     /** Also empties the live region, so the same move after a clear is announced again. */
     function clearDrag() {
         drag = NO_DRAG;
+        yRange = null;
         announcement = "";
     }
 
@@ -316,6 +342,7 @@
             return;
         }
         event.preventDefault();
+        freezeY();
         drag = { days: drag.days + step.days, percent: drag.percent + (step.percent && percentStep(step.percent)) };
         announcement = dragAnnouncement(drag);
     }
@@ -325,7 +352,7 @@
         const echart = chart;
         const anchor =
             shown &&
-            dragCurves(shown.data.curves, drag)
+            dragCurves(shown.data.curves, drag, log)
                 .find(({ name }) => name === ACTUAL)
                 ?.points.findLast(([, value]) => value !== null)?.[1];
         if (!echart || typeof anchor !== "number") {
@@ -357,10 +384,11 @@
         log: boolean,
         zoom: Zoom,
         drag: Drag,
-        focused: boolean
+        focused: boolean,
+        yRange: { min: number; max: number; interval?: number } | null
     ): Option {
         const { data } = shown;
-        const curves = dragCurves(data.curves, drag);
+        const curves = dragCurves(data.curves, drag, log);
         const slots = curveSlots(curves.map(({ name }) => name));
         // With no curve shown, every curve stays as an invisible line, so the empty plot keeps its axes in place.
         const empty = curves.every(({ name }) => hidden.includes(name));
@@ -393,7 +421,7 @@
             color: theme.color,
             textStyle: theme.textStyle,
             animation: false,
-            grid: { left: 8, right: 16, top: 16, bottom: 64 },
+            grid: GRID,
             tooltip: {
                 ...theme.tooltip,
                 show: !empty,
@@ -436,9 +464,10 @@
             yAxis: log
                 ? logAxis(
                       theme,
-                      drawn.map(({ curve }) => curve)
+                      drawn.map(({ curve }) => curve),
+                      yRange
                   )
-                : { ...theme.axis, type: "value", axisLabel: { ...label, formatter: "{value}%" } },
+                : { ...theme.axis, type: "value", ...yRange, axisLabel: { ...label, formatter: "{value}%" } },
             series: [
                 ...drawn.map(({ curve, slot }): LineSeriesOption => {
                     const kind = lineKind(curve.name);
@@ -469,14 +498,18 @@
     }
 
     /** The `asinh` y axis, with its ticks at round values in real %. */
-    function logAxis(theme: ChartTheme, curves: PredictiveCycles["data"]["curves"]): Option["yAxis"] {
+    function logAxis(
+        theme: ChartTheme,
+        curves: PredictiveCycles["data"]["curves"],
+        yRange: { min: number; max: number } | null
+    ): Option["yAxis"] {
         const values = curves.flatMap(({ points }) => points.flatMap(([, value]) => (value === null ? [] : [value])));
         const ticks = asinhTicks(Math.min(0, ...values), Math.max(0, ...values)).map((value) => Math.asinh(value));
         return {
             ...theme.axis,
             type: "value",
-            min: ticks[0],
-            max: ticks[ticks.length - 1],
+            min: yRange?.min ?? ticks[0],
+            max: yRange?.max ?? ticks[ticks.length - 1],
             axisTick: { ...theme.axis.axisTick, customValues: ticks },
             axisLabel: { ...theme.axis.axisLabel, customValues: ticks, formatter: (value: number) => `${Math.round(Math.sinh(value))}%` }
         };
@@ -624,6 +657,7 @@
 
     function pickLog(pressed: boolean) {
         log = pressed;
+        yRange = null;
         remember();
     }
 
@@ -997,8 +1031,16 @@
                             aria-label="Predictive Cycles chart, {shown.data.id.toUpperCase()}, Base Year {shown.data.base_year}"
                             aria-describedby="{uid}-summary"
                             onkeydown={moveByKey}
+                            onkeyup={(event) => {
+                                if (KEY_STEPS.has(event.key)) {
+                                    yRange = null;
+                                }
+                            }}
                             onfocus={() => (focused = true)}
-                            onblur={() => (focused = false)} />
+                            onblur={() => {
+                                focused = false;
+                                yRange = null;
+                            }} />
                         {#if loading}
                             <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
                                 <Spinner size="lg" tone="muted" label="Loading Predictive Cycles" />
@@ -1010,7 +1052,7 @@
                         {/if}
                     </div>
                     <p id="{uid}-summary" class="sr-only">
-                        {chartSummary(dragCurves(shown.data.curves, drag), hidden, shown.data.base_year)}
+                        {chartSummary(dragCurves(shown.data.curves, drag, log), hidden, shown.data.base_year)}
                     </p>
                     <p aria-live="polite" class="sr-only">{announcement}</p>
                 {/if}

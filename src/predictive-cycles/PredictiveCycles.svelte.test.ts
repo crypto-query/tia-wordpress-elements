@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { userEvent } from "@vitest/browser/context";
-import { getInstanceByDom } from "echarts/core";
+import { Axis, getInstanceByDom } from "echarts/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../shared/api";
 import { formatReturn } from "../shared/format";
@@ -158,9 +158,9 @@ describe("PredictiveCycles", () => {
             cutoff: null
         };
 
-        async function open() {
+        async function open(answer = daily) {
             vi.mocked(getAssets).mockResolvedValue([asset]);
-            vi.mocked(getPredictiveCycles).mockResolvedValue(daily);
+            vi.mocked(getPredictiveCycles).mockResolvedValue(answer);
             render(PredictiveCycles, props);
             return chart();
         }
@@ -210,8 +210,8 @@ describe("PredictiveCycles", () => {
                 surface.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: left + x, clientY: top + y }));
         }
 
-        const actualPixel = (group: HTMLElement) =>
-            (getInstanceByDom(group)?.convertToPixel({ gridIndex: 0 }, pointAt(group, day(6, 1)) ?? []) ?? []) as number[];
+        const actualPixel = (group: HTMLElement, at = day(6, 1)) =>
+            (getInstanceByDom(group)?.convertToPixel({ gridIndex: 0 }, pointAt(group, at) ?? []) ?? []) as number[];
 
         /** Presses on Actual's Jul 1 point, moves the pointer by `dx`, `dy` pixels and lets go. */
         async function dragActual(group: HTMLElement, dx: number, dy: number) {
@@ -225,7 +225,7 @@ describe("PredictiveCycles", () => {
             send("mouseup", x + dx, y + dy);
         }
 
-        it("moves Actual up or down per key by as many pixels as a day moves it, on both scales", async () => {
+        it("moves every Actual point up or down per key by as many pixels as a day moves it, on both scales", async () => {
             const group = await open();
             // The test page has no Tailwind, so the chart gets its size here.
             group.style.height = "360px";
@@ -242,12 +242,69 @@ describe("PredictiveCycles", () => {
                     await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
                     await waitFor(() => expect(pointAt(group, day(0, 1))?.[1]).toBeLessThan(0.5));
                 }
-                const [, before] = actualPixel(group);
+                // Jan 1 and Jul 1 lie far apart in value, where a uniform % move would differ in pixels on the Log scale.
+                const pixels = () => [day(0, 1), day(6, 1)].map((at) => actualPixel(group, at)[1] ?? 0);
+                const before = pixels();
                 await userEvent.keyboard("{ArrowDown}");
-                await waitFor(() => expect(actualPixel(group)[1] - before).toBeCloseTo(dayPixels, 1));
+                await waitFor(() => pixels().forEach((y, index) => expect(y - (before[index] ?? 0)).toBeCloseTo(dayPixels, 1)));
                 await userEvent.keyboard("{ArrowUp}");
-                await waitFor(() => expect(actualPixel(group)[1]).toBeCloseTo(before, 1));
+                await waitFor(() => pixels().forEach((y, index) => expect(y).toBeCloseTo(before[index] ?? 0, 1)));
             }
+        });
+
+        it("holds the y axis while a key or the mouse moves Actual past the top, and rescales on release", async () => {
+            // Its axis runs from -0.5 to 3.5 in steps of 0.5; with only min and max fixed, ECharts would pick steps of 1.
+            const group = await open({
+                ...daily,
+                data: {
+                    ...daily.data,
+                    curves: [
+                        { id: 0, name: "Actual", points: ramp(0.5, 3.2) },
+                        { id: 1, name: "All", points: ramp(-0.3, 2) }
+                    ]
+                }
+            });
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            group.focus();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const echart = getInstanceByDom(group);
+            const top = () => echart?.convertFromPixel({ yAxisIndex: 0 }, 16) as number;
+            const dayPixels =
+                (echart?.convertToPixel({ xAxisIndex: 0 }, day(0, 2)) ?? 0) - (echart?.convertToPixel({ xAxisIndex: 0 }, day(0, 1)) ?? 0);
+            const extent = top();
+            // The rendered tick values, read from the internal axis model.
+            const ticks = () => {
+                const axis: unknown = echart?.["getModel"]().getComponent("yAxis", 0)?.axis;
+                return axis instanceof Axis ? axis.scale.getTicks().map(({ value }) => value) : [];
+            };
+            const labels = ticks();
+            expect(labels.length).toBeGreaterThan(1);
+
+            for (let press = 0; press < 40; press++) {
+                const [, before] = actualPixel(group);
+                await fireEvent.keyDown(group, { key: "ArrowUp" });
+                await waitFor(() => expect(before - actualPixel(group)[1]).toBeCloseTo(dayPixels, 1));
+                expect(top()).toBeCloseTo(extent);
+                expect(ticks()).toEqual(labels);
+            }
+            expect(pointAt(group, day(6, 1))?.[1]).toBeGreaterThan(extent);
+
+            await fireEvent.keyUp(group, { key: "ArrowUp" });
+            await waitFor(() => expect(top()).toBeGreaterThan(pointAt(group, day(6, 1))?.[1] ?? Infinity));
+
+            const held = top();
+            const heldLabels = ticks();
+            const [x, y] = actualPixel(group);
+            const send = pointer(group);
+            send("mousemove", x, y);
+            send("mousedown", x, y);
+            send("mousemove", x, 0);
+            await waitFor(() => expect(pointAt(group, day(6, 1))?.[1]).toBeGreaterThan(held));
+            expect(top()).toBeCloseTo(held);
+            expect(ticks()).toEqual(heldLabels);
+            send("mouseup", x, 0);
+            await waitFor(() => expect(top()).toBeGreaterThan(pointAt(group, day(6, 1))?.[1] ?? Infinity));
         });
 
         it("shows Actual's moved value and the drag hint over its moved line, and drops the hint off the line", async () => {

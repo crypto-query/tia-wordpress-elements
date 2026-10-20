@@ -572,10 +572,11 @@ describe("dragCurves", () => {
         { id: 1, name: "All", points: [[day(1), 2]] }
     ];
 
-    const actual = (drag: Drag) => dragCurves(curves, drag)[0]?.points;
+    const actual = (drag: Drag) => dragCurves(curves, drag, false)[0]?.points;
 
     it("returns equal data with no drag", () => {
-        expect(dragCurves(curves, NO_DRAG)).toEqual(curves);
+        expect(dragCurves(curves, NO_DRAG, false)).toEqual(curves);
+        expect(dragCurves(curves, NO_DRAG, true)).toEqual(curves);
     });
 
     it("shifts Actual's values right on its own dates, with nulls where nothing lands", () => {
@@ -595,7 +596,7 @@ describe("dragCurves", () => {
     });
 
     it("drops values moved past the dates and leaves other curves untouched", () => {
-        const dragged = dragCurves(curves, { days: 5, percent: 2 });
+        const dragged = dragCurves(curves, { days: 5, percent: 2 }, false);
         expect(dragged[0]?.points).toEqual([
             [day(1), null],
             [day(2), null],
@@ -616,11 +617,29 @@ describe("dragCurves", () => {
                 ]
             }
         ];
-        expect(dragCurves(gapped, { days: 1, percent: 0.5 })[0]?.points).toEqual([
+        expect(dragCurves(gapped, { days: 1, percent: 0.5 }, false)[0]?.points).toEqual([
             [day(1), null],
             [day(2), 1.5],
             [day(4), 2.5]
         ]);
+    });
+
+    it("on log, moves Actual's last value by the percent and every value by the same asinh amount", () => {
+        const steep: CurveData[] = [
+            {
+                id: 0,
+                name: "Actual",
+                points: [
+                    [day(1), 0.5],
+                    [day(2), 40],
+                    [day(3), null]
+                ]
+            }
+        ];
+        const [first, last, empty] = dragCurves(steep, { days: 0, percent: 5 }, true)[0]?.points ?? [];
+        expect(last?.[1]).toBeCloseTo(45);
+        expect(Math.asinh(first?.[1] ?? 0) - Math.asinh(0.5)).toBeCloseTo(Math.asinh(45) - Math.asinh(40));
+        expect(empty?.[1]).toBeNull();
     });
 });
 
