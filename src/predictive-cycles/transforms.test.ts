@@ -249,6 +249,13 @@ describe("dataRequest", () => {
             curves: [{ id: 0 }, { id: 9, years: [2014, 2022] }, { id: 7, years: [10, 20, 30] }, { id: 2 }]
         });
     });
+
+    it("leaves out a year-curve with every year excluded", () => {
+        const curves = [{ id: 0, name: "Actual" }, bear, decades];
+        const request = dataRequest({ asset: { ...btc, curves }, baseYear: 2026 }, { 9: [2014, 2018, 2022], 7: [10, 20, 30] });
+
+        expect(request.curves).toEqual([{ id: 0 }]);
+    });
 });
 
 describe("chips", () => {
@@ -470,6 +477,8 @@ describe("isMemory", () => {
     it("takes the stored shape", () => {
         expect(isMemory(good)).toBe(true);
         expect(isMemory({ excluded: {}, instances: {} })).toBe(true);
+        const shown = { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, tooltip: false, labels: true } } } };
+        expect(isMemory(shown)).toBe(true);
     });
 
     it.each([
@@ -477,7 +486,9 @@ describe("isMemory", () => {
         ["an exclusion that is not a list", { ...good, excluded: { eth: { 1: 2018 } } }],
         ["a hidden curve by id", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, hidden: [1] } } } }],
         ["a zoom without an end", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, zoom: { start: 0 } } } } }],
-        ["Log as a string", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, log: "true" } } } }]
+        ["Log as a string", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, log: "true" } } } }],
+        ["Tooltip as a string", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, tooltip: "false" } } } }],
+        ["Axis labels as null", { ...good, instances: { "1:0": { attributes: {}, pick: { ...pick, labels: null } } } }]
     ])("refuses %s", (_, value) => {
         expect(isMemory(value)).toBe(false);
     });
@@ -493,16 +504,24 @@ describe("restore", () => {
             selection: { asset: btc, baseYear: 2026 },
             hidden: [],
             log: false,
+            tooltip: true,
+            labels: true,
             zoom: { start: 0, end: 100 }
         });
     });
 
-    it("takes the stored view when the attributes did not change", () => {
+    it("takes the stored view when the attributes did not change, Tooltip and Axis labels on when it lacks them", () => {
         expect(restore({ baseYear: 2026 }, entry, assets, now)).toEqual({
             selection: { asset: eth, baseYear: 2024 },
             hidden: ["All"],
             log: true,
+            tooltip: true,
+            labels: true,
             zoom: { start: 20, end: 60 }
+        });
+        expect(restore({ baseYear: 2026 }, { attributes, pick: { ...pick, tooltip: false, labels: false } }, assets, now)).toMatchObject({
+            tooltip: false,
+            labels: false
         });
     });
 
@@ -511,6 +530,8 @@ describe("restore", () => {
             selection: { asset: btc, baseYear: 2025 },
             hidden: [],
             log: false,
+            tooltip: true,
+            labels: true,
             zoom: { start: 0, end: 100 }
         });
     });
@@ -520,6 +541,8 @@ describe("restore", () => {
             selection: { asset: btc, baseYear: 2026 },
             hidden: ["All"],
             log: true,
+            tooltip: true,
+            labels: true,
             zoom: { start: 0, end: 100 }
         });
     });

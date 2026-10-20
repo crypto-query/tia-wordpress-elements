@@ -66,6 +66,29 @@ const cutoff = (at: number, trial: boolean, source: Cutoff["source"]): Cutoff =>
 const chart = () => screen.findByRole("group", { name: "Predictive Cycles chart, BTC, Base Year 2026" });
 const chip = (name: string) => screen.getByRole("button", { name });
 
+/** Opens the Settings menu, unless it is open, and returns it. */
+async function settings() {
+    const trigger = screen.getByRole("button", { name: "Settings" });
+    if (trigger.getAttribute("aria-expanded") !== "true") {
+        await userEvent.click(trigger);
+    }
+    return screen.findByRole("menu", { name: "Settings" });
+}
+const action = async (name: "Clear" | "Reset") => within(await settings()).getByRole("menuitem", { name });
+const setting = async (name: "Tooltip" | "Axis labels" | "Log scale") => within(await settings()).getByRole("menuitemcheckbox", { name });
+
+async function closeMenu() {
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+}
+
+/** Whether Reset has something to do, read from the menu, which closes again. */
+async function resetDisabled() {
+    const disabled = (await action("Reset")).getAttribute("aria-disabled");
+    await closeMenu();
+    return disabled;
+}
+
 describe("PredictiveCycles", () => {
     it("shows the spinner, then the chart for the picked asset and Base Year", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
@@ -180,10 +203,10 @@ describe("PredictiveCycles", () => {
 
         it("moves Actual a day per left or right key, draws it thicker with focus, and Reset clears it", async () => {
             const group = await open();
+            expect(await resetDisabled()).toBe("true");
             expect(actualSeries(group)?.lineStyle.width).toBe(3);
             group.focus();
             await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(4));
-            expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
 
             await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}");
             await announced("Actual moved +3 days, 0.00%");
@@ -192,13 +215,14 @@ describe("PredictiveCycles", () => {
             expect(pointAt(group, day(6, 4))).toEqual([day(6, 4), 4]);
             expect(group).toHaveAccessibleDescription("Jul 4: Actual +4.00%.");
 
-            await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
+            await userEvent.click(await setting("Log scale"));
             await waitFor(() => expect(pointAt(group, day(0, 4))).toEqual([day(0, 4), Math.asinh(0.5)]));
+            await closeMenu();
 
-            group.blur();
             await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(3));
-            await fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-            expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
+            await userEvent.click(await action("Reset"));
+            await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+            expect(await resetDisabled()).toBe("true");
             await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), Math.asinh(0.5)]));
         });
 
@@ -239,8 +263,10 @@ describe("PredictiveCycles", () => {
             // Down first: a move above the top tick would rescale the linear axis under the measurement.
             for (const scale of ["linear", "log"]) {
                 if (scale === "log") {
-                    await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
+                    await userEvent.click(await setting("Log scale"));
                     await waitFor(() => expect(pointAt(group, day(0, 1))?.[1]).toBeLessThan(0.5));
+                    await closeMenu();
+                    group.focus();
                 }
                 // Jan 1 and Jul 1 lie far apart in value, where a uniform % move would differ in pixels on the Log scale.
                 const pixels = () => [day(0, 1), day(6, 1)].map((at) => actualPixel(group, at)[1] ?? 0);
@@ -322,11 +348,43 @@ describe("PredictiveCycles", () => {
             pointer(group)("mousemove", x, y);
             await waitFor(() => expect(within(group).getByText("Jul 1 · day 182")).toBeVisible());
             expect(within(group).getByText(formatReturn(moved))).toBeVisible();
-            expect(within(group).getByText("Drag to move, or use the arrow keys")).toBeVisible();
+            const hint = within(group).getByText("Drag to move, or use the arrow keys");
+            expect(hint).toBeVisible();
+            expect(hint.parentElement?.textContent).toContain("Actual");
 
             pointer(group)("mousemove", x, y + 60);
             await waitFor(() => expect(within(group).queryByText("Drag to move, or use the arrow keys")).not.toBeInTheDocument());
             expect(within(group).getByText("Jul 1 · day 182")).toBeVisible();
+        });
+
+        it("turns the chart tooltip off and keeps the drag hint on Actual", async () => {
+            const group = await open();
+            const tooltip = () => (getInstanceByDom(group)?.getOption().tooltip as { show: boolean }[])[0]?.show;
+            expect(tooltip()).toBe(true);
+
+            await userEvent.click(await setting("Tooltip"));
+            await waitFor(() => expect(tooltip()).toBe(false));
+            expect(memory.current.instances["1:0"]?.pick.tooltip).toBe(false);
+            await closeMenu();
+
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const [x, y] = actualPixel(group);
+            pointer(group)("mousemove", x, y);
+            await waitFor(() => expect(within(group).getByText("Drag to move, or use the arrow keys")).toBeVisible());
+            const panel = within(group).getByText("Drag to move, or use the arrow keys").parentElement;
+            expect(panel?.textContent).toBe("Drag to move, or use the arrow keys");
+            expect(panel?.innerHTML).not.toMatch(/Actual|%|mt-2/);
+
+            const visible = () =>
+                within(group)
+                    .queryAllByText(/ day /)
+                    .some((element) => element.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+            pointer(group)("mousemove", x, y + 60);
+            await waitFor(() => expect(visible()).toBe(false));
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            expect(visible()).toBe(false);
         });
 
         it("moves Actual with the mouse after the keys moved it, by whole days", async () => {
@@ -368,7 +426,7 @@ describe("PredictiveCycles", () => {
 
             await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
             await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
-            expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
+            expect(await resetDisabled()).toBe("true");
             expect(screen.queryByText(/^Actual moved/)).not.toBeInTheDocument();
             await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), 0.5]));
         });
@@ -605,7 +663,7 @@ describe("PredictiveCycles", () => {
                 within(panel)
                     .getAllByRole("listitem")
                     .map((item) => item.firstElementChild?.textContent)
-            ).toEqual(["Show or hide a line", "Change the years", "Move Actual", "Zoom", "Log scale", "Reset"]);
+            ).toEqual(["Show or hide a line", "Change the years", "Move Actual", "Zoom", "Settings"]);
             expect(within(panel).getAllByText("←")[0].tagName).toBe("KBD");
 
             await fireEvent.click(badge(/^Bull years/));
@@ -709,7 +767,6 @@ describe("PredictiveCycles", () => {
             );
         });
 
-        const resetButton = () => screen.getByRole("button", { name: "Reset" });
         const stored = () => memory.current.instances["1:0"]?.pick;
 
         /** Zooms the way the slider does, so the chart sends its `datazoom` event. */
@@ -731,13 +788,105 @@ describe("PredictiveCycles", () => {
 
         it("stores the Log scale", async () => {
             await open([asset]);
-            const toggle = screen.getByRole("button", { name: "Log scale" });
-            expect(toggle).toHaveAttribute("aria-pressed", "false");
+            const toggle = await setting("Log scale");
+            expect(toggle).toHaveAttribute("aria-checked", "false");
 
-            await fireEvent.click(toggle);
-            expect(toggle).toHaveAttribute("aria-pressed", "true");
+            await userEvent.click(toggle);
+            expect(toggle).toHaveAttribute("aria-checked", "true");
+            expect(screen.getByRole("menu", { name: "Settings" })).toBeInTheDocument();
             expect(stored()?.log).toBe(true);
             expect(JSON.parse(localStorage.getItem("tia-elements:predictive-cycles") ?? "null")).toEqual(memory.current);
+        });
+
+        it("opens the Settings menu from the cog before help, with the actions and the Show settings", async () => {
+            await open([btc]);
+            const trigger = screen.getByRole("button", { name: "Settings" });
+            const help = screen.getByRole("button", { name: "How to use this chart" });
+            expect(trigger.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+            expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+            const menu = await settings();
+            expect(trigger).toHaveAttribute("aria-expanded", "true");
+            expect(
+                within(menu)
+                    .getAllByRole("menuitem")
+                    .map((item) => item.textContent.trim())
+            ).toEqual([expect.stringMatching(/^Clear/), expect.stringMatching(/^Reset/)]);
+            expect(
+                within(menu)
+                    .getAllByRole("menuitemcheckbox")
+                    .map((item) => item.getAttribute("aria-checked"))
+            ).toEqual(["true", "true", "false"]);
+            expect(await setting("Tooltip")).toHaveAccessibleDescription("Values of the day under the pointer.");
+
+            await closeMenu();
+            expect(trigger).toHaveFocus();
+        });
+
+        it("clears every line but Actual and every year, keeping the drag, and Reset brings them back", async () => {
+            await open([btc]);
+            const group = await screen.findByRole("group", { name: /^Predictive Cycles chart/ });
+            group.focus();
+            await userEvent.keyboard("{ArrowRight}");
+            await screen.findByText("Actual moved +1 day, 0.00%", { selector: "[aria-live=polite]" });
+
+            await userEvent.click(await action("Clear"));
+            await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+            expect(chip("Actual")).toBePressed();
+            for (const name of ["All", "Y2 Midterm", "Bear", "Bull", "Halving"]) {
+                expect(chip(name)).not.toBePressed();
+            }
+            expect(badge(/^Bear years/)).toHaveAccessibleName("Bear years: 0 of 3 included. Edit years");
+            expect(badge(/^Bear years/)).toHaveTextContent("0/3");
+            await waitFor(() => expect(lastRequest()?.curves.map(({ id }) => id)).toEqual([0, 2, 3, 5, 7, 8]));
+            expect(screen.getByText("Actual moved +1 day, 0.00%", { selector: "[aria-live=polite]" })).toBeInTheDocument();
+            expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+            const year = await openYears(/^Bear years/, "Bear years");
+            expect(screen.getByText("0 of 3 included")).toBeInTheDocument();
+            expect(screen.queryByText("At least one year must stay included")).not.toBeInTheDocument();
+            await fireEvent.click(year("2018"));
+            await waitFor(() => expect(lastRequest()?.curves).toContainEqual({ id: 4, years: [2018] }));
+            await userEvent.keyboard("{Escape}");
+            await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+            await userEvent.click(await action("Reset"));
+            expect(chip("All")).toBePressed();
+            expect(badge(/^Bull years/)).toHaveTextContent("10/10");
+            await waitFor(() => expect(lastRequest()?.curves).toHaveLength(9));
+            expect(await resetDisabled()).toBe("true");
+        });
+
+        it("hides the axis labels, and keeps it", async () => {
+            await open([asset]);
+            const group = await screen.findByRole("group", { name: /^Predictive Cycles chart/ });
+            type Axis = { axisLabel: { show: boolean } };
+            const shows = () => {
+                const option = getInstanceByDom(group)?.getOption();
+                return [...(option?.xAxis as Axis[]), ...(option?.yAxis as Axis[])].map(({ axisLabel }) => axisLabel.show);
+            };
+            expect(shows()).toEqual([true, true]);
+
+            await userEvent.click(await setting("Axis labels"));
+            await waitFor(() => expect(shows()).toEqual([false, false]));
+            await userEvent.click(await setting("Log scale"));
+            await waitFor(() => expect(shows()).toEqual([false, false]));
+            expect(stored()).toMatchObject({ labels: false, log: true, tooltip: true });
+            cleanup();
+
+            await open([asset]);
+            expect(await setting("Axis labels")).toHaveAttribute("aria-checked", "false");
+            expect(await setting("Tooltip")).toHaveAttribute("aria-checked", "true");
+        });
+
+        it("shows the tooltip and the axis labels for a view stored before they existed", async () => {
+            const pick = { asset: "btc", baseYear: 2026, hidden: [], log: false, zoom: { start: 0, end: 100 } };
+            memory.set({ ...EMPTY_MEMORY, instances: { "1:0": { attributes: { asset: null, baseYear: 2026 }, pick } } });
+            await open([asset]);
+
+            expect(await setting("Tooltip")).toHaveAttribute("aria-checked", "true");
+            expect(await setting("Axis labels")).toHaveAttribute("aria-checked", "true");
         });
 
         it("stores the zoom after a pause, keeps it on a Base Year change and resets it on an asset change", async () => {
@@ -761,8 +910,8 @@ describe("PredictiveCycles", () => {
 
             await screen.findByRole("group", { name: "Predictive Cycles chart, ETH, Base Year 2024" });
             expect(chip("Bear")).not.toBePressed();
-            expect(screen.getByRole("button", { name: "Log scale" })).toHaveAttribute("aria-pressed", "true");
-            expect(resetButton()).toHaveAttribute("aria-disabled", "false");
+            expect(await setting("Log scale")).toHaveAttribute("aria-checked", "true");
+            expect(await resetDisabled()).toBe("false");
             cleanup();
 
             await open([asset, eth], { baseYear: 2025 });
@@ -770,27 +919,40 @@ describe("PredictiveCycles", () => {
             expect(memory.current.instances).toEqual({});
         });
 
-        it("resets curves, the asset's exclusions and the zoom, and keeps asset, Base Year and Log", async () => {
+        it("resets curves, the asset's exclusions and the zoom, and keeps asset, Base Year, Log, Tooltip and Axis labels", async () => {
             memory.set({ ...EMPTY_MEMORY, excluded: { btc: { 1: [2018] } } });
             await open([eth], { baseYear: 2025 });
-            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+            expect(await resetDisabled()).toBe("true");
 
-            await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
+            await userEvent.click(await setting("Log scale"));
+            await userEvent.click(await setting("Tooltip"));
+            await userEvent.click(await setting("Axis labels"));
+            await closeMenu();
             await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
-            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+            expect(await resetDisabled()).toBe("true");
 
             await fireEvent.click(chip("Actual"));
             const year = await openYears(/^Bear years/, "Bear years");
             await fireEvent.click(year("2018"));
             await zoomTo(20, 60);
-            expect(resetButton()).toHaveAttribute("aria-disabled", "false");
+            await userEvent.keyboard("{Escape}");
+            await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+            expect(await resetDisabled()).toBe("false");
 
-            await fireEvent.click(resetButton());
+            await userEvent.click(await action("Reset"));
             expect(chip("Actual")).toBePressed();
-            expect(year("2018")).toBePressed();
-            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+            expect(badge(/^Bear years/)).toHaveAccessibleName("Bear years: 3 of 3 included. Edit years");
+            expect(await resetDisabled()).toBe("true");
             expect(memory.current.excluded).toEqual({ btc: { 1: [2018] } });
-            expect(stored()).toEqual({ asset: "eth", baseYear: 2024, hidden: [], log: true, zoom: { start: 0, end: 100 } });
+            expect(stored()).toEqual({
+                asset: "eth",
+                baseYear: 2024,
+                hidden: [],
+                log: true,
+                tooltip: false,
+                labels: false,
+                zoom: { start: 0, end: 100 }
+            });
             await waitFor(() =>
                 expect(lastRequest()).toMatchObject({
                     base_year: 2024,
@@ -804,11 +966,11 @@ describe("PredictiveCycles", () => {
             await fireEvent.click(chip("All"));
             await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
             await userEvent.click(await screen.findByRole("option", { name: "Ethereum" }));
-            expect(resetButton()).toHaveAttribute("aria-disabled", "false");
+            expect(await resetDisabled()).toBe("false");
 
-            await fireEvent.click(resetButton());
+            await userEvent.click(await action("Reset"));
             expect(stored()?.hidden).toEqual([]);
-            expect(resetButton()).toHaveAttribute("aria-disabled", "true");
+            expect(await resetDisabled()).toBe("true");
         });
 
         it("shares year exclusions live with the other instances", async () => {

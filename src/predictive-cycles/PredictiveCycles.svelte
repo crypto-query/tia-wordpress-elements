@@ -50,13 +50,29 @@
 <script lang="ts">
     import { Axis, format, type ECharts, type ElementEvent } from "echarts/core";
     import { mergeProps } from "bits-ui";
-    import { Check, ChevronDown, ChevronLeft, ChevronRight, Lock, RotateCcw } from "lucide-svelte";
+    import {
+        Check,
+        ChevronDown,
+        ChevronLeft,
+        ChevronRight,
+        Eraser,
+        Lock,
+        MessageSquareText,
+        RotateCcw,
+        Settings,
+        Spline,
+        Type
+    } from "lucide-svelte";
     import { onMount, untrack } from "svelte";
     import { MediaQuery } from "svelte/reactivity";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
     import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
+    import DropdownMenu from "tia-design-system/ui/dropdown-menu/DropdownMenu.svelte";
+    import DropdownMenuGroup from "tia-design-system/ui/dropdown-menu/DropdownMenuGroup.svelte";
+    import DropdownMenuItem from "tia-design-system/ui/dropdown-menu/DropdownMenuItem.svelte";
+    import DropdownMenuSeparator from "tia-design-system/ui/dropdown-menu/DropdownMenuSeparator.svelte";
     import Chart from "tia-design-system/ui/chart/Chart.svelte";
     import { chartTheme, type ChartTheme } from "tia-design-system/ui/chart/chart-theme";
     import Kbd from "tia-design-system/ui/kbd/Kbd.svelte";
@@ -127,6 +143,8 @@
     // Names of the hidden curves, on every asset.
     let hidden = $state.raw<string[]>([]);
     let log = $state(false);
+    let showTooltip = $state(true);
+    let showLabels = $state(true);
     let zoom = $state.raw<Zoom>(FULL_ZOOM);
     let shown = $state.raw<PredictiveCycles | null>(null);
     let request = $state.raw<AbortController | null>(null);
@@ -169,7 +187,9 @@
         !hidden.includes(ACTUAL) &&
             (shown?.data.curves.some(({ name, points }) => name === ACTUAL && points.some(([, value]) => value !== null)) ?? false)
     );
-    const option = $derived(theme && shown ? chartOption(theme, shown, hidden, log, zoom, drag, focused && draggable, yRange) : null);
+    const option = $derived(
+        theme && shown ? chartOption(theme, shown, hidden, log, showTooltip, showLabels, zoom, drag, focused && draggable, yRange) : null
+    );
     const noneShown = $derived(selection !== null && selection.asset.curves.every(({ name }) => hidden.includes(name)));
 
     // Every pick, a year chip here or in another instance, and Reset change the request; refetch debounces quick changes.
@@ -256,7 +276,8 @@
                         emphasise(ACTUAL, true);
                     },
                     onmouseout: () => emphasise(ACTUAL, false),
-                    tooltip: { formatter: gripTooltip },
+                    // `show` overrides the chart tooltip's, so the Tooltip setting leaves the drag hint on.
+                    tooltip: { show: true, formatter: gripTooltip },
                     ondragstart: startGrab,
                     ondrag: moveGrab,
                     ondragend: endGrab
@@ -268,8 +289,12 @@
     /**
      * The value tooltip of the day under the pointer, with the drag hint as its last line. The hint shares the panel
      * because ECharts moves its tooltip around the pointer, so a second panel there would sometimes lie under it.
+     * With the Tooltip setting off, only the hint, even mid-grab: ECharts draws an empty box for "".
      */
     function gripTooltip(): string {
+        if (!showTooltip) {
+            return `<div class="text-foreground-muted">Drag to move, or use the arrow keys</div>`;
+        }
         const at: unknown = chart?.convertFromPixel({ xAxisIndex: 0 }, gripX);
         if (!shown || typeof at !== "number") {
             return "";
@@ -382,6 +407,8 @@
         shown: PredictiveCycles,
         hidden: string[],
         log: boolean,
+        showTooltip: boolean,
+        showLabels: boolean,
         zoom: Zoom,
         drag: Drag,
         focused: boolean,
@@ -394,7 +421,7 @@
         const empty = curves.every(({ name }) => hidden.includes(name));
         const drawn = curves.flatMap((curve, index) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[index] }]));
         const ticks = monthStarts(data.base_year);
-        const label = theme.axis.axisLabel;
+        const label = { ...theme.axis.axisLabel, show: showLabels };
         const helper: LineSeriesOption = { type: "line", data: [], silent: true };
         if (cutoff && zone !== "none") {
             const from = zone === "before" ? firstAt : cutoff.at;
@@ -403,7 +430,7 @@
                 itemStyle: { color: theme.zone },
                 // Rotated 90° about its anchor: align "right" ends the text at the anchor near the top,
                 // verticalAlign "top" puts its height right of the anchor, so it clears the line.
-                label: { ...label, position: [4, 8], rotate: 90, align: "right", verticalAlign: "top" },
+                label: { ...theme.axis.axisLabel, position: [4, 8], rotate: 90, align: "right", verticalAlign: "top" },
                 data: [[{ name: zoneLabel(cutoff), xAxis: from }, { xAxis: lastAt }]]
             };
             if (zone === "inside") {
@@ -424,7 +451,7 @@
             grid: GRID,
             tooltip: {
                 ...theme.tooltip,
-                show: !empty,
+                show: showTooltip && !empty,
                 trigger: "axis",
                 // The cut-off already draws a dashed line; the pointer draws none.
                 axisPointer: { type: "none" },
@@ -465,7 +492,8 @@
                 ? logAxis(
                       theme,
                       drawn.map(({ curve }) => curve),
-                      yRange
+                      yRange,
+                      showLabels
                   )
                 : { ...theme.axis, type: "value", ...yRange, axisLabel: { ...label, formatter: "{value}%" } },
             series: [
@@ -501,7 +529,8 @@
     function logAxis(
         theme: ChartTheme,
         curves: PredictiveCycles["data"]["curves"],
-        yRange: { min: number; max: number } | null
+        yRange: { min: number; max: number } | null,
+        showLabels: boolean
     ): Option["yAxis"] {
         const values = curves.flatMap(({ points }) => points.flatMap(([, value]) => (value === null ? [] : [value])));
         const ticks = asinhTicks(Math.min(0, ...values), Math.max(0, ...values)).map((value) => Math.asinh(value));
@@ -511,7 +540,12 @@
             min: yRange?.min ?? ticks[0],
             max: yRange?.max ?? ticks[ticks.length - 1],
             axisTick: { ...theme.axis.axisTick, customValues: ticks },
-            axisLabel: { ...theme.axis.axisLabel, customValues: ticks, formatter: (value: number) => `${Math.round(Math.sinh(value))}%` }
+            axisLabel: {
+                ...theme.axis.axisLabel,
+                show: showLabels,
+                customValues: ticks,
+                formatter: (value: number) => `${Math.round(Math.sinh(value))}%`
+            }
         };
     }
 
@@ -525,7 +559,15 @@
         if (instance === null || !selection) {
             return;
         }
-        const pick = { asset: selection.asset.id, baseYear: selection.baseYear, hidden, log, zoom };
+        const pick = {
+            asset: selection.asset.id,
+            baseYear: selection.baseYear,
+            hidden,
+            log,
+            tooltip: showTooltip,
+            labels: showLabels,
+            zoom
+        };
         const entry = { attributes: normalise(attributes, ATTRIBUTE_KEYS), pick };
         memory.set({ ...memory.current, instances: { ...memory.current.instances, [instance]: entry } });
     }
@@ -542,6 +584,8 @@
             const view = restore(attributes, entry, assets, new Date());
             if (view) {
                 ({ selection, hidden, log, zoom } = view);
+                showTooltip = view.tooltip;
+                showLabels = view.labels;
             }
         } catch (error) {
             fail(error, loadAssets);
@@ -668,6 +712,18 @@
         }
     }
 
+    /** Shows only Actual and excludes every year of the asset; the drag, zoom and Show settings stay. */
+    function clear() {
+        if (!selection) {
+            return;
+        }
+        const { id, curves } = selection.asset;
+        hidden = [...new Set([...hidden, ...curves.map(({ name }) => name)])].filter((name) => name !== ACTUAL);
+        const none = Object.fromEntries(curves.flatMap((curve) => (curve.years ? [[curve.id, curve.years]] : [])));
+        store.set({ ...store.current, excluded: { ...store.current.excluded, [id]: none } });
+        remember();
+    }
+
     function reset() {
         if (!selection || !resettable) {
             return;
@@ -789,7 +845,10 @@
             {/if}
         {/each}
     </div>
-    <p class="mt-1 border-t border-border-muted pt-2 text-2xs text-foreground-subtle">At least one year must stay included</p>
+    <!-- Clear in the Settings menu excludes every year; the chips themselves keep one. -->
+    {#if count.included > 0}
+        <p class="mt-1 border-t border-border-muted pt-2 text-2xs text-foreground-subtle">At least one year must stay included</p>
+    {/if}
 {/snippet}
 
 {#snippet curveChip(curve: Curve, slot: number, baseYear: number)}
@@ -894,12 +953,11 @@
         portalTarget={root}
         bind:open={() => openPanel === "help", (open) => setPanel("help", open)}>
         {#snippet trigger({ props })}
-            <!-- Outside the "Curves" group, last in the row: pushed to the right end, or scrolled to on a narrow card. -->
             <button
                 {...props}
                 type="button"
                 aria-label="How to use this chart"
-                class="ml-auto grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-sm font-semibold text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background pointer-coarse:size-11">
+                class="grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-sm font-semibold text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background pointer-coarse:size-11">
                 ?
             </button>
         {/snippet}
@@ -926,13 +984,68 @@
                 {/if}
             </li>
             {@render helpItem("Zoom", "Drag the handles of the slider under the chart.")}
-            {@render helpItem("Log scale", "Makes large moves easier to compare.")}
             {@render helpItem(
-                "Reset",
-                "Shows all lines and includes all years again. It does not change the asset, the Base Year or Log scale."
+                "Settings",
+                "The cog holds Clear, Reset, Tooltip, Axis labels and Log scale. Reset keeps the asset, the Base Year and what Show sets."
             )}
         </ul>
     </Popover>
+{/snippet}
+
+{#snippet settings()}
+    <DropdownMenu aria-label="Settings" portalTarget={root}>
+        {#snippet trigger({ props })}
+            <button
+                {...props}
+                type="button"
+                aria-label="Settings"
+                class="grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background pointer-coarse:size-11">
+                <Settings class="size-4" aria-hidden="true" />
+            </button>
+        {/snippet}
+        <DropdownMenuGroup heading="Actions">
+            <DropdownMenuItem label="Clear" description="Hides every line except Actual and excludes all years." onSelect={clear}>
+                {#snippet leadingIcon()}<Eraser />{/snippet}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                label="Reset"
+                description="Shows all lines and years, full zoom, Actual back in place."
+                disabled={!resettable}
+                onSelect={reset}>
+                {#snippet leadingIcon()}<RotateCcw />{/snippet}
+            </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup heading="Show">
+            <DropdownMenuItem
+                label="Tooltip"
+                description="Values of the day under the pointer."
+                bind:checked={
+                    () => showTooltip,
+                    (on) => {
+                        showTooltip = on;
+                        remember();
+                    }
+                }>
+                {#snippet leadingIcon()}<MessageSquareText />{/snippet}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                label="Axis labels"
+                description="Months and % values on the axes."
+                bind:checked={
+                    () => showLabels,
+                    (on) => {
+                        showLabels = on;
+                        remember();
+                    }
+                }>
+                {#snippet leadingIcon()}<Type />{/snippet}
+            </DropdownMenuItem>
+            <DropdownMenuItem label="Log scale" description="Makes large moves easier to compare." bind:checked={() => log, pickLog}>
+                {#snippet leadingIcon()}<Spline />{/snippet}
+            </DropdownMenuItem>
+        </DropdownMenuGroup>
+    </DropdownMenu>
 {/snippet}
 
 <!-- Positioned, so panels portalled here are placed from it; floating-ui misplaces them by the admin bar's html margin otherwise. -->
@@ -967,22 +1080,6 @@
                             {@render stepper(1, picked)}
                         </div>
                     </div>
-                    <div class="ml-auto flex h-10 items-center gap-2 pointer-coarse:h-11">
-                        <Toggle variant="outline" size="md" class="rounded-full" bind:pressed={() => log, pickLog}>Log scale</Toggle>
-                        <!-- Below 24rem the row no longer fits on one line, so Reset keeps only its icon. -->
-                        <Button
-                            variant="outline-fill"
-                            size="sm"
-                            class="@max-sm:w-9 @max-sm:px-0"
-                            aria-label="Reset"
-                            aria-disabled={!resettable}
-                            onclick={reset}>
-                            {#snippet leadingIcon()}
-                                <RotateCcw class="size-4" aria-hidden="true" />
-                            {/snippet}
-                            <span class="@max-sm:sr-only">Reset</span>
-                        </Button>
-                    </div>
                 </div>
             {/if}
             <div class="flex flex-col px-4 pt-4 pb-5 @lg:px-5">
@@ -992,25 +1089,31 @@
                 {#if selection}
                     {@const picked = selection}
                     {@const slots = curveSlots(picked.asset.curves.map(({ name }) => name))}
-                    <!-- Spans the card's full width, so the fade sits at the card edge; the padding keeps focus rings unclipped. -->
-                    <div
-                        {@attach edgeFade}
-                        class={[
-                            "-mx-4 mb-1 flex scroll-px-10 scrollbar-none items-center gap-1 overflow-x-auto px-4 py-1 @lg:-mx-5 @lg:px-5 [&::-webkit-scrollbar]:hidden",
-                            fade.left && "mask-l-from-[calc(100%-1.5rem)]",
-                            fade.right && "mask-r-from-[calc(100%-2.25rem)]"
-                        ]}>
-                        <div role="group" aria-label="Curves" class="flex shrink-0 items-center gap-1">
-                            {#each chipGroups(picked.asset.curves) as group, index (group[0].id)}
-                                {#if index > 0}
-                                    <span aria-hidden="true" class="mx-0.75 h-5 w-px shrink-0 bg-border"></span>
-                                {/if}
-                                {#each group as curve (curve.id)}
-                                    {@render curveChip(curve, slots[picked.asset.curves.indexOf(curve)], picked.baseYear)}
+                    <!-- Spans the card's full width, so the left fade sits at the card edge; Settings and help stay pinned at the right. -->
+                    <div class="-mx-4 mb-1 flex items-center gap-1 @lg:-mx-5">
+                        <!-- The padding keeps focus rings unclipped. -->
+                        <div
+                            {@attach edgeFade}
+                            class={[
+                                "flex min-w-0 flex-1 scroll-px-10 scrollbar-none items-center overflow-x-auto py-1 pr-1 pl-4 @lg:pl-5 [&::-webkit-scrollbar]:hidden",
+                                fade.left && "mask-l-from-[calc(100%-1.5rem)]",
+                                fade.right && "mask-r-from-[calc(100%-2.25rem)]"
+                            ]}>
+                            <div role="group" aria-label="Curves" class="flex shrink-0 items-center gap-1">
+                                {#each chipGroups(picked.asset.curves) as group, index (group[0].id)}
+                                    {#if index > 0}
+                                        <span aria-hidden="true" class="mx-0.75 h-5 w-px shrink-0 bg-border"></span>
+                                    {/if}
+                                    {#each group as curve (curve.id)}
+                                        {@render curveChip(curve, slots[picked.asset.curves.indexOf(curve)], picked.baseYear)}
+                                    {/each}
                                 {/each}
-                            {/each}
+                            </div>
                         </div>
-                        {@render help()}
+                        <div class="flex shrink-0 items-center gap-1 py-1 pr-4 @lg:pr-5">
+                            {@render settings()}
+                            {@render help()}
+                        </div>
                     </div>
                 {/if}
                 {#if failure}

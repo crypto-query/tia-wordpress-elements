@@ -26,14 +26,15 @@ export function stepYear(years: number[], year: number, step: -1 | 1): number | 
 /** Excluded years (or offsets) per curve id. */
 export type Exclusions = Record<number, number[]>;
 
-/** Every curve of the asset; a year-curve sends only its included years. */
+/** Every curve of the asset; a year-curve sends only its included years, and is left out with none. */
 export function dataRequest({ asset, baseYear }: Selection, excluded: Exclusions): DataRequest {
     return {
         id: asset.id,
         base_year: baseYear,
-        curves: asset.curves.map(({ id, years }) =>
-            years ? { id, years: years.filter((year) => !(excluded[id] ?? []).includes(year)) } : { id }
-        )
+        curves: asset.curves.flatMap(({ id, years }) => {
+            const included = years?.filter((year) => !(excluded[id] ?? []).includes(year));
+            return !included ? [{ id }] : included.length > 0 ? [{ id, years: included }] : [];
+        })
     };
 }
 
@@ -209,8 +210,19 @@ export type Zoom = { start: number; end: number };
 
 export const FULL_ZOOM: Zoom = { start: 0, end: 100 };
 
-/** One instance's view. Curves are hidden by name, so a hidden curve stays hidden on every asset that has it. */
-export type InstancePick = { asset: string; baseYear: number; hidden: string[]; log: boolean; zoom: Zoom };
+/**
+ * One instance's view. Curves are hidden by name, so a hidden curve stays hidden on every asset that has it.
+ * `tooltip` and `labels` came later, so a stored pick may lack them; they default to on.
+ */
+export type InstancePick = {
+    asset: string;
+    baseYear: number;
+    hidden: string[];
+    log: boolean;
+    tooltip?: boolean;
+    labels?: boolean;
+    zoom: Zoom;
+};
 
 /** What `localStorage` keeps: year exclusions per asset for every instance, and each instance's view. */
 export type Memory = { excluded: Record<string, Exclusions>; instances: Record<string, InstanceEntry<InstancePick>> };
@@ -228,6 +240,8 @@ const isPick = (value: unknown) =>
     Array.isArray(value.hidden) &&
     value.hidden.every((name) => typeof name === "string") &&
     typeof value.log === "boolean" &&
+    ["undefined", "boolean"].includes(typeof value.tooltip) &&
+    ["undefined", "boolean"].includes(typeof value.labels) &&
     isObject(value.zoom) &&
     Number.isFinite(value.zoom.start) &&
     Number.isFinite(value.zoom.end);
@@ -240,7 +254,7 @@ const isEntry = (value: unknown) =>
 export const isMemory = (value: unknown): value is Memory =>
     isObject(value) && isRecordOf(value.excluded, (entry) => isRecordOf(entry, isIntegers)) && isRecordOf(value.instances, isEntry);
 
-export type View = { selection: Selection; hidden: string[]; log: boolean; zoom: Zoom };
+export type View = { selection: Selection; hidden: string[]; log: boolean; tooltip: boolean; labels: boolean; zoom: Zoom };
 
 /**
  * The view to start with: the stored one unless the attributes changed. A stored asset that is gone falls back to
@@ -254,7 +268,7 @@ export function restore(
 ): View | null {
     const pick = storedPick(entry, attributes, ATTRIBUTE_KEYS);
     const asset = pick && assets.find(({ id }) => id === pick.asset);
-    const kept = { hidden: pick?.hidden ?? [], log: pick?.log ?? false };
+    const kept = { hidden: pick?.hidden ?? [], log: pick?.log ?? false, tooltip: pick?.tooltip ?? true, labels: pick?.labels ?? true };
     if (!pick || !asset) {
         const selection = pickSelection(attributes, assets, now);
         return selection && { selection, ...kept, zoom: FULL_ZOOM };
