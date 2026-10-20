@@ -137,11 +137,29 @@ describe("PredictiveCycles", () => {
         type Series = { name: string; data: [number, number | null][]; lineStyle: { width: number } };
         const actualSeries = (group: HTMLElement) =>
             (getInstanceByDom(group)?.getOption().series as Series[]).find(({ name }) => name === "Actual");
+        const pointAt = (group: HTMLElement, at: number) => actualSeries(group)?.data.find(([x]) => x === at);
         const announced = (text: string) => screen.findByText(text, { selector: "[aria-live=polite]" });
+        // A drag resamples Actual on its own dates, so these curves have a point every day: straight from Jan 1 to Jul 1.
+        const ramp = (from: number, to: number) =>
+            Array.from({ length: 365 }, (_, index): [number, number | null] => [
+                day(0, 1 + index),
+                index > 181 ? null : from + ((to - from) * index) / 181
+            ]);
+        const daily: Data = {
+            data: {
+                id: "btc",
+                base_year: 2026,
+                curves: [
+                    { id: 0, name: "Actual", points: ramp(0.5, 4) },
+                    { id: 1, name: "All", points: ramp(0, 2) }
+                ]
+            },
+            cutoff: null
+        };
 
         async function open() {
             vi.mocked(getAssets).mockResolvedValue([asset]);
-            vi.mocked(getPredictiveCycles).mockResolvedValue(data(null));
+            vi.mocked(getPredictiveCycles).mockResolvedValue(daily);
             render(PredictiveCycles, props);
             return chart();
         }
@@ -168,14 +186,13 @@ describe("PredictiveCycles", () => {
 
             await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}{ArrowUp}{ArrowUp}{ArrowDown}");
             await announced("Actual moved +3 days, +1.00%");
-            expect(actualSeries(group)?.data.slice(0, 2)).toEqual([
-                [day(0, 4), 1.5],
-                [day(6, 4), 5]
-            ]);
-            expect(group).toHaveAccessibleDescription("Jul 1: Actual +4.00%, All +2.00%.");
+            expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), null]);
+            expect(pointAt(group, day(0, 4))).toEqual([day(0, 4), 1.5]);
+            expect(pointAt(group, day(6, 4))).toEqual([day(6, 4), 5]);
+            expect(group).toHaveAccessibleDescription("Jul 4: Actual +5.00%.");
 
             await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
-            await waitFor(() => expect(actualSeries(group)?.data[0]).toEqual([day(0, 4), Math.asinh(1.5)]));
+            await waitFor(() => expect(pointAt(group, day(0, 4))).toEqual([day(0, 4), Math.asinh(1.5)]));
 
             group.blur();
             await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(3));
@@ -193,7 +210,7 @@ describe("PredictiveCycles", () => {
         }
 
         const actualPixel = (group: HTMLElement) =>
-            (getInstanceByDom(group)?.convertToPixel({ gridIndex: 0 }, actualSeries(group)?.data[1] ?? []) ?? []) as number[];
+            (getInstanceByDom(group)?.convertToPixel({ gridIndex: 0 }, pointAt(group, day(6, 1)) ?? []) ?? []) as number[];
 
         /** Presses on Actual's Jul 1 point, moves the pointer by `dx`, `dy` pixels and lets go. */
         async function dragActual(group: HTMLElement, dx: number, dy: number) {
@@ -207,7 +224,7 @@ describe("PredictiveCycles", () => {
             send("mouseup", x + dx, y + dy);
         }
 
-        it("shows Actual's real value and the drag hint over its moved line, and drops the hint off the line", async () => {
+        it("shows Actual's moved value and the drag hint over its moved line, and drops the hint off the line", async () => {
             const group = await open();
             // The test page has no Tailwind, so the chart gets its size here.
             group.style.height = "360px";
@@ -219,7 +236,7 @@ describe("PredictiveCycles", () => {
             const [x, y] = actualPixel(group);
             pointer(group)("mousemove", x, y);
             await waitFor(() => expect(within(group).getByText("Jul 1 · day 182")).toBeVisible());
-            expect(within(group).getByText("+4.00%")).toBeVisible();
+            expect(within(group).getByText("+5.00%")).toBeVisible();
             expect(within(group).getByText("Drag to move, or use the arrow keys")).toBeVisible();
 
             pointer(group)("mousemove", x, y + 60);
@@ -240,7 +257,8 @@ describe("PredictiveCycles", () => {
             const text = (await screen.findByText(/^Actual moved \+\d+ days, \+5\.00%$/, { selector: "[aria-live=polite]" })).textContent;
             const days = Number(/\+(\d+) days/.exec(text ?? "")?.[1]);
             expect(days).toBeGreaterThan(10);
-            expect(actualSeries(group)?.data[0]).toEqual([day(0, 1 + days), 5.5]);
+            expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), null]);
+            expect(pointAt(group, day(0, 1 + days))).toEqual([day(0, 1 + days), 5.5]);
         });
 
         it("does nothing while Actual is hidden", async () => {

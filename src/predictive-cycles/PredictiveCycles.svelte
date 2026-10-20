@@ -269,7 +269,7 @@
         if (!shown || typeof at !== "number") {
             return "";
         }
-        const values = tooltipHtml(shown.data.curves, hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
+        const values = tooltipHtml(dragCurves(shown.data.curves, drag), hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
         return grab ? values : `${values}<div class="mt-2 text-foreground-muted">Drag to move, or use the arrow keys</div>`;
     }
 
@@ -384,7 +384,7 @@
                 axisPointer: { type: "none" },
                 formatter: (params) => {
                     const [first] = [params].flat();
-                    return first && "axisValue" in first ? tooltipHtml(data.curves, hidden, Number(first.axisValue)) : "";
+                    return first && "axisValue" in first ? tooltipHtml(curves, hidden, Number(first.axisValue)) : "";
                 }
             },
             dataZoom: [
@@ -991,7 +991,9 @@
                             </p>
                         {/if}
                     </div>
-                    <p id="{uid}-summary" class="sr-only">{chartSummary(shown.data.curves, hidden, shown.data.base_year)}</p>
+                    <p id="{uid}-summary" class="sr-only">
+                        {chartSummary(dragCurves(shown.data.curves, drag), hidden, shown.data.base_year)}
+                    </p>
                     <p aria-live="polite" class="sr-only">{announcement}</p>
                 {/if}
             </div>

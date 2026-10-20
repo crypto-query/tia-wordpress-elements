@@ -16,6 +16,7 @@ import {
     dragCurves,
     isMemory,
     monthStarts,
+    NO_DRAG,
     notice,
     pickSelection,
     restore,
@@ -25,6 +26,7 @@ import {
     yearCount,
     yearsTitle,
     zoneLabel,
+    type Drag,
     type InstancePick
 } from "./transforms";
 
@@ -570,18 +572,54 @@ describe("dragCurves", () => {
         { id: 1, name: "All", points: [[day(1), 2]] }
     ];
 
-    it("moves only Actual, by whole days and by percent, and keeps its nulls", () => {
-        expect(dragCurves(curves, { days: 2, percent: -1.5 })).toEqual([
+    const actual = (drag: Drag) => dragCurves(curves, drag)[0]?.points;
+
+    it("returns equal data with no drag", () => {
+        expect(dragCurves(curves, NO_DRAG)).toEqual(curves);
+    });
+
+    it("shifts Actual's values right on its own dates, with nulls where nothing lands", () => {
+        expect(actual({ days: 1, percent: 0 })).toEqual([
+            [day(1), null],
+            [day(2), 1],
+            [day(3), 0]
+        ]);
+    });
+
+    it("shifts Actual's values left, with trailing nulls, and adds the percent", () => {
+        expect(actual({ days: -1, percent: -1.5 })).toEqual([
+            [day(1), -1.5],
+            [day(2), null],
+            [day(3), null]
+        ]);
+    });
+
+    it("drops values moved past the dates and leaves other curves untouched", () => {
+        const dragged = dragCurves(curves, { days: 5, percent: 2 });
+        expect(dragged[0]?.points).toEqual([
+            [day(1), null],
+            [day(2), null],
+            [day(3), null]
+        ]);
+        expect(dragged[1]).toBe(curves[1]);
+    });
+
+    it("fills a date missing from the grid with the last value before it", () => {
+        const gapped: CurveData[] = [
             {
                 id: 0,
                 name: "Actual",
                 points: [
-                    [day(3), -0.5],
-                    [day(4), -1.5],
-                    [day(5), null]
+                    [day(1), 1],
+                    [day(2), 2],
+                    [day(4), 4]
                 ]
-            },
-            { id: 1, name: "All", points: [[day(1), 2]] }
+            }
+        ];
+        expect(dragCurves(gapped, { days: 1, percent: 0.5 })[0]?.points).toEqual([
+            [day(1), null],
+            [day(2), 1.5],
+            [day(4), 2.5]
         ]);
     });
 });
