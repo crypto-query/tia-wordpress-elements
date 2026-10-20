@@ -3,6 +3,7 @@ import { userEvent } from "@vitest/browser/context";
 import { getInstanceByDom } from "echarts/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../shared/api";
+import { formatReturn } from "../shared/format";
 import { getAssets, getPredictiveCycles, type Asset, type Cutoff, type DataRequest, type PredictiveCycles as Data } from "./api";
 import PredictiveCycles, { memory } from "./PredictiveCycles.svelte";
 import { EMPTY_MEMORY } from "./transforms";
@@ -177,22 +178,22 @@ describe("PredictiveCycles", () => {
             expect(screen.queryByRole("table")).not.toBeInTheDocument();
         });
 
-        it("moves Actual a day or a percent per arrow key, draws it thicker with focus, and Reset clears it", async () => {
+        it("moves Actual a day per left or right key, draws it thicker with focus, and Reset clears it", async () => {
             const group = await open();
             expect(actualSeries(group)?.lineStyle.width).toBe(3);
             group.focus();
             await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(4));
             expect(screen.getByRole("button", { name: "Reset" })).toHaveAttribute("aria-disabled", "true");
 
-            await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}{ArrowUp}{ArrowUp}{ArrowDown}");
-            await announced("Actual moved +3 days, +1.00%");
+            await userEvent.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowLeft}");
+            await announced("Actual moved +3 days, 0.00%");
             expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), null]);
-            expect(pointAt(group, day(0, 4))).toEqual([day(0, 4), 1.5]);
-            expect(pointAt(group, day(6, 4))).toEqual([day(6, 4), 5]);
-            expect(group).toHaveAccessibleDescription("Jul 4: Actual +5.00%.");
+            expect(pointAt(group, day(0, 4))).toEqual([day(0, 4), 0.5]);
+            expect(pointAt(group, day(6, 4))).toEqual([day(6, 4), 4]);
+            expect(group).toHaveAccessibleDescription("Jul 4: Actual +4.00%.");
 
             await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
-            await waitFor(() => expect(pointAt(group, day(0, 4))).toEqual([day(0, 4), Math.asinh(1.5)]));
+            await waitFor(() => expect(pointAt(group, day(0, 4))).toEqual([day(0, 4), Math.asinh(0.5)]));
 
             group.blur();
             await waitFor(() => expect(actualSeries(group)?.lineStyle.width).toBe(3));
@@ -224,19 +225,46 @@ describe("PredictiveCycles", () => {
             send("mouseup", x + dx, y + dy);
         }
 
+        it("moves Actual up or down per key by as many pixels as a day moves it, on both scales", async () => {
+            const group = await open();
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            group.focus();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const echart = getInstanceByDom(group);
+            const dayPixels =
+                (echart?.convertToPixel({ xAxisIndex: 0 }, day(0, 2)) ?? 0) - (echart?.convertToPixel({ xAxisIndex: 0 }, day(0, 1)) ?? 0);
+            expect(dayPixels).toBeGreaterThan(1);
+
+            // Down first: a move above the top tick would rescale the linear axis under the measurement.
+            for (const scale of ["linear", "log"]) {
+                if (scale === "log") {
+                    await fireEvent.click(screen.getByRole("button", { name: "Log scale" }));
+                    await waitFor(() => expect(pointAt(group, day(0, 1))?.[1]).toBeLessThan(0.5));
+                }
+                const [, before] = actualPixel(group);
+                await userEvent.keyboard("{ArrowDown}");
+                await waitFor(() => expect(actualPixel(group)[1] - before).toBeCloseTo(dayPixels, 1));
+                await userEvent.keyboard("{ArrowUp}");
+                await waitFor(() => expect(actualPixel(group)[1]).toBeCloseTo(before, 1));
+            }
+        });
+
         it("shows Actual's moved value and the drag hint over its moved line, and drops the hint off the line", async () => {
             const group = await open();
             // The test page has no Tailwind, so the chart gets its size here.
             group.style.height = "360px";
             group.focus();
             await userEvent.keyboard("{ArrowUp}");
-            await announced("Actual moved 0 days, +1.00%");
+            await screen.findByText(/^Actual moved 0 days, \+\d+\.\d\d%$/, { selector: "[aria-live=polite]" });
             await new Promise((resolve) => setTimeout(resolve, 100));
+            const moved = pointAt(group, day(6, 1))?.[1] ?? null;
+            expect(moved).toBeGreaterThan(4);
 
             const [x, y] = actualPixel(group);
             pointer(group)("mousemove", x, y);
             await waitFor(() => expect(within(group).getByText("Jul 1 · day 182")).toBeVisible());
-            expect(within(group).getByText("+5.00%")).toBeVisible();
+            expect(within(group).getByText(formatReturn(moved))).toBeVisible();
             expect(within(group).getByText("Drag to move, or use the arrow keys")).toBeVisible();
 
             pointer(group)("mousemove", x, y + 60);
@@ -250,15 +278,18 @@ describe("PredictiveCycles", () => {
             group.style.height = "360px";
             group.focus();
             await userEvent.keyboard("{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}{ArrowUp}");
-            await announced("Actual moved 0 days, +5.00%");
             await new Promise((resolve) => setTimeout(resolve, 100));
+            const moved = (pointAt(group, day(6, 1))?.[1] ?? 0) - 4;
+            expect(moved).toBeGreaterThan(0);
+            await announced(`Actual moved 0 days, ${formatReturn(moved)}`);
 
             await dragActual(group, 60, 0);
-            const text = (await screen.findByText(/^Actual moved \+\d+ days, \+5\.00%$/, { selector: "[aria-live=polite]" })).textContent;
+            const text = (await screen.findByText(/^Actual moved \+\d+ days, /, { selector: "[aria-live=polite]" })).textContent;
+            expect(text).toMatch(new RegExp(`, \\${formatReturn(moved)}$`));
             const days = Number(/\+(\d+) days/.exec(text ?? "")?.[1]);
             expect(days).toBeGreaterThan(10);
             expect(actualSeries(group)?.data[0]).toEqual([day(0, 1), null]);
-            expect(pointAt(group, day(0, 1 + days))).toEqual([day(0, 1 + days), 5.5]);
+            expect(pointAt(group, day(0, 1 + days))?.[1]).toBeCloseTo(0.5 + moved);
         });
 
         it("does nothing while Actual is hidden", async () => {
@@ -275,8 +306,8 @@ describe("PredictiveCycles", () => {
         it("clears the drag on a Base Year change", async () => {
             const group = await open();
             group.focus();
-            await userEvent.keyboard("{ArrowUp}");
-            await announced("Actual moved 0 days, +1.00%");
+            await userEvent.keyboard("{ArrowRight}");
+            await announced("Actual moved +1 day, 0.00%");
 
             await fireEvent.click(screen.getByRole("button", { name: "Older Base Year" }));
             await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));

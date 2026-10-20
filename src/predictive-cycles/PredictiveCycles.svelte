@@ -108,6 +108,7 @@
     let { attributes, card, instance }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
 
     const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    // `percent` is the direction only: `percentStep` sizes it.
     const KEY_STEPS = new Map<string, Drag>([
         ["ArrowLeft", { days: -1, percent: 0 }],
         ["ArrowRight", { days: 1, percent: 0 }],
@@ -315,8 +316,25 @@
             return;
         }
         event.preventDefault();
-        drag = { days: drag.days + step.days, percent: drag.percent + step.percent };
+        drag = { days: drag.days + step.days, percent: drag.percent + (step.percent && percentStep(step.percent)) };
         announcement = dragAnnouncement(drag);
+    }
+
+    /** The real % that moves Actual's last point as many pixels as one day on the x axis, so up and down match left and right. */
+    function percentStep(sign: number): number {
+        const echart = chart;
+        const anchor =
+            shown &&
+            dragCurves(shown.data.curves, drag)
+                .find(({ name }) => name === ACTUAL)
+                ?.points.findLast(([, value]) => value !== null)?.[1];
+        if (!echart || typeof anchor !== "number") {
+            return sign;
+        }
+        const real = (value: number) => (log ? Math.sinh(value) : value);
+        const day = echart.convertToPixel({ xAxisIndex: 0 }, firstAt + DAY) - echart.convertToPixel({ xAxisIndex: 0 }, firstAt);
+        const y = echart.convertToPixel({ yAxisIndex: 0 }, log ? Math.asinh(anchor) : anchor);
+        return real(echart.convertFromPixel({ yAxisIndex: 0 }, y - sign * day)) - anchor;
     }
 
     function tooltipHtml(curves: CurveData[], hidden: string[], at: number): string {
