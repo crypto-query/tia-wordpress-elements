@@ -1,0 +1,30 @@
+{
+    "$schema": "https://schemas.wp.org/trunk/block.json",
+    "apiVersion": 3,
+    "name": "tia-elements/decennial-cycles",
+    "version": "0.1.0",
+    "title": "Decennial Cycles",
+    "category": "widgets",
+    "description": "The 10-Year Cycle of an asset across the Decade Years.",
+    "textdomain": "tia-wordpress-elements",
+    "attributes": {
+        "asset": { "type": "string" },
+        "align": { "type": "string", "default": "wide" }
+    },
+    "supports": {
+        "html": false,
+        "align": ["wide", "full"],
+        "anchor": true,
+        "className": true,
+        "color": { "text": true, "background": true, "link": true },
+        "typography": { "fontSize": true, "lineHeight": true, "__experimentalFontFamily": true },
+        "spacing": { "margin": true, "padding": true },
+        "__experimentalBorder": { "color": true, "radius": true, "style": true, "width": true },
+        "shadow": true,
+        "dimensions": { "minHeight": true }
+    },
+    "editorScript": "file:./edit.ts",
+    "viewScript": "file:./view.ts",
+    "style": "tia-elements-design-system",
+    "render": "file:./render.php"
+}

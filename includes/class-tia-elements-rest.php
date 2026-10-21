@@ -114,6 +114,33 @@ final class TIA_Elements_Rest {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/decennial-cycles/assets',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => static fn() => self::respond( TIA_Elements_Decennial_Cycles_Service::assets() ),
+				'permission_callback' => array( self::class, 'member_or_trial_gate' ),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/decennial-cycles/data',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => static fn( WP_REST_Request $request ) => self::respond( TIA_Elements_Decennial_Cycles_Service::data( (string) $request->get_param( 'id' ) ) ),
+				'permission_callback' => array( self::class, 'member_or_trial_gate' ),
+				'args'                => array(
+					'id' => array(
+						'type'              => 'string',
+						'default'           => '',
+						'validate_callback' => array( self::class, 'is_enabled_decennial_cycles_asset' ),
+					),
+				),
+			)
+		);
 	}
 
 	/**
@@ -252,6 +279,15 @@ final class TIA_Elements_Rest {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Whether the id is an enabled Decennial Cycles asset.
+	 *
+	 * @param mixed $id The id parameter.
+	 */
+	public static function is_enabled_decennial_cycles_asset( mixed $id ): bool {
+		return in_array( $id, array_column( TIA_Elements_Settings::from_wordpress()->decennial_cycles_assets(), 'id' ), true );
 	}
 
 	/**

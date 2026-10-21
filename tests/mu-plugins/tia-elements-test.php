@@ -19,10 +19,14 @@
  * - `data-server-stub`: the data server URL is `https://data-server.test`. `/forecast_curves_assets` lists
  *   btc, dji and xau, each with Base Years from the current UTC year -2 to +2, plus `foo`, which no option
  *   enables. `/forecast_curves_data` answers one row per UTC day of the Base Year, Actual null after today;
- *   an unknown asset gets upstream's `400 {"error": "Invalid asset ID"}`.
+ *   an unknown asset gets upstream's `400 {"error": "Invalid asset ID"}`. `/decennial_assets` lists dji, spx, ndx,
+ *   xjo and xao, plus `foo`, which no option enables. `/decennial_data` (POST only) answers 3,660 rows of one
+ *   column `Gain`, starting at 0; an unknown asset gets the same 400.
  * - `data-server-forbidden`: the data server URL is `https://data-server.test`, and every call to it gets HTTP 403.
- * - `data-server-bad-request`: with `data-server-stub`, `/forecast_curves_data` answers `400 {"error": "Invalid asset ID"}`
- *   for every asset; `/forecast_curves_assets` still answers the stub list.
+ * - `data-server-bad-request`: with `data-server-stub`, `/forecast_curves_data` and `/decennial_data` answer
+ *   `400 {"error": "Invalid asset ID"}` for every asset; the asset lists still answer the stub lists.
+ * - `data-server-no-data`: with `data-server-stub`, `/decennial_data` answers `500 {"error": "No data available for this asset"}`.
+ * - `data-server-no-curve`: with `data-server-stub`, `/decennial_data` answers a table with no column.
  *
  * @package tia-wordpress-elements
  */
@@ -300,7 +304,23 @@ function tia_elements_test_data_server_assets() {
 }
 
 /**
- * Answers a data-server call: the asset list, or one asset's curve table for one Base Year.
+ * The stub data server's Decennial Cycles assets: id, name, title, range begin. Upstream order is not sorted.
+ *
+ * @return array<int, array{0: string, 1: string, 2: string, 3: int}>
+ */
+function tia_elements_test_decennial_assets() {
+	return array(
+		array( 'dji', 'Dow Jones Industrial - DJI', 'Dow Jones Industrial 10-Year Cycle', 1897 ),
+		array( 'spx', 'S&P 500 - SPX', 'S&P 500 10-Year Cycle', 1926 ),
+		array( 'ndx', 'Nasdaq 100 - NDX', 'Nasdaq 100 10-Year Cycle', 1971 ),
+		array( 'foo', 'Foo - not enabled', 'Foo 10-Year Cycle', 2000 ),
+		array( 'xjo', 'ASX 200 - XJO', 'ASX 200 10-Year Cycle', 1993 ),
+		array( 'xao', 'All Ordinaries - XAO', 'All Ordinaries 10-Year Cycle', 1959 ),
+	);
+}
+
+/**
+ * Answers a data-server call: an asset list, or one asset's curve table.
  *
  * @param string               $url  Request URL.
  * @param array<string, mixed> $args Request arguments.
@@ -359,6 +379,49 @@ function tia_elements_test_data_server( $url, $args ) {
 				);
 				++$day;
 			}
+		}
+	} elseif ( '/decennial_assets' === $path ) {
+		$body = array(
+			'assets' => array_map(
+				static fn( $asset ) => array(
+					'id'    => $asset[0],
+					'name'  => $asset[1],
+					'title' => $asset[2],
+					'range' => array(
+						'begin' => $asset[3],
+						'end'   => 2025,
+					),
+				),
+				tia_elements_test_decennial_assets()
+			),
+		);
+	} elseif ( '/decennial_data' === $path ) {
+		$request  = json_decode( is_string( $args['body'] ?? null ) ? $args['body'] : '', true );
+		$id       = is_array( $request ) ? $request['id'] ?? null : null;
+		$switches = tia_elements_test_switches();
+		if ( 'POST' !== ( $args['method'] ?? 'GET' ) ) {
+			$status = 405;
+			$body   = array( 'error' => 'Method Not Allowed' );
+		} elseif ( ! in_array( $id, array_column( tia_elements_test_decennial_assets(), 0 ), true ) || in_array( 'data-server-bad-request', $switches, true ) ) {
+			$status = 400;
+			$body   = array( 'error' => 'Invalid asset ID' );
+		} elseif ( in_array( 'data-server-no-data', $switches, true ) ) {
+			$status = 500;
+			$body   = array( 'error' => 'No data available for this asset' );
+		} elseif ( in_array( 'data-server-no-curve', $switches, true ) ) {
+			$body = array(
+				'columns' => array(),
+				'index'   => array(),
+				'data'    => array(),
+			);
+		} else {
+			$index = array_map( static fn( $row ) => $row / 366, range( 0, 3659 ) );
+			$body  = array(
+				'columns' => array( 'Gain' ),
+				'index'   => $index,
+				// A rising trend with a five-year wave, in cumulative percent.
+				'data'    => array_map( static fn( $dec ) => array( round( 6 * $dec + 10 * sin( 2 * M_PI * $dec / 5 ), 4 ) ), $index ),
+			);
 		}
 	} else {
 		$status = 404;

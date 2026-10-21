@@ -48,6 +48,17 @@ final class TIA_Elements_Predictive_Cycles {
 			);
 		}
 
+		return self::sort( $assets );
+	}
+
+	/**
+	 * Assets ordered by group, then by name case-insensitive.
+	 *
+	 * @template T of array{name: string, group: string}
+	 * @param array<T> $assets Assets.
+	 * @return list<T>
+	 */
+	public static function sort( array $assets ): array {
 		$rank = static function ( string $group ): int {
 			$rank = array_search( $group, self::GROUPS, true );
 			return false === $rank ? count( self::GROUPS ) : $rank;

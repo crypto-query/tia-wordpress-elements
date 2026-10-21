@@ -94,6 +94,11 @@ final class TIA_Elements_Settings {
 		array( 'xao', 'Indices' ),
 	);
 
+	public const DECENNIAL_CYCLES_ASSETS_OPTION = 'tia_decennial_cycles_assets';
+
+	/** Ids of the default Decennial Cycles assets, all Indices. */
+	private const DECENNIAL_CYCLES_ASSETS_DEFAULT = array( 'dji', 'spx', 'ndx', 'xjo', 'xao' );
+
 	/** Every option the plugin stores; uninstall deletes them all. */
 	public const OPTIONS = array(
 		'tia_supabase_url',
@@ -104,7 +109,7 @@ final class TIA_Elements_Settings {
 		self::MEMBER_ROLES_OPTION,
 		self::FORWARD_RETURNS_ASSETS_OPTION,
 		self::PREDICTIVE_CYCLES_ASSETS_OPTION,
-		'tia_decennial_cycles_assets',
+		self::DECENNIAL_CYCLES_ASSETS_OPTION,
 	);
 
 	/**
@@ -147,6 +152,7 @@ final class TIA_Elements_Settings {
 		$options[ self::MEMBER_ROLES_OPTION ]             = get_option( self::MEMBER_ROLES_OPTION, null );
 		$options[ self::FORWARD_RETURNS_ASSETS_OPTION ]   = get_option( self::FORWARD_RETURNS_ASSETS_OPTION, null );
 		$options[ self::PREDICTIVE_CYCLES_ASSETS_OPTION ] = get_option( self::PREDICTIVE_CYCLES_ASSETS_OPTION, null );
+		$options[ self::DECENNIAL_CYCLES_ASSETS_OPTION ]  = get_option( self::DECENNIAL_CYCLES_ASSETS_OPTION, null );
 
 		return new self( array_filter( $options, static fn( $value ) => null !== $value ), $constants );
 	}
@@ -261,6 +267,31 @@ final class TIA_Elements_Settings {
 				'group' => $asset[1],
 			),
 			self::PREDICTIVE_CYCLES_ASSETS_DEFAULT
+		);
+	}
+
+	/**
+	 * The enabled Decennial Cycles assets: the saved list, or the default while none is saved.
+	 *
+	 * @return list<array{id: string, group: string}>
+	 */
+	public function decennial_cycles_assets(): array {
+		$saved = $this->options[ self::DECENNIAL_CYCLES_ASSETS_OPTION ] ?? null;
+		if ( is_array( $saved ) ) {
+			return array_values(
+				array_filter(
+					$saved,
+					static fn( $asset ) => is_array( $asset ) && is_string( $asset['id'] ?? null ) && is_string( $asset['group'] ?? null )
+				)
+			);
+		}
+
+		return array_map(
+			static fn( string $id ) => array(
+				'id'    => $id,
+				'group' => 'Indices',
+			),
+			self::DECENNIAL_CYCLES_ASSETS_DEFAULT
 		);
 	}
 

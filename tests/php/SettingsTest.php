@@ -242,6 +242,40 @@ final class SettingsTest extends TestCase {
 	}
 
 	/**
+	 * Without a saved list, the Decennial Cycles assets are the five indices.
+	 */
+	public function test_decennial_cycles_assets_default(): void {
+		$expected = array(
+			array( 'dji', 'Indices' ),
+			array( 'spx', 'Indices' ),
+			array( 'ndx', 'Indices' ),
+			array( 'xjo', 'Indices' ),
+			array( 'xao', 'Indices' ),
+		);
+
+		foreach ( array( array(), array( 'tia_decennial_cycles_assets' => '' ) ) as $options ) {
+			$assets = ( new TIA_Elements_Settings( $options, array() ) )->decennial_cycles_assets();
+
+			$this->assertSame( $expected, array_map( static fn( $asset ) => array( $asset['id'], $asset['group'] ), $assets ) );
+		}
+	}
+
+	/**
+	 * A saved Decennial Cycles list replaces the default, even when empty; malformed entries are dropped.
+	 */
+	public function test_decennial_cycles_assets_saved(): void {
+		$saved = array(
+			array(
+				'id'    => 'dji',
+				'group' => 'Indices',
+			),
+		);
+
+		$this->assertSame( $saved, ( new TIA_Elements_Settings( array( 'tia_decennial_cycles_assets' => array( ...$saved, array( 'id' => 'spx' ), 'ndx' ) ), array() ) )->decennial_cycles_assets() );
+		$this->assertSame( array(), ( new TIA_Elements_Settings( array( 'tia_decennial_cycles_assets' => array() ), array() ) )->decennial_cycles_assets() );
+	}
+
+	/**
 	 * A field absent from the form keeps the stored value, secret or not.
 	 */
 	public function test_absent_input_keeps_stored(): void {

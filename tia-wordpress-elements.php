@@ -31,6 +31,8 @@ require_once __DIR__ . '/includes/class-tia-elements-forward-returns-service.php
 require_once __DIR__ . '/includes/class-tia-elements-data-server.php';
 require_once __DIR__ . '/includes/class-tia-elements-predictive-cycles.php';
 require_once __DIR__ . '/includes/class-tia-elements-predictive-cycles-service.php';
+require_once __DIR__ . '/includes/class-tia-elements-decennial-cycles.php';
+require_once __DIR__ . '/includes/class-tia-elements-decennial-cycles-service.php';
 require_once __DIR__ . '/includes/class-tia-elements-rest.php';
 require_once __DIR__ . '/src/suite-subscriptions/class-tia-elements-suite-subscription-rows.php';
 require_once __DIR__ . '/src/suite-subscriptions/class-tia-elements-suite-subscriptions-element.php';

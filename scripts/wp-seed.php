@@ -40,6 +40,12 @@ const TIA_ELEMENTS_SEED_PAGES = array(
 			. '<div class="wp-block-group" style="padding-right:20px;padding-left:20px"><!-- wp:tia-elements/predictive-cycles /--></div>'
 			. '<!-- /wp:group -->',
 	),
+	'decennial-cycles'  => array(
+		'title'   => 'Decennial Cycles',
+		'content' => '<!-- wp:group {"style":{"spacing":{"padding":{"left":"20px","right":"20px"}}}} -->'
+			. '<div class="wp-block-group" style="padding-right:20px;padding-left:20px"><!-- wp:tia-elements/decennial-cycles /--></div>'
+			. '<!-- /wp:group -->',
+	),
 );
 
 /**
