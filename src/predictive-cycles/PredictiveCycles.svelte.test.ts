@@ -581,7 +581,7 @@ describe("PredictiveCycles", () => {
             type Series = { name: string; lineStyle: { type: string; width: number } };
             const series = () =>
                 getInstanceByDom(screen.getByRole("group", { name: /^Predictive Cycles chart/ }))?.getOption().series as Series[];
-            expect(series().find(({ name }) => name === "Bull")?.lineStyle).toMatchObject({ type: "dashed", width: 2 });
+            expect(series().find(({ name }) => name === "Bull")?.lineStyle).toMatchObject({ type: "solid", width: 2 });
             expect(series().find(({ name }) => name === "All")?.lineStyle).toMatchObject({ type: "solid", width: 2 });
 
             await fireEvent.click(chip("Bull"));

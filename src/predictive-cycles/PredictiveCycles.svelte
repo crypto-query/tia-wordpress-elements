@@ -438,7 +438,7 @@
                     silent: true,
                     symbol: "none",
                     label: { show: false },
-                    lineStyle: { color: label.color, type: "dashed", width: 1 },
+                    lineStyle: { color: label.color, type: "solid", width: 1 },
                     data: [{ xAxis: cutoff.at }]
                 };
             }
@@ -453,7 +453,7 @@
                 ...theme.tooltip,
                 show: showTooltip && !empty,
                 trigger: "axis",
-                // The cut-off already draws a dashed line; the pointer draws none.
+                // The cut-off already draws a line; the pointer draws none.
                 axisPointer: { type: "none" },
                 formatter: (params) => {
                     const [first] = [params].flat();
@@ -507,12 +507,11 @@
                         showSymbol: false,
                         silent: empty,
                         triggerEvent: "line",
-                        // A year set can equal a solid curve (BTC Bear and Y2), so its dashes draw on top of it.
+                        // A year set can equal another curve (BTC Bear and Y2), so it draws on top of it.
                         z: kind === "set" ? 3 : 2,
                         lineStyle: {
                             // With the chart focused, the arrow keys move Actual, so it draws as if hovered.
                             width: kind === "actual" ? (focused ? 4 : 3) : 2,
-                            type: kind === "set" ? "dashed" : "solid",
                             opacity: empty ? 0 : 1
                         },
                         emphasis: { focus: "series", lineStyle: { width: hovered } },
@@ -815,17 +814,14 @@
 {/snippet}
 
 {#snippet swatch(kind: "actual" | "set" | "plain", on: boolean)}
-    <!-- The line in the chart, drawn small: dashed for a year set, thicker for Actual, hollow when hidden. -->
-    <span aria-hidden="true" class="flex w-4 shrink-0 gap-0.5">
-        {#each kind === "set" ? [0, 1, 2] : [0] as dash (dash)}
-            <span
-                class={[
-                    "flex-1 rounded-full",
-                    kind === "actual" ? "h-1.25" : "h-0.75",
-                    on ? "bg-(--chip)" : "border border-(--chip) bg-surface"
-                ]}>
-            </span>
-        {/each}
+    <!-- The line in the chart, drawn small: thicker for Actual, hollow when hidden. -->
+    <span
+        aria-hidden="true"
+        class={[
+            "w-4 shrink-0 rounded-full",
+            kind === "actual" ? "h-1.25" : "h-0.75",
+            on ? "bg-(--chip)" : "border border-(--chip) bg-surface"
+        ]}>
     </span>
 {/snippet}
 

@@ -139,7 +139,7 @@ export function chipGroups(curves: Curve[]): Curve[][] {
 /** The chip name: shorter for Y1 to Y4, else the upstream name. */
 export const shortName = (name: string): string => ROLES.get(name)?.short ?? name;
 
-/** Actual draws thicker, a year set (group 4) dashed, every other curve plain. */
+/** Actual draws thicker, a year set (group 4) on top, every other curve plain. */
 export const lineKind = (name: string): "actual" | "set" | "plain" =>
     name === ACTUAL ? "actual" : ROLES.get(name)?.group === 4 ? "set" : "plain";
 
