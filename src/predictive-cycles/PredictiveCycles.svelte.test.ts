@@ -413,6 +413,121 @@ describe("PredictiveCycles", () => {
             expect(visible()).toBe(false);
         });
 
+        type Dot = {
+            id: string;
+            parentId?: string;
+            ignore?: boolean;
+            shape: { cx: number; cy: number };
+            style: { fill: string; opacity?: number };
+        };
+        const dots = (group: HTMLElement) =>
+            ((getInstanceByDom(group)?.getOption().graphic as { elements: Dot[] }[] | undefined)?.[0]?.elements ?? []).filter(
+                ({ parentId, ignore }) => parentId === "pointer-dots" && !ignore
+            );
+
+        it("rings each shown line with a value on the hovered day, and drops the rings off the grid", async () => {
+            const group = await open();
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const [x, y] = actualPixel(group, day(2, 1));
+            pointer(group)("mousemove", x, y + 30);
+            await waitFor(() => expect(dots(group)).toHaveLength(2));
+            expect(dots(group)[0]?.shape.cx).toBeCloseTo(x, 0);
+            expect(dots(group)[0]?.shape.cy).toBeCloseTo(y, 0);
+
+            await fireEvent.click(chip("All"));
+            await waitFor(() => expect(dots(group)).toHaveLength(1));
+
+            pointer(group)("mousemove", x, 4);
+            await waitFor(() => expect(dots(group)).toHaveLength(0));
+            // No value after Jul 1, so no ring there.
+            pointer(group)("mousemove", actualPixel(group, day(6, 1))[0] + 40, y);
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            expect(dots(group)).toHaveLength(0);
+        });
+
+        it("hides the tooltip, its pointer and the rings in the trial zone, and shows them again outside", async () => {
+            const group = await open({ ...daily, cutoff: cutoff(day(4, 1), true, "tia-pro") });
+            const tooltip = () => (getInstanceByDom(group)?.getOption().tooltip as { showContent: boolean }[])[0]?.showContent;
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const [, y] = actualPixel(group, day(2, 1));
+            const send = pointer(group);
+
+            const visible = () =>
+                within(group)
+                    .queryAllByText(/ day /)
+                    .some((element) => element.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+
+            send("mousemove", actualPixel(group, day(5, 1))[0], y);
+            await waitFor(() => expect(tooltip()).toBe(false));
+            expect(dots(group)).toHaveLength(0);
+            await waitFor(() => expect(visible()).toBe(false), { timeout: 2000 });
+
+            send("mousemove", actualPixel(group, day(2, 1))[0], y);
+            await waitFor(() => expect(tooltip()).toBe(true));
+            await waitFor(() => expect(dots(group)).toHaveLength(2));
+            await waitFor(() => expect(within(group).getByText("Mar 1 · day 60")).toBeVisible());
+        });
+
+        it("keeps the trial zone and the cut-off unfaded, and the tooltip inside the chart", async () => {
+            type Marked = { markArea?: { blur: { itemStyle: { opacity: number }; label: { opacity: number } } } };
+            type Lined = { markLine?: { blur: { lineStyle: { opacity: number } } } };
+            const group = await open({ ...daily, cutoff: cutoff(day(4, 1), true, "tia-pro") });
+            const option = getInstanceByDom(group)?.getOption();
+            const helper = (option?.series as (Marked & Lined)[]).find(({ markArea }) => markArea);
+            expect(helper?.markArea?.blur).toEqual({ itemStyle: { opacity: 1 }, label: { opacity: 1 } });
+            expect(helper?.markLine?.blur.lineStyle.opacity).toBe(1);
+            expect((option?.tooltip as { confine: boolean }[])[0]?.confine).toBe(true);
+        });
+
+        it("dims the dots of the curves an emphasised curve fades, and brightens them again on leave", async () => {
+            const group = await open();
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const [x, y] = actualPixel(group, day(2, 1));
+            pointer(group)("mousemove", x, y + 30);
+            const opacities = () => dots(group).map(({ style }) => style.opacity ?? 1);
+            await waitFor(() => expect(opacities()).toEqual([1, 1]));
+
+            await fireEvent.mouseEnter(chip("All"));
+            await waitFor(() => expect(opacities()).toEqual([0.2, 1]));
+            // Hiding the emphasised curve still ends its emphasis on leave.
+            await fireEvent.click(chip("All"));
+            await fireEvent.mouseLeave(chip("All"));
+            await waitFor(() => expect(opacities()).toEqual([1]));
+        });
+
+        it("hides the tooltip and the dots at once when the Tooltip setting turns off under a still pointer", async () => {
+            const group = await open();
+            // The test page has no Tailwind, so the chart gets its size here.
+            group.style.height = "360px";
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            const [x, y] = actualPixel(group, day(2, 1));
+            pointer(group)("mousemove", x, y + 30);
+            await waitFor(() => expect(within(group).getByText("Mar 1 · day 60")).toBeVisible());
+            const echart = getInstanceByDom(group);
+            if (!echart) {
+                throw new Error("no chart");
+            }
+            const hidden = vi.spyOn(echart, "dispatchAction");
+
+            // By keyboard: a click moves the real pointer, which would leave the chart.
+            screen.getByRole("button", { name: "Settings" }).focus();
+            await userEvent.keyboard("{Enter}");
+            within(await screen.findByRole("menu", { name: "Settings" }))
+                .getByRole("menuitemcheckbox", { name: "Tooltip" })
+                .focus();
+            // The open menu can land under the real pointer, which leaves the chart; the pointer comes back to it.
+            pointer(group)("mousemove", x, y + 30);
+            await userEvent.keyboard("{Enter}");
+            await waitFor(() => expect(hidden).toHaveBeenCalledWith({ type: "hideTip" }));
+            expect(dots(group)).toHaveLength(0);
+        });
+
         it("moves Actual with the mouse after the keys moved it, by whole days", async () => {
             const group = await open();
             // The test page has no Tailwind, so the chart gets its size here.

@@ -133,11 +133,13 @@
     ]);
 
     const GRID = { left: 8, right: 16, top: 16, bottom: 64 };
+    // The opacity of the other lines, and their dots, while one line is emphasised.
+    const BLURRED = 0.2;
 
     const uid = $props.id();
     let root = $state<HTMLDivElement>();
     let chart = $state<ECharts>();
-    let theme = $state.raw<(ChartTheme & { zone: string }) | null>(null);
+    let theme = $state.raw<(ChartTheme & { zone: string; ring: string }) | null>(null);
     let assets = $state.raw<Asset[]>([]);
     let selection = $state.raw<Selection | null>(null);
     // Names of the hidden curves, on every asset.
@@ -163,6 +165,13 @@
     let grab: { from: Drag; anchor: number; msPerPixel: number; valuePerPixel: number } | null = null;
     let gripPoints = "";
     let gripX = 0;
+    // The day under the pointer inside the grid, tracked apart from the tooltip so the dots follow it too.
+    let hoverAt = $state<number | null>(null);
+    let hoverPixel = [0, 0];
+    let dotsKey = "";
+    let dotCount = 0;
+    // The emphasised curve, by ECharts' own hover or by `emphasise`; the dots of the others dim with their lines.
+    let lit: string | null = null;
     let width = $state(0);
     // The one open panel: "help", a curve id for its year popover, or none.
     let openPanel = $state<"help" | number | null>(null);
@@ -183,6 +192,8 @@
     const lastAt = $derived(shown ? (shown.data.curves[0]?.points.at(-1)?.[0] ?? Date.UTC(shown.data.base_year, 11, 31)) : 0);
     const cutoff = $derived(shown?.cutoff ?? null);
     const zone = $derived(cutoffCase(cutoff, firstAt, lastAt));
+    // Only a flip rebuilds the option: the tooltip and its pointer line hide in the zone.
+    const pointerInZone = $derived(hoverAt !== null && inZone(hoverAt));
     const draggable = $derived(
         !hidden.includes(ACTUAL) &&
             (shown?.data.curves.some(({ name, points }) => name === ACTUAL && points.some(([, value]) => value !== null)) ?? false)
@@ -191,7 +202,20 @@
     const initials = $derived(width > 0 && ((width - 64) * 100) / Math.max(zoom.end - zoom.start, 1) / 12 < 36);
     const option = $derived(
         theme && shown
-            ? chartOption(theme, shown, hidden, log, showTooltip, showLabels, initials, zoom, drag, focused && draggable, yRange)
+            ? chartOption(
+                  theme,
+                  shown,
+                  hidden,
+                  log,
+                  showTooltip,
+                  pointerInZone,
+                  showLabels,
+                  initials,
+                  zoom,
+                  drag,
+                  focused && draggable,
+                  yRange
+              )
             : null
     );
     const noneShown = $derived(selection !== null && selection.asset.curves.every(({ name }) => hidden.includes(name)));
@@ -224,19 +248,131 @@
             }
         };
         echart.on("datazoom", onZoom);
-        // A remounted chart (after Try again) has lost the grip, so its first paint lays it again.
+        // A remounted chart (after Try again) has lost the grip and the dots, so its first paint lays them again.
         gripPoints = "";
-        // Every paint (a new option, a zoom, a resize) may move Actual's pixels, so the grip follows. A paint can run
-        // inside `setOption`, which refuses a nested `setOption`, so the grip waits for it to return.
-        const onRendered = () => queueMicrotask(placeGrip);
+        dotsKey = "";
+        dotCount = 0;
+        // Every paint (a new option, a zoom, a resize) may move Actual's pixels, so the grip and the dots follow. A
+        // paint can run inside `setOption`, which refuses a nested `setOption`, so they wait for it to return.
+        const onRendered = () =>
+            queueMicrotask(() => {
+                placeGrip();
+                placeDots();
+            });
         echart.on("rendered", onRendered);
+        const onMove = ({ offsetX, offsetY }: ElementEvent) => {
+            hoverPixel = [offsetX, offsetY];
+            const inside = echart.containPixel({ gridIndex: 0 }, hoverPixel);
+            hoverAt = inside ? snapDay(echart.convertFromPixel({ xAxisIndex: 0 }, offsetX)) : null;
+            placeDots();
+            // The tooltip shows on this same move before the option flips; hiding it before the paint avoids a flash.
+            if (hoverAt !== null && inZone(hoverAt)) {
+                queueMicrotask(() => echart.isDisposed() || echart.dispatchAction({ type: "hideTip" }));
+            }
+        };
+        const onOut = () => {
+            hoverAt = null;
+            placeDots();
+        };
+        const onLine = (on: boolean) => (event: unknown) => {
+            if (isObject(event) && event.componentType === "series" && typeof event.seriesName === "string") {
+                lit = on ? event.seriesName : null;
+                placeDots();
+            }
+        };
+        const onOver = onLine(true);
+        const onLeave = onLine(false);
+        echart.on("mouseover", onOver);
+        echart.on("mouseout", onLeave);
+        echart.getZr().on("mousemove", onMove);
+        echart.getZr().on("globalout", onOut);
         return () => {
             if (!echart.isDisposed()) {
                 echart.off("datazoom", onZoom);
                 echart.off("rendered", onRendered);
+                echart.off("mouseover", onOver);
+                echart.off("mouseout", onLeave);
+                echart.getZr().off("mousemove", onMove);
+                echart.getZr().off("globalout", onOut);
             }
         };
     });
+
+    // The tooltip keeps its last panel and drops its pointer line when the option flips under a still pointer, so it
+    // is hidden on entering the zone or turning the Tooltip off, and shown again at the pointer once the new option applies.
+    $effect(() => {
+        const echart = chart;
+        const hide = pointerInZone || !showTooltip;
+        const [x, y] = untrack(() => (hoverAt === null ? [] : hoverPixel));
+        setTimeout(() => {
+            if (echart && !echart.isDisposed() && x !== undefined) {
+                echart.dispatchAction(hide ? { type: "hideTip" } : { type: "showTip", x, y });
+            }
+        });
+    });
+
+    const snapDay = (at: number) => firstAt + Math.round((at - firstAt) / DAY) * DAY;
+
+    /** Whether day `at` lies in the shaded "Available after trial" zone. */
+    function inZone(at: number): boolean {
+        return cutoff !== null && (zone === "before" || (zone === "inside" && at > cutoff.at));
+    }
+
+    /**
+     * Rings each shown line where the pointer line crosses it. The circles keep their ids and only hide, as a
+     * merged graphic keeps children it is no longer given. Laid again only when the dots changed.
+     */
+    function placeDots() {
+        const echart = chart;
+        if (!echart || echart.isDisposed() || !theme) {
+            return;
+        }
+        const at = hoverAt;
+        const curves = shown ? dragCurves(shown.data.curves, drag, log) : [];
+        const slots = curveSlots(curves.map(({ name }) => name));
+        const off = at === null || !showTooltip || inZone(at) || curves.every(({ name }) => hidden.includes(name));
+        const dots = off
+            ? []
+            : curves.flatMap(({ name, points }, index) => {
+                  const value = hidden.includes(name) ? null : (points.find(([day]) => day === at)?.[1] ?? null);
+                  if (value === null) {
+                      return [];
+                  }
+                  const [cx = 0, cy = 0]: number[] = echart.convertToPixel({ gridIndex: 0 }, [at, log ? Math.asinh(value) : value]);
+                  const opacity = lit === null || lit === name ? 1 : BLURRED;
+                  return echart.containPixel({ gridIndex: 0 }, [cx, cy]) ? [{ cx, cy, fill: theme?.color[slots[index] - 1], opacity }] : [];
+              });
+        const key = JSON.stringify(dots);
+        if (key === dotsKey) {
+            return;
+        }
+        dotsKey = key;
+        dotCount = Math.max(dotCount, dots.length);
+        echart.setOption({
+            graphic: [
+                {
+                    id: "pointer-dots",
+                    type: "group",
+                    silent: true,
+                    children: Array.from({ length: dotCount }, (_, index) => {
+                        const dot = dots[index];
+                        return {
+                            id: `pointer-dot-${index}`,
+                            type: "circle",
+                            z: 90,
+                            ignore: !dot,
+                            shape: { cx: dot?.cx ?? 0, cy: dot?.cy ?? 0, r: 4 },
+                            style: { fill: dot?.fill, stroke: theme?.ring, lineWidth: 2, opacity: dot?.opacity }
+                        };
+                    })
+                }
+            ]
+        });
+        // `setOption` clears the series' hover states, so a line still pointed at would lose its emphasis.
+        if (lit !== null) {
+            echart.dispatchAction({ type: "highlight", seriesName: lit });
+        }
+    }
 
     /**
      * Lays an invisible, wide polyline over Actual's visible points; dragging it moves Actual. It is laid again only
@@ -296,14 +432,15 @@
      * With the Tooltip setting off, only the hint, even mid-grab: ECharts draws an empty box for "".
      */
     function gripTooltip(): string {
-        if (!showTooltip) {
+        const at: unknown = chart?.convertFromPixel({ xAxisIndex: 0 }, gripX);
+        const day = typeof at === "number" ? snapDay(at) : null;
+        if (!showTooltip || (day !== null && inZone(day))) {
             return `<div class="text-foreground-muted">Drag to move, or use the arrow keys</div>`;
         }
-        const at: unknown = chart?.convertFromPixel({ xAxisIndex: 0 }, gripX);
-        if (!shown || typeof at !== "number") {
+        if (!shown || day === null) {
             return "";
         }
-        const values = tooltipHtml(dragCurves(shown.data.curves, drag, log), hidden, firstAt + Math.round((at - firstAt) / DAY) * DAY);
+        const values = tooltipHtml(dragCurves(shown.data.curves, drag, log), hidden, day);
         return grab ? values : `${values}<div class="mt-2 text-foreground-muted">Drag to move, or use the arrow keys</div>`;
     }
 
@@ -397,10 +534,8 @@
     }
 
     function tooltipHtml(curves: CurveData[], hidden: string[], at: number): string {
-        const inZone = cutoff !== null && (zone === "before" || (zone === "inside" && at > cutoff.at));
         return [
             `<div class="font-medium">${dayLabel(at)}</div>`,
-            inZone ? `<div class="text-foreground-muted">${zoneLabel(cutoff)}</div>` : "",
             ...tooltipRows(curves, hidden, at).map(
                 ({ name, slot, value }) =>
                     `<div class="mt-1 flex items-center gap-2"><span class="size-2.5 rounded-full" style="background-color: var(--chart-${slot})"></span>` +
@@ -410,11 +545,12 @@
     }
 
     function chartOption(
-        theme: ChartTheme & { zone: string },
+        theme: ChartTheme & { zone: string; ring: string },
         shown: PredictiveCycles,
         hidden: string[],
         log: boolean,
         showTooltip: boolean,
+        pointerInZone: boolean,
         showLabels: boolean,
         initials: boolean,
         zoom: Zoom,
@@ -442,6 +578,8 @@
             helper.markArea = {
                 silent: true,
                 itemStyle: { color: theme.zone },
+                // The zone and the cut-off are no curve, so they stay while a hovered line fades the others.
+                blur: { itemStyle: { opacity: 1 }, label: { opacity: 1 } },
                 // Rotated 90° about its anchor: align "right" ends the text at the anchor near the top,
                 // verticalAlign "top" puts its height right of the anchor, so it clears the line.
                 label: { ...theme.axis.axisLabel, position: [4, 8], rotate: 90, align: "right", verticalAlign: "top" },
@@ -453,6 +591,7 @@
                     symbol: "none",
                     label: { show: false },
                     lineStyle: { color: label.color, type: "solid", width: 1 },
+                    blur: { lineStyle: { opacity: 1 } },
                     data: [{ xAxis: cutoff.at }]
                 };
             }
@@ -466,9 +605,15 @@
             tooltip: {
                 ...theme.tooltip,
                 show: showTooltip && !empty,
+                // In the zone the pointer still tracks, unseen, so it is right again the moment it leaves.
+                showContent: !pointerInZone,
+                // Entering the zone shows the tooltip for one move; without a delay or fade it hides before it paints.
+                hideDelay: 0,
+                displayTransition: false,
+                // Also keeps the grip's tooltip, which inherits it, inside a narrow chart.
+                confine: true,
                 trigger: "axis",
-                // The cut-off already draws a line; the pointer draws none.
-                axisPointer: { type: "none" },
+                axisPointer: { type: pointerInZone ? "none" : "line", lineStyle: { color: label.color, type: "dashed", width: 1 } },
                 formatter: (params) => {
                     const [first] = [params].flat();
                     return first && "axisValue" in first ? tooltipHtml(curves, hidden, Number(first.axisValue)) : "";
@@ -539,7 +684,7 @@
                             opacity: empty ? 0 : 1
                         },
                         emphasis: { focus: "series", lineStyle: { width: hovered } },
-                        blur: { lineStyle: { opacity: 0.2 } },
+                        blur: { lineStyle: { opacity: BLURRED } },
                         color: theme.color[slot - 1]
                     };
                 }),
@@ -728,11 +873,17 @@
         remember();
     }
 
-    /** Draws a shown curve thicker and fades the others while its chip is hovered or focused. */
+    /**
+     * Draws a shown curve thicker and fades the others while its chip is hovered or focused. Off downplays every
+     * curve: a curve hidden or rebuilt while emphasised would leave the others faded.
+     */
     function emphasise(name: string, on: boolean) {
-        if (!hidden.includes(name)) {
-            chart?.dispatchAction({ type: on ? "highlight" : "downplay", seriesName: name });
+        if (on && hidden.includes(name)) {
+            return;
         }
+        chart?.dispatchAction(on ? { type: "highlight", seriesName: name } : { type: "downplay" });
+        lit = on ? name : null;
+        placeDots();
     }
 
     /** Shows only Actual and excludes every year of the asset; the drag, zoom and Show settings stay. */
@@ -760,7 +911,12 @@
 
     /** Reads the chart colours once from the tokens on the Block root. */
     function readTheme(root: HTMLDivElement) {
-        theme = { ...chartTheme(root), zone: getComputedStyle(root).getPropertyValue("--muted").trim() };
+        const style = getComputedStyle(root);
+        theme = {
+            ...chartTheme(root),
+            zone: style.getPropertyValue("--muted").trim(),
+            ring: style.getPropertyValue("--card-background").trim()
+        };
     }
 
     onMount(() => {
