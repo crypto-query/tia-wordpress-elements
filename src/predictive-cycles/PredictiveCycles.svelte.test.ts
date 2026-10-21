@@ -281,8 +281,31 @@ describe("PredictiveCycles", () => {
             }
         });
 
+        it("ends the y axis just under a line below 0, not a whole step lower", async () => {
+            type YAxis = { min?: number | null; axisLabel: { showMinLabel?: boolean } };
+            const yAxis = (group: HTMLElement) => (getInstanceByDom(group)?.getOption().yAxis as YAxis[])[0];
+            const group = await open({
+                ...daily,
+                data: {
+                    ...daily.data,
+                    curves: [
+                        { id: 0, name: "Actual", points: ramp(0.5, 20) },
+                        { id: 1, name: "All", points: ramp(-0.3, 2) }
+                    ]
+                }
+            });
+            expect(yAxis(group).min).toBeGreaterThan(-1);
+            expect(yAxis(group).min).toBeLessThan(-0.3);
+            expect(yAxis(group).axisLabel.showMinLabel).toBe(false);
+
+            cleanup();
+            const above = await open();
+            expect(yAxis(above).min ?? null).toBeNull();
+            expect(yAxis(above).axisLabel.showMinLabel).not.toBe(false);
+        });
+
         it("holds the y axis while a key or the mouse moves Actual past the top, and rescales on release", async () => {
-            // Its axis runs from -0.5 to 3.5 in steps of 0.5; with only min and max fixed, ECharts would pick steps of 1.
+            // Its axis ends just under -0.3, off the step; a held axis keeps its ticks where ECharts would count from there.
             const group = await open({
                 ...daily,
                 data: {
@@ -305,12 +328,12 @@ describe("PredictiveCycles", () => {
             // The rendered tick values, read from the internal axis model.
             const ticks = () => {
                 const axis: unknown = echart?.["getModel"]().getComponent("yAxis", 0)?.axis;
-                return axis instanceof Axis ? axis.scale.getTicks().map(({ value }) => value) : [];
+                return axis instanceof Axis ? axis.getTicksCoords().map(({ tickValue }) => tickValue) : [];
             };
             const labels = ticks();
             expect(labels.length).toBeGreaterThan(1);
 
-            for (let press = 0; press < 40; press++) {
+            for (let press = 0; press < 60; press++) {
                 const [, before] = actualPixel(group);
                 await fireEvent.keyDown(group, { key: "ArrowUp" });
                 await waitFor(() => expect(before - actualPixel(group)[1]).toBeCloseTo(dayPixels, 1));

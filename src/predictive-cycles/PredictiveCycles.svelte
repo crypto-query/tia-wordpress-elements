@@ -156,7 +156,7 @@
     // Memory only: an asset or Base Year change and Reset clear it.
     let drag = $state.raw<Drag>(NO_DRAG);
     // The y axis extent while a move runs, in axis units; an axis that rescales mid-move makes every line jump.
-    let yRange = $state.raw<{ min: number; max: number; interval?: number } | null>(null);
+    let yRange = $state.raw<{ min: number; max: number; ticks: number[]; labels: number[] } | null>(null);
     let focused = $state(false);
     let announcement = $state("");
     // The axis scale at the pointer when a mouse drag starts, so a y axis that rescales under the drag does not feed back.
@@ -323,15 +323,18 @@
     function freezeY() {
         const echart = chart;
         if (echart && !yRange) {
-            // No public API exposes the tick interval, so this reads it from the internal axis model, which ECharts leaves untyped.
+            // No public API exposes the ticks, so this reads them from the internal axis model, which ECharts leaves untyped.
+            // With a fixed interval ECharts would count the steps from the bottom, which can sit off the step.
             const axis: unknown = echart["getModel"]().getComponent("yAxis", 0)?.axis;
-            const ticks = axis instanceof Axis ? axis.scale.getTicks() : [];
-            // toPrecision drops the float noise of the subtraction, which would show in the labels.
-            const interval = ticks.length > 1 ? Number((ticks[1].value - ticks[0].value).toPrecision(12)) : undefined;
+            const ticks = axis instanceof Axis ? axis.scale.getTicks().map(({ value }) => value) : [];
+            const [below = 0, last = 0] = ticks.slice(-2);
+            const step = last - below;
             yRange = {
                 min: echart.convertFromPixel({ yAxisIndex: 0 }, echart.getHeight() - GRID.bottom),
                 max: echart.convertFromPixel({ yAxisIndex: 0 }, GRID.top),
-                ...(interval && { interval })
+                ticks,
+                // The bottom tick under a line below 0 sits off the step, so it gets no label.
+                labels: ticks.filter((value) => !step || Math.abs(value / step - Math.round(value / step)) < 1e-6)
             };
         }
     }
@@ -417,7 +420,7 @@
         zoom: Zoom,
         drag: Drag,
         focused: boolean,
-        yRange: { min: number; max: number; interval?: number } | null
+        yRange: { min: number; max: number; ticks: number[]; labels: number[] } | null
     ): Option {
         const { data } = shown;
         const curves = dragCurves(data.curves, drag, log);
@@ -427,6 +430,12 @@
         const drawn = curves.flatMap((curve, index) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[index] }]));
         const ticks = monthStarts(data.base_year);
         const label = { ...theme.axis.axisLabel, show: showLabels };
+        const values = drawn.flatMap(({ curve }) => curve.points.flatMap(([, value]) => (value === null ? [] : [value])));
+        const low = Math.min(0, ...values);
+        const high = Math.max(0, ...values);
+        // ECharts rounds the bottom out to a whole tick step, which can add a step of empty grid under a line just
+        // below 0; the axis ends a little under the lowest line instead, and its odd bottom value gets no label.
+        const bottom = low < 0 ? { min: low - (high - low) * 0.03, axisLabel: { showMinLabel: false } } : null;
         const helper: LineSeriesOption = { type: "line", data: [], silent: true };
         if (cutoff && zone !== "none") {
             const from = zone === "before" ? firstAt : cutoff.at;
@@ -498,13 +507,19 @@
                 }
             },
             yAxis: log
-                ? logAxis(
-                      theme,
-                      drawn.map(({ curve }) => curve),
-                      yRange,
-                      showLabels
-                  )
-                : { ...theme.axis, type: "value", ...yRange, axisLabel: { ...label, formatter: "{value}%" } },
+                ? logAxis(theme, low, high, yRange, showLabels)
+                : {
+                      ...theme.axis,
+                      type: "value",
+                      min: yRange?.min ?? bottom?.min,
+                      max: yRange?.max,
+                      axisTick: { ...theme.axis.axisTick, customValues: yRange?.ticks },
+                      axisLabel: {
+                          ...label,
+                          ...(yRange ? { customValues: yRange.labels } : bottom?.axisLabel),
+                          formatter: "{value}%"
+                      }
+                  },
             series: [
                 ...drawn.map(({ curve, slot }): LineSeriesOption => {
                     const kind = lineKind(curve.name);
@@ -536,12 +551,12 @@
     /** The `asinh` y axis, with its ticks at round values in real %. */
     function logAxis(
         theme: ChartTheme,
-        curves: PredictiveCycles["data"]["curves"],
+        low: number,
+        high: number,
         yRange: { min: number; max: number } | null,
         showLabels: boolean
     ): Option["yAxis"] {
-        const values = curves.flatMap(({ points }) => points.flatMap(([, value]) => (value === null ? [] : [value])));
-        const ticks = asinhTicks(Math.min(0, ...values), Math.max(0, ...values)).map((value) => Math.asinh(value));
+        const ticks = asinhTicks(low, high).map((value) => Math.asinh(value));
         return {
             ...theme.axis,
             type: "value",
