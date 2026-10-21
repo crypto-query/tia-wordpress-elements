@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatReturn } from "./format";
+import { formatReturn, formatTick } from "./format";
 
 describe("formatReturn", () => {
     it.each([
@@ -14,5 +14,18 @@ describe("formatReturn", () => {
         [null, ""]
     ])("formats %s as %j", (value, text) => {
         expect(formatReturn(value)).toBe(text);
+    });
+});
+
+describe("formatTick", () => {
+    it.each([
+        [-10, "\u221210%"],
+        [0, "0%"],
+        [-0, "0%"],
+        [20, "20%"],
+        [-2.5, "\u22122.5%"],
+        [1500, "1,500%"]
+    ])("formats %s as %j", (value, text) => {
+        expect(formatTick(value)).toBe(text);
     });
 });

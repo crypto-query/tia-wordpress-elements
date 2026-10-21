@@ -83,6 +83,7 @@
     import { ApiError, type ErrorKind } from "../shared/api";
     import { asinhTicks, toAsinh } from "../shared/asinh";
     import { isObject, type Card as BootCard } from "../shared/boot";
+    import { formatTick } from "../shared/format";
     import { normalise, storedPick, withoutKey } from "../shared/load-rules";
     import { getAssets, getPredictiveCycles, type Asset, type Curve, type CurveData, type PredictiveCycles, type Selection } from "./api";
     import {
@@ -695,7 +696,7 @@
                       axisLabel: {
                           ...label,
                           ...(yRange ? { customValues: yRange.labels } : bottom?.axisLabel),
-                          formatter: "{value}%"
+                          formatter: formatTick
                       }
                   },
             series: [
@@ -745,7 +746,7 @@
                 ...theme.axis.axisLabel,
                 show: showLabels,
                 customValues: ticks,
-                formatter: (value: number) => `${Math.round(Math.sinh(value))}%`
+                formatter: (value: number) => formatTick(Math.round(Math.sinh(value)))
             }
         };
     }

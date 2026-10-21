@@ -28,6 +28,7 @@
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
     import type { Card as BootCard } from "../shared/boot";
+    import { formatTick } from "../shared/format";
     import { getAssets, getDecennialCycles, type Asset, type DecennialCycles } from "./api";
     import { axisName, caption, pickAsset, todayMarker, tooltipContent, xAxisTicks } from "./transforms";
 
@@ -95,7 +96,7 @@
                 axisTick: { ...theme.axis.axisTick, customValues: ticks },
                 axisLabel: { ...label, customValues: labels, hideOverlap: true, formatter: tickLabel }
             },
-            yAxis: { ...theme.axis, type: "value", scale: true, axisLabel: { ...label, formatter: "{value}%" } },
+            yAxis: { ...theme.axis, type: "value", scale: true, axisLabel: { ...label, formatter: formatTick } },
             series: [
                 {
                     type: "line",
