@@ -317,6 +317,8 @@ describe("isMemory", () => {
     it("accepts the stored shape", () => {
         expect(isMemory(good)).toBe(true);
         expect(isMemory({ excluded: {}, instances: {} })).toBe(true);
+        const shown = { ...good.instances["1:0"], pick: { ...good.instances["1:0"].pick, tooltips: false, colours: true } };
+        expect(isMemory({ ...good, instances: { "1:0": shown } })).toBe(true);
     });
 
     it.each([
@@ -332,6 +334,14 @@ describe("isMemory", () => {
                 ...good,
                 instances: { "1:0": { ...good.instances["1:0"], pick: { base: "btc", quote: "usd", period: 6, entryOffset: 0.5 } } }
             }
+        ],
+        [
+            "Tooltips as a string",
+            { ...good, instances: { "1:0": { ...good.instances["1:0"], pick: { ...good.instances["1:0"].pick, tooltips: "false" } } } }
+        ],
+        [
+            "Colours as null",
+            { ...good, instances: { "1:0": { ...good.instances["1:0"], pick: { ...good.instances["1:0"].pick, colours: null } } } }
         ]
     ])("rejects %s", (_, value) => {
         expect(isMemory(value)).toBe(false);
@@ -357,44 +367,60 @@ describe("withExclusions", () => {
 
 describe("restore", () => {
     const attributes = { base: "xauusd", quote: "usd", period: 12 };
-    const stored = (pick: { base: string; quote: string; period: number; entryOffset: number }) => ({
+    const stored = (pick: { base: string; quote: string; period: number; entryOffset: number; tooltips?: boolean; colours?: boolean }) => ({
         attributes: { base: "xauusd", quote: "usd", period: 12 },
         pick
     });
+    const on = { tooltips: true, colours: true };
 
     it("takes the attribute rule with Entry Offset 0 without a stored entry", () => {
-        expect(restore(attributes, undefined, assets)).toEqual({ base: "xauusd", quote: "usd", period: 12, entryOffset: 0 });
+        expect(restore(attributes, undefined, assets)).toEqual({ base: "xauusd", quote: "usd", period: 12, entryOffset: 0, ...on });
     });
 
-    it("drops the stored pick when an attribute changed", () => {
+    it("drops the stored pick, Tooltips and Colours included, when an attribute changed", () => {
+        const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 1, tooltips: false, colours: false });
+        expect(restore({ ...attributes, period: 3 }, entry, assets)).toEqual({
+            base: "xauusd",
+            quote: "usd",
+            period: 3,
+            entryOffset: 0,
+            ...on
+        });
+    });
+
+    it("lets the stored pick win over the attributes, Tooltips and Colours on when it lacks them", () => {
         const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 1 });
-        expect(restore({ ...attributes, period: 3 }, entry, assets)).toEqual({ base: "xauusd", quote: "usd", period: 3, entryOffset: 0 });
+        expect(restore(attributes, entry, assets)).toEqual({ base: "btc", quote: "usd", period: 3, entryOffset: 1, ...on });
+        const off = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 1, tooltips: false, colours: false });
+        expect(restore(attributes, off, assets)).toMatchObject({ tooltips: false, colours: false });
     });
 
-    it("lets the stored pick win over the attributes", () => {
-        const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 1 });
-        expect(restore(attributes, entry, assets)).toEqual({ base: "btc", quote: "usd", period: 3, entryOffset: 1 });
-    });
-
-    it("falls back to the attribute rule when the stored asset is gone", () => {
-        const entry = stored({ base: "eth", quote: "usd", period: 3, entryOffset: 1 });
-        expect(restore(attributes, entry, assets)).toEqual({ base: "xauusd", quote: "usd", period: 12, entryOffset: 0 });
+    it("falls back to the attribute rule when the stored asset is gone, and keeps Tooltips and Colours", () => {
+        const entry = stored({ base: "eth", quote: "usd", period: 3, entryOffset: 1, tooltips: false });
+        expect(restore(attributes, entry, assets)).toEqual({
+            base: "xauusd",
+            quote: "usd",
+            period: 12,
+            entryOffset: 0,
+            ...on,
+            tooltips: false
+        });
     });
 
     it("keeps the stored asset with the attribute period and Entry Offset 0 when the stored period is gone", () => {
         const own = { base: "^dji", quote: "usd", period: 12 };
         const entry = { attributes: own, pick: { base: "^dji", quote: "usd", period: 3, entryOffset: 1 } };
-        expect(restore(own, entry, assets)).toEqual({ base: "^dji", quote: "usd", period: 12, entryOffset: 0 });
+        expect(restore(own, entry, assets)).toEqual({ base: "^dji", quote: "usd", period: 12, entryOffset: 0, ...on });
     });
 
     it("keeps the stored asset with its smallest period when the attribute period belongs to another asset", () => {
         const entry = stored({ base: "^dji", quote: "usd", period: 3, entryOffset: 1 });
-        expect(restore(attributes, entry, assets)).toEqual({ base: "^dji", quote: "usd", period: 6, entryOffset: 0 });
+        expect(restore(attributes, entry, assets)).toEqual({ base: "^dji", quote: "usd", period: 6, entryOffset: 0, ...on });
     });
 
     it("clamps the stored Entry Offset to the Holding Period", () => {
         const entry = stored({ base: "btc", quote: "usd", period: 3, entryOffset: 7 });
-        expect(restore(attributes, entry, assets)).toEqual({ base: "btc", quote: "usd", period: 3, entryOffset: 2 });
+        expect(restore(attributes, entry, assets)).toEqual({ base: "btc", quote: "usd", period: 3, entryOffset: 2, ...on });
     });
 });
 

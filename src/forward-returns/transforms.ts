@@ -164,7 +164,8 @@ export function cellName(year: number, month: number, value: number | null, peri
 /** The Block attributes a stored pick is tied to. */
 export const ATTRIBUTE_KEYS = ["base", "quote", "period"] as const;
 
-export type InstancePick = Selection & { entryOffset: number };
+/** `tooltips` and `colours` came later, so a stored pick may lack them; they default to on. */
+export type InstancePick = Selection & { entryOffset: number; tooltips?: boolean; colours?: boolean };
 
 /** What `localStorage` keeps: exclusions per `base/quote/period` for every instance, and each instance's last pick. */
 export type Memory = { excluded: Record<string, Exclusions>; instances: Record<string, InstanceEntry<InstancePick>> };
@@ -187,7 +188,9 @@ const isPick = (value: unknown) =>
     typeof value.base === "string" &&
     typeof value.quote === "string" &&
     isInteger(value.period) &&
-    isInteger(value.entryOffset);
+    isInteger(value.entryOffset) &&
+    ["undefined", "boolean"].includes(typeof value.tooltips) &&
+    ["undefined", "boolean"].includes(typeof value.colours);
 
 const isEntry = (value: unknown) =>
     isObject(value) &&
@@ -205,18 +208,19 @@ export function restore(
     attributes: Record<string, unknown>,
     entry: InstanceEntry<InstancePick> | undefined,
     assets: Asset[]
-): InstancePick | null {
+): Required<InstancePick> | null {
     const pick = storedPick(entry, attributes, ATTRIBUTE_KEYS);
     const asset = pick && assets.find((candidate) => assetKey(candidate) === assetKey(pick));
+    const shown = { tooltips: pick?.tooltips ?? true, colours: pick?.colours ?? true };
     if (!pick || !asset) {
         const selection = pickSelection(attributes, assets);
-        return selection && { ...selection, entryOffset: 0 };
+        return selection && { ...selection, entryOffset: 0, ...shown };
     }
     const fallback = pickSelection(attributes, [asset])?.period;
     const selection = selectAsset(asset, asset.periods.includes(pick.period) ? pick.period : fallback);
     // An Entry Offset means other Entry Months under another Holding Period.
     const entryOffset = selection?.period === pick.period ? clamp(pick.entryOffset, 0, pick.period - 1) : 0;
-    return selection && { ...selection, entryOffset };
+    return selection && { ...selection, entryOffset, ...shown };
 }
 
 /**

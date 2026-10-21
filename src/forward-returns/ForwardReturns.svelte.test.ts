@@ -60,6 +60,29 @@ function result(label: string) {
     return row ? texts(within(row).getAllByRole("cell")) : [];
 }
 
+/** Opens the Settings menu, unless it is open, and returns it. */
+async function settings() {
+    const trigger = screen.getByRole("button", { name: "Settings" });
+    if (trigger.getAttribute("aria-expanded") !== "true") {
+        await userEvent.click(trigger);
+    }
+    return screen.findByRole("menu", { name: "Settings" });
+}
+const resetItem = async () => within(await settings()).getByRole("menuitem", { name: "Reset" });
+const setting = async (name: "Tooltips" | "Colours") => within(await settings()).getByRole("menuitemcheckbox", { name });
+
+async function closeMenu() {
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+}
+
+/** Whether Reset has something to do, read from the menu, which closes again. */
+async function resetDisabled() {
+    const disabled = (await resetItem()).getAttribute("aria-disabled");
+    await closeMenu();
+    return disabled;
+}
+
 describe("ForwardReturns", () => {
     it("shows the spinner, then Years as rows and Entry Months as columns", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
@@ -319,14 +342,14 @@ describe("ForwardReturns", () => {
         expect(partial).toHaveClass("text-foreground-muted");
     });
 
-    it('opens the help from the "?" after Reset, and Esc closes it and returns focus', async () => {
+    it('opens the help from the "?" after Settings, and Esc closes it and returns focus', async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
         render(ForwardReturns, props);
         await screen.findByRole("grid");
 
         const help = screen.getByRole("button", { name: "How to use this table" });
-        expect(screen.getByRole("button", { name: "Reset" }).nextElementSibling).toBe(help);
+        expect(screen.getByRole("button", { name: "Settings" }).nextElementSibling).toBe(help);
         expect(help).toHaveAttribute("aria-expanded", "false");
         await userEvent.click(help);
         const panel = await screen.findByRole("dialog", { name: "How to use this table" });
@@ -336,7 +359,7 @@ describe("ForwardReturns", () => {
             within(panel)
                 .getAllByRole("listitem")
                 .map((item) => item.firstElementChild?.textContent)
-        ).toEqual(["Exclude a return", "Exclude a year", "Holding Period", "Entry Months", "Partial", "Results", "Keyboard", "Reset"]);
+        ).toEqual(["Exclude a return", "Exclude a year", "Holding Period", "Entry Months", "Partial", "Results", "Keyboard", "Settings"]);
         expect(within(panel).getByText("Space").tagName).toBe("KBD");
 
         await userEvent.keyboard("{Escape}");
@@ -344,24 +367,101 @@ describe("ForwardReturns", () => {
         await waitFor(() => expect(screen.queryByRole("dialog", { name: "How to use this table" })).not.toBeInTheDocument());
     });
 
-    it("Reset includes everything and sets the Entry Offset to 0", async () => {
+    it("opens the Settings menu from the cog before help, with Reset and the Show settings", async () => {
         vi.mocked(getAssets).mockResolvedValue([asset]);
         vi.mocked(getForwardReturns).mockResolvedValue(data);
         render(ForwardReturns, props);
         await screen.findByRole("grid");
-        const reset = screen.getByRole("button", { name: "Reset" });
-        expect(reset).toHaveAttribute("aria-disabled", "true");
+        const trigger = screen.getByRole("button", { name: "Settings" });
+        expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+        expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+        const menu = await settings();
+        expect(trigger).toHaveAttribute("aria-expanded", "true");
+        expect(
+            within(menu)
+                .getAllByRole("menuitem")
+                .map((item) => item.textContent.trim())
+        ).toEqual([expect.stringMatching(/^Reset/)]);
+        expect(
+            within(menu)
+                .getAllByRole("menuitemcheckbox")
+                .map((item) => [item.textContent.trim(), item.getAttribute("aria-checked")])
+        ).toEqual([
+            [expect.stringMatching(/^Tooltips/), "true"],
+            [expect.stringMatching(/^Colours/), "true"]
+        ]);
+        expect(await setting("Colours")).toHaveAccessibleDescription("Green and red fill on returns.");
+
+        await closeMenu();
+        expect(trigger).toHaveFocus();
+    });
+
+    it("Reset in the menu includes everything and sets the Entry Offset to 0", async () => {
+        vi.mocked(getAssets).mockResolvedValue([asset]);
+        vi.mocked(getForwardReturns).mockResolvedValue(data);
+        render(ForwardReturns, props);
+        await screen.findByRole("grid");
+        expect(await resetDisabled()).toBe("true");
 
         await userEvent.click(screen.getByRole("checkbox", { name: /\+3\.21%/ }));
         await userEvent.click(screen.getByRole("checkbox", { name: "Count 2025" }));
         await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
-        await userEvent.click(reset);
+        await userEvent.click(await setting("Colours"));
+        expect(await resetDisabled()).toBe("false");
+        await userEvent.click(await resetItem());
+        await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
 
         expect(headers()).toEqual(["Year", "Jan \u2013 Jun", "Jul \u2013 Dec"]);
         expect(screen.getByRole("checkbox", { name: "Count 2025" })).toBeChecked();
         expect(screen.getByRole("checkbox", { name: /\+3\.21%/ })).toHaveAttribute("aria-checked", "true");
-        expect(reset).toHaveAttribute("aria-disabled", "true");
-        expect(reset).toHaveFocus();
+        expect(await resetDisabled()).toBe("true");
+        expect(await setting("Colours")).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("Tooltips off drops the hover and focus hints and keeps the accessible names", async () => {
+        vi.mocked(getAssets).mockResolvedValue([asset]);
+        vi.mocked(getForwardReturns).mockResolvedValue(data);
+        render(ForwardReturns, props);
+        await screen.findByRole("grid");
+
+        const toggle = await setting("Tooltips");
+        await userEvent.click(toggle);
+        expect(toggle).toHaveAttribute("aria-checked", "false");
+        expect(screen.getByRole("menu", { name: "Settings" })).toBeInTheDocument();
+        await closeMenu();
+
+        const cell = screen.getByRole("checkbox", { name: "January \u2013 June 2024, +3.21%" });
+        await userEvent.hover(cell);
+        await fireEvent.pointerMove(within(cell).getByText("+3.21%"), { pointerType: "mouse" });
+        const year = screen.getByRole("checkbox", { name: "Count 2024" });
+        await userEvent.hover(year);
+        await fireEvent.pointerMove(within(year).getByText("2024"), { pointerType: "mouse" });
+        const totals = part(2).getByRole("rowheader", { name: "Totals" });
+        await userEvent.hover(totals);
+        await fireEvent.pointerMove(within(totals).getByText("Totals"), { pointerType: "mouse" });
+        cell.focus();
+        await userEvent.keyboard("{End}");
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+        expect(screen.getByRole("checkbox", { name: "July \u2013 December 2024, \u22122.10%" })).toHaveFocus();
+    });
+
+    it("Colours off drops the fill and keeps the green and red text", async () => {
+        vi.mocked(getAssets).mockResolvedValue([asset]);
+        vi.mocked(getForwardReturns).mockResolvedValue(data);
+        render(ForwardReturns, props);
+        await screen.findByRole("grid");
+        const gain = screen.getByRole("checkbox", { name: /\+3\.21%/ });
+        const loss = screen.getByRole("checkbox", { name: /\u22122\.10%/ });
+        expect(gain).toHaveClass("bg-success-light", "text-success-strong");
+        expect(loss).toHaveClass("bg-error-light", "text-error-strong");
+
+        await userEvent.click(await setting("Colours"));
+        expect(gain).not.toHaveClass("bg-success-light");
+        expect(gain).toHaveClass("text-success-strong");
+        expect(loss).not.toHaveClass("bg-error-light");
+        expect(loss).toHaveClass("text-error-strong");
     });
 
     it("clamps the Entry Offset when the Holding Period gets shorter", async () => {
@@ -590,9 +690,38 @@ describe("ForwardReturns", () => {
             await userEvent.click(screen.getByRole("button", { name: "Next Entry Offset" }));
             expect(memory.current.instances["1:0"]).toEqual({
                 attributes: { base: "btc", quote: "usd", period: null },
-                pick: { base: "btc", quote: "usd", period: 6, entryOffset: 1 }
+                pick: { base: "btc", quote: "usd", period: 6, entryOffset: 1, tooltips: true, colours: true }
             });
             expect(JSON.parse(localStorage.getItem("tia-elements:forward-returns") ?? "null")).toEqual(memory.current);
+        });
+
+        it("stores Tooltips and Colours and restores them on the next mount", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockResolvedValue(data);
+            render(ForwardReturns, props);
+            await screen.findByRole("grid");
+
+            await userEvent.click(await setting("Tooltips"));
+            await userEvent.click(await setting("Colours"));
+            expect(memory.current.instances["1:0"]?.pick).toMatchObject({ tooltips: false, colours: false });
+            cleanup();
+
+            render(ForwardReturns, props);
+            await screen.findByRole("grid");
+            expect(screen.getByRole("checkbox", { name: /\+3\.21%/ })).not.toHaveClass("bg-success-light");
+            expect(await setting("Tooltips")).toHaveAttribute("aria-checked", "false");
+            expect(await setting("Colours")).toHaveAttribute("aria-checked", "false");
+        });
+
+        it("shows Tooltips and Colours for a pick stored before they existed", async () => {
+            vi.mocked(getAssets).mockResolvedValue([asset]);
+            vi.mocked(getForwardReturns).mockImplementation(async (selection) => answer(selection));
+            memory.set(stored(unset));
+            render(ForwardReturns, props);
+            await screen.findByRole("grid");
+
+            expect(await setting("Tooltips")).toHaveAttribute("aria-checked", "true");
+            expect(await setting("Colours")).toHaveAttribute("aria-checked", "true");
         });
 
         it("shows exclusions live in a second instance and stores them", async () => {

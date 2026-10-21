@@ -10,13 +10,17 @@
 </script>
 
 <script lang="ts">
-    import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-svelte";
+    import { ChevronLeft, ChevronRight, MessageSquareText, Palette, RotateCcw, Settings } from "lucide-svelte";
     import { onMount } from "svelte";
     import { MediaQuery } from "svelte/reactivity";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
     import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
+    import DropdownMenu from "tia-design-system/ui/dropdown-menu/DropdownMenu.svelte";
+    import DropdownMenuGroup from "tia-design-system/ui/dropdown-menu/DropdownMenuGroup.svelte";
+    import DropdownMenuItem from "tia-design-system/ui/dropdown-menu/DropdownMenuItem.svelte";
+    import DropdownMenuSeparator from "tia-design-system/ui/dropdown-menu/DropdownMenuSeparator.svelte";
     import Kbd from "tia-design-system/ui/kbd/Kbd.svelte";
     import Popover from "tia-design-system/ui/popover/Popover.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
@@ -72,6 +76,8 @@
     let request = $state.raw<AbortController | null>(null);
     let failure = $state.raw<{ kind: ErrorKind; retry: () => void } | null>(null);
     let entryOffset = $state(0);
+    let showTooltips = $state(true);
+    let showColours = $state(true);
     // The one Return Cell or year under the pointer mounts a Tooltip; one per cell blocks the page for seconds on long histories.
     let hinted = $state<string | null>(null);
     // A Return Cell or year focused by keyboard opens its hint; the grid's one Tab stop is the item focused last.
@@ -147,7 +153,12 @@
         }
         const entry = {
             attributes: normalise(attributes, ATTRIBUTE_KEYS),
-            pick: { ...selection, entryOffset: clamp(entryOffset, 0, selection.period - 1) }
+            pick: {
+                ...selection,
+                entryOffset: clamp(entryOffset, 0, selection.period - 1),
+                tooltips: showTooltips,
+                colours: showColours
+            }
         };
         memory.set({ ...memory.current, instances: { ...memory.current.instances, [instance]: entry } });
     }
@@ -317,6 +328,8 @@
             const restored = restore(attributes, entry, assets);
             selection = restored && { base: restored.base, quote: restored.quote, period: restored.period };
             entryOffset = restored?.entryOffset ?? 0;
+            showTooltips = restored?.tooltips ?? true;
+            showColours = restored?.colours ?? true;
         } catch (error) {
             fail(error, loadAssets);
             return;
@@ -448,7 +461,7 @@
             "grid w-full min-w-20 items-center rounded-md border text-center text-md font-medium whitespace-nowrap pointer-coarse:min-h-11",
             state === "partial" ? "border-dashed border-border-input" : "border-transparent",
             state === "counted" || (state === "partial" && !exclusions.years.includes(year))
-                ? tones[toneOf(value)]
+                ? (showColours ? tones : rateTones)[toneOf(value)]
                 : "text-foreground-muted",
             locked ? "cursor-not-allowed" : "cursor-pointer hover:border-current"
         ]}
@@ -468,7 +481,7 @@
 {/snippet}
 
 {#snippet hint(key: string, year: number, month: number, value: number | null, state: CellState)}
-    {#if hinted === key}
+    {#if showTooltips && hinted === key}
         <!-- No offset beyond the arrow: rows sit closer than the default gap, so its tip would touch the row above. -->
         <Tooltip
             content={cellHint(year, month, value, state)}
@@ -552,11 +565,61 @@
                 </li>
             {/if}
             {@render helpItem(
-                "Reset",
-                "Includes everything again and moves the Entry Months back. It keeps the asset and the Holding Period."
+                "Settings",
+                "The cog holds Reset, Tooltips and Colours. Reset includes everything again and moves the Entry Months back. It keeps the asset, the Holding Period and what Show sets."
             )}
         </ul>
     </Popover>
+{/snippet}
+
+{#snippet settings()}
+    <DropdownMenu aria-label="Settings" portalTarget={root}>
+        {#snippet trigger({ props })}
+            <button
+                {...props}
+                type="button"
+                aria-label="Settings"
+                class="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background @max-lg:size-11 pointer-coarse:size-11">
+                <Settings class="size-4" aria-hidden="true" />
+            </button>
+        {/snippet}
+        <DropdownMenuGroup heading="Actions">
+            <DropdownMenuItem
+                label="Reset"
+                description="Includes all cells and years, Entry Months back to the start."
+                disabled={!changed}
+                onSelect={reset}>
+                {#snippet leadingIcon()}<RotateCcw />{/snippet}
+            </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup heading="Show">
+            <DropdownMenuItem
+                label="Tooltips"
+                description="Months, value and click hint on hover."
+                bind:checked={
+                    () => showTooltips,
+                    (on) => {
+                        showTooltips = on;
+                        remember();
+                    }
+                }>
+                {#snippet leadingIcon()}<MessageSquareText />{/snippet}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                label="Colours"
+                description="Green and red fill on returns."
+                bind:checked={
+                    () => showColours,
+                    (on) => {
+                        showColours = on;
+                        remember();
+                    }
+                }>
+                {#snippet leadingIcon()}<Palette />{/snippet}
+            </DropdownMenuItem>
+        </DropdownMenuGroup>
+    </DropdownMenu>
 {/snippet}
 
 {#snippet loading()}
@@ -583,50 +646,42 @@
                 sizes.twoRows}px)">
             {#if selection}
                 {@const picked = selection}
-                <div class="flex flex-col gap-4 border-b border-border-muted px-4 py-5 @lg:px-6 @3xl:flex-row @3xl:items-end">
-                    <Combobox
-                        label="Asset"
-                        class="@lg:w-64"
-                        searchPlaceholder="Search assets…"
-                        items={assets.map((asset) => ({ value: assetKey(asset), label: asset.title, group: asset.group }))}
-                        portalTarget={root}
-                        value={assetKey(selection)}
-                        onValueChange={pickAsset} />
-                    <div class="flex flex-col items-start gap-4 @lg:flex-row @lg:items-end @3xl:ml-auto">
-                        <!-- On a narrow card the toggle fills the row with smaller labels; narrower than those, it scrolls sideways. -->
-                        <div class="flex w-full flex-col gap-1.5 @max-lg:overflow-x-auto @lg:w-auto">
-                            <span id="{uid}-period" class="text-sm font-medium text-foreground">Holding Period</span>
-                            <ToggleGroup
-                                type="single"
-                                variant="solid"
-                                size="sm"
-                                indicator="sliding"
-                                class="min-w-max rounded-full"
-                                aria-labelledby="{uid}-period"
-                                bind:value={() => String(picked.period), pickPeriod}
-                                onkeydown={pickFocused}>
-                                {#each currentAsset ? periodOptions(currentAsset) : [] as option (option.value)}
-                                    <Toggle
-                                        value={option.value}
-                                        class="rounded-full whitespace-nowrap @max-lg:flex-auto @max-lg:px-1 @max-lg:text-xs"
-                                        >{option.label}</Toggle>
-                                {/each}
-                            </ToggleGroup>
-                        </div>
-                        <div class="flex items-center gap-2 @max-lg:w-full">
-                            <Button
-                                variant="outline-fill"
-                                size="sm"
-                                class="@max-lg:h-11 @max-lg:flex-1 pointer-coarse:h-11"
-                                aria-disabled={!changed}
-                                onclick={reset}>
-                                {#snippet leadingIcon()}
-                                    <RotateCcw class="size-4" aria-hidden="true" />
-                                {/snippet}
-                                Reset
-                            </Button>
-                            {@render help()}
-                        </div>
+                <!-- Below `@lg` the cog and help share the Asset row and the toggle wraps under it; up to `@3xl` Asset has a row of its own.
+                     The toggle stays before the cog in the DOM, so Tab from Asset reaches it first. -->
+                <div class="flex flex-wrap items-end gap-4 border-b border-border-muted px-4 py-5 @lg:px-6">
+                    <div class="min-w-0 grow @lg:basis-full @3xl:grow-0 @3xl:basis-auto">
+                        <Combobox
+                            label="Asset"
+                            class="@lg:w-64"
+                            searchPlaceholder="Search assets…"
+                            items={assets.map((asset) => ({ value: assetKey(asset), label: asset.title, group: asset.group }))}
+                            portalTarget={root}
+                            value={assetKey(selection)}
+                            onValueChange={pickAsset} />
+                    </div>
+                    <!-- On a narrow card the toggle fills the row with smaller labels; narrower than those, it scrolls sideways. -->
+                    <div class="order-last flex w-full flex-col gap-1.5 @max-lg:overflow-x-auto @lg:order-0 @lg:w-auto @3xl:ml-auto">
+                        <span id="{uid}-period" class="text-sm font-medium text-foreground">Holding Period</span>
+                        <ToggleGroup
+                            type="single"
+                            variant="solid"
+                            size="sm"
+                            indicator="sliding"
+                            class="min-w-max rounded-full"
+                            aria-labelledby="{uid}-period"
+                            bind:value={() => String(picked.period), pickPeriod}
+                            onkeydown={pickFocused}>
+                            {#each currentAsset ? periodOptions(currentAsset) : [] as option (option.value)}
+                                <Toggle
+                                    value={option.value}
+                                    class="rounded-full whitespace-nowrap @max-lg:flex-auto @max-lg:px-1 @max-lg:text-xs"
+                                    >{option.label}</Toggle>
+                            {/each}
+                        </ToggleGroup>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                        {@render settings()}
+                        {@render help()}
                     </div>
                 </div>
             {/if}
@@ -711,7 +766,7 @@
                                                     }}
                                                     onblur={() => (focused = null)}
                                                     onclick={() => exclude({ years: toggle(exclusions.years, row.year) })}>
-                                                    {#if hinted === `year-${row.year}`}
+                                                    {#if showTooltips && hinted === `year-${row.year}`}
                                                         <Tooltip
                                                             content={`${row.year} · whole row\nClick to ${counted ? "exclude" : "include"}`}
                                                             class="whitespace-pre-line"
@@ -754,13 +809,17 @@
                                                 <!-- An invisible year sizes the box, so each label ends where the centred years end. -->
                                                 <span class="relative mx-auto block w-max">
                                                     <span class="invisible" aria-hidden="true">{years[0]?.year}</span>
-                                                    <Tooltip content={hint} portalTarget={root}>
-                                                        {#snippet trigger({ props })}
-                                                            <span
-                                                                {...withoutFocusStop(props)}
-                                                                class="absolute inset-y-0 right-0 flex items-center">{label}</span>
-                                                        {/snippet}
-                                                    </Tooltip>
+                                                    {#if showTooltips}
+                                                        <Tooltip content={hint} portalTarget={root}>
+                                                            {#snippet trigger({ props })}
+                                                                <span
+                                                                    {...withoutFocusStop(props)}
+                                                                    class="absolute inset-y-0 right-0 flex items-center">{label}</span>
+                                                            {/snippet}
+                                                        </Tooltip>
+                                                    {:else}
+                                                        <span class="absolute inset-y-0 right-0 flex items-center">{label}</span>
+                                                    {/if}
                                                 </span>
                                             </th>
                                             {#each results as column, index (months[index])}
