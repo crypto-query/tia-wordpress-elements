@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { userEvent } from "@vitest/browser/context";
 import { Axis, getInstanceByDom } from "echarts/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { ApiError } from "../shared/api";
 import { formatReturn } from "../shared/format";
 import { getAssets, getPredictiveCycles, type Asset, type Cutoff, type DataRequest, type PredictiveCycles as Data } from "./api";
@@ -729,6 +729,33 @@ describe("PredictiveCycles", () => {
             expect(chip("Bull")).toBePressed();
             await new Promise((resolve) => setTimeout(resolve, 200));
             expect(getPredictiveCycles).toHaveBeenCalledOnce();
+        });
+
+        it("colours each line like its chip while every year of a curve is excluded", async () => {
+            // The tokens come from the design system's CSS, which the tests do not load.
+            const slots = Array.from({ length: 11 }, (_, index) => `--chart-${index + 1}`);
+            slots.forEach((slot, index) => document.documentElement.style.setProperty(slot, `rgb(${index + 1}, 0, 0)`));
+            onTestFinished(() => slots.forEach((slot) => document.documentElement.style.removeProperty(slot)));
+            memory.set({ ...EMPTY_MEMORY, excluded: { btc: { 4: [2014, 2018, 2022] } } });
+            await open([btc]);
+            expect(lastRequest()?.curves.map(({ id }) => id)).not.toContain(4);
+            type Series = { name?: string; color?: string };
+            const group = screen.getByRole("group", { name: /^Predictive Cycles chart/ });
+            const lines = (getInstanceByDom(group)?.getOption().series as Series[]).filter(({ name }) => name);
+            /** `color` as the browser computes it inside `parent`, so a hex and a `var()` compare. */
+            const computed = (parent: Element, color: string) => {
+                const probe = parent.appendChild(document.createElement("span"));
+                probe.style.color = color;
+                const value = getComputedStyle(probe).color;
+                probe.remove();
+                return value;
+            };
+            const colours = lines.map(({ name = "", color = "" }) => [computed(chip(name), color), computed(chip(name), "var(--chip)")]);
+            expect(lines).toHaveLength(8);
+            expect(new Set(colours.map(([line]) => line)).size).toBe(8);
+            for (const [line, swatch] of colours) {
+                expect(line).toBe(swatch);
+            }
         });
 
         const badge = (name: RegExp) => screen.getByRole("button", { name });

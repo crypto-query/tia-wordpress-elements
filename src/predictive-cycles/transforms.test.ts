@@ -75,36 +75,27 @@ describe("pickSelection", () => {
 });
 
 describe("curveSlots", () => {
+    const year = ["Y1 Post-election", "Y2 Midterm", "Y3 Pre-election", "Y4 Election"];
+
     it.each([
-        ["Actual", 1],
-        ["All", 2],
-        ["Y1 Post-election", 3],
-        ["Y2 Midterm", 4],
-        ["Y3 Pre-election", 5],
-        ["Y4 Election", 6],
-        ["Decade offsets", 7],
-        ["20 & 60", 8],
-        ["20", 8],
-        ["Bear", 9],
-        ["Bull", 10],
-        ["Halving", 11]
-    ])("gives %s slot %i", (name, slot) => {
-        expect(curveSlots([name])).toEqual([slot]);
+        ["DJI", ["Actual", "All", "20 & 60", ...year, "Decade offsets"], [1, 2, 3, 4, 5, 6, 7, 8]],
+        ["XAU", ["Actual", "All", ...year], [1, 2, 3, 4, 5, 6]],
+        [
+            "BTC",
+            ["Actual", "Bull", "All", "Y2 Midterm", "Bear", "Y1 Post-election", "Halving", "Y4 Election", "Y3 Pre-election"],
+            [1, 4, 2, 7, 3, 6, 5, 9, 8]
+        ]
+    ])("colours %s by position in the original chart's order", (_, names, slots) => {
+        expect(curveSlots(names)).toEqual(Object.fromEntries(names.map((name, index) => [name, slots[index]])));
     });
 
-    it("keeps a role's slot whatever its position", () => {
-        expect(curveSlots(["Halving", "Actual", "Bull"])).toEqual([11, 1, 10]);
+    it("puts an unknown name after the known ones, in server order", () => {
+        expect(curveSlots(["Mystery", "Actual", "Other", "All"])).toEqual({ Actual: 1, All: 2, Mystery: 3, Other: 4 });
     });
 
-    it("gives an unknown role the first slot no curve of the asset uses", () => {
-        expect(curveSlots(["Actual", "Mystery", "All", "Other"])).toEqual([1, 3, 2, 4]);
-    });
-
-    it("gives an unknown role index mod 11 when every slot is used", () => {
-        const known = ["Actual", "All", "Y1 Post-election", "Y2 Midterm", "Y3 Pre-election", "Y4 Election"];
-        const names = [...known, "Decade offsets", "20 & 60", "Bear", "Bull", "Halving", "Mystery"];
-        expect(curveSlots(names).at(-1)).toBe(1);
-        expect(curveSlots([...names, "Other"]).at(-1)).toBe(2);
+    it("wraps after 11 curves", () => {
+        const names = Array.from({ length: 12 }, (_, index) => `Curve ${index}`);
+        expect(curveSlots(names)["Curve 11"]).toBe(1);
     });
 });
 
@@ -459,9 +450,9 @@ describe("tooltipRows", () => {
 
     it("lists each shown curve with a value in list order, a real 0 as 0.00%", () => {
         const curves = [curve("Actual", 3.214), curve("Bear", 0), curve("All", null), curve("Bull", -2.1), curve("Halving", 1)];
-        expect(tooltipRows(curves, ["Bull"], at)).toEqual([
-            { name: "Actual", slot: 1, value: "+3.21%" },
-            { name: "Bear", slot: 9, value: "0.00%" },
+        expect(tooltipRows(curves, ["Bull"], at, { Actual: 3, Bear: 6, All: 10, Bull: 5, Halving: 11 })).toEqual([
+            { name: "Actual", slot: 3, value: "+3.21%" },
+            { name: "Bear", slot: 6, value: "0.00%" },
             { name: "Halving", slot: 11, value: "+1.00%" }
         ]);
     });

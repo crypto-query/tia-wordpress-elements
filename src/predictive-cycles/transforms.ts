@@ -107,23 +107,23 @@ export function toggleYear(curve: Curve, baseYear: number, excluded: number[], y
     return chip.included ? [...excluded, year] : excluded.filter((other) => other !== year);
 }
 
-/** A curve's role, by its exact upstream name: its `--chart-n` slot, its chip group, and its chip name if shorter. */
-type Role = { slot: number; group: number; short?: string };
+/** A curve's role, by its exact upstream name: its chip group, and its chip name if shorter. */
+type Role = { group: number; short?: string };
 
 /** In chip order: groups ascending, then the fixed order inside each group. */
 const ROLES: ReadonlyMap<string, Role> = new Map([
-    ["Actual", { slot: 1, group: 1 }],
-    ["All", { slot: 2, group: 2 }],
-    ["20 & 60", { slot: 8, group: 2 }],
-    ["20", { slot: 8, group: 2 }],
-    ["Y1 Post-election", { slot: 3, group: 3, short: "Y1 Post" }],
-    ["Y2 Midterm", { slot: 4, group: 3, short: "Y2 Mid" }],
-    ["Y3 Pre-election", { slot: 5, group: 3, short: "Y3 Pre" }],
-    ["Y4 Election", { slot: 6, group: 3, short: "Y4 Elect" }],
-    ["Bear", { slot: 9, group: 4 }],
-    ["Bull", { slot: 10, group: 4 }],
-    ["Halving", { slot: 11, group: 4 }],
-    ["Decade offsets", { slot: 7, group: 4 }]
+    ["Actual", { group: 1 }],
+    ["All", { group: 2 }],
+    ["20 & 60", { group: 2 }],
+    ["20", { group: 2 }],
+    ["Y1 Post-election", { group: 3, short: "Y1 Post" }],
+    ["Y2 Midterm", { group: 3, short: "Y2 Mid" }],
+    ["Y3 Pre-election", { group: 3, short: "Y3 Pre" }],
+    ["Y4 Election", { group: 3, short: "Y4 Elect" }],
+    ["Bear", { group: 4 }],
+    ["Bull", { group: 4 }],
+    ["Halving", { group: 4 }],
+    ["Decade offsets", { group: 4 }]
 ]);
 
 const ORDER = [...ROLES.keys()];
@@ -143,21 +143,20 @@ export const shortName = (name: string): string => ROLES.get(name)?.short ?? nam
 export const lineKind = (name: string): "actual" | "set" | "plain" =>
     name === ACTUAL ? "actual" : ROLES.get(name)?.group === 4 ? "set" : "plain";
 
-/** The `--chart-n` slot of each curve, by its exact upstream name. An unknown name takes the first unused slot, else `index mod 11`. */
-export function curveSlots(names: string[]): number[] {
-    const used = new Set(names.flatMap((name) => ROLES.get(name)?.slot ?? []));
-    return names.map((name, index) => {
-        const known = ROLES.get(name)?.slot;
-        if (known !== undefined) {
-            return known;
-        }
-        const free = Array.from({ length: 11 }, (_, slot) => slot + 1).find((slot) => !used.has(slot));
-        if (free === undefined) {
-            return (index % 11) + 1;
-        }
-        used.add(free);
-        return free;
-    });
+/** The order the original chart hands out its colours in; an unknown name comes after these, in server order. */
+const COLOUR_ORDER = [
+    ...["Actual", "All", "20 & 60", "20", "Bear", "Bull", "Halving"],
+    ...["Y1 Post-election", "Y2 Midterm", "Y3 Pre-election", "Y4 Election", "Decade offsets"]
+];
+
+/**
+ * The `--chart-n` slot of each of an asset's curves. Like the original chart, a colour goes by the curve's position
+ * among the asset's curves, so one name may take another colour on another asset.
+ */
+export function curveSlots(names: string[]): Record<string, number> {
+    const rank = (name: string) => (COLOUR_ORDER.includes(name) ? COLOUR_ORDER.indexOf(name) : COLOUR_ORDER.length);
+    const order = names.toSorted((a, b) => rank(a) - rank(b));
+    return Object.fromEntries(order.map((name, position) => [name, (position % 11) + 1]));
 }
 
 export type CutoffCase = "none" | "before" | "inside";
@@ -193,12 +192,11 @@ export function dayLabel(at: number): string {
 
 export type TooltipRow = { name: string; slot: number; value: string };
 
-/** One row per shown curve with a value on day `at`, in list order. */
-export function tooltipRows(curves: CurveData[], hidden: string[], at: number): TooltipRow[] {
-    const slots = curveSlots(curves.map(({ name }) => name));
-    return curves.flatMap(({ name, points }, index) => {
+/** One row per shown curve with a value on day `at`, in list order; `slots` comes from `curveSlots` of the asset. */
+export function tooltipRows(curves: CurveData[], hidden: string[], at: number, slots: Record<string, number>): TooltipRow[] {
+    return curves.flatMap(({ name, points }) => {
         const value = hidden.includes(name) ? null : (points.find(([day]) => day === at)?.[1] ?? null);
-        return value === null ? [] : [{ name, slot: slots[index], value: formatReturn(value) }];
+        return value === null ? [] : [{ name, slot: slots[name], value: formatReturn(value) }];
     });
 }
 
@@ -337,7 +335,7 @@ export function chartSummary(curves: CurveData[], hidden: string[], baseYear: nu
     const days = actual === undefined || actual === yearEnd ? [yearEnd] : [actual, yearEnd];
     return days
         .flatMap((at) => {
-            const rows = tooltipRows(curves, hidden, at);
+            const rows = tooltipRows(curves, hidden, at, curveSlots(curves.map(({ name }) => name)));
             return rows.length === 0 ? [] : [`${shortDate(at)}: ${rows.map(({ name, value }) => `${name} ${value}`).join(", ")}.`];
         })
         .join(" ");

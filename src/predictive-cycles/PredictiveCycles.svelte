@@ -200,6 +200,10 @@
     );
     // Below about 36 px a month, three-letter names crowd each other out, so every month shows its initial.
     const initials = $derived(width > 0 && ((width - 64) * 100) / Math.max(zoom.end - zoom.start, 1) / 12 < 36);
+    // From the asset's full curve list: the data leaves out a curve whose years are all excluded.
+    const slots = $derived(
+        curveSlots((assets.find(({ id }) => id === shown?.data.id)?.curves ?? shown?.data.curves ?? []).map(({ name }) => name))
+    );
     const option = $derived(
         theme && shown
             ? chartOption(
@@ -329,18 +333,17 @@
         }
         const at = hoverAt;
         const curves = shown ? dragCurves(shown.data.curves, drag, log) : [];
-        const slots = curveSlots(curves.map(({ name }) => name));
         const off = at === null || !showTooltip || inZone(at) || curves.every(({ name }) => hidden.includes(name));
         const dots = off
             ? []
-            : curves.flatMap(({ name, points }, index) => {
+            : curves.flatMap(({ name, points }) => {
                   const value = hidden.includes(name) ? null : (points.find(([day]) => day === at)?.[1] ?? null);
                   if (value === null) {
                       return [];
                   }
                   const [cx = 0, cy = 0]: number[] = echart.convertToPixel({ gridIndex: 0 }, [at, log ? Math.asinh(value) : value]);
                   const opacity = lit === null || lit === name ? 1 : BLURRED;
-                  return echart.containPixel({ gridIndex: 0 }, [cx, cy]) ? [{ cx, cy, fill: theme?.color[slots[index] - 1], opacity }] : [];
+                  return echart.containPixel({ gridIndex: 0 }, [cx, cy]) ? [{ cx, cy, fill: theme?.color[slots[name] - 1], opacity }] : [];
               });
         const key = JSON.stringify(dots);
         if (key === dotsKey) {
@@ -536,7 +539,7 @@
     function tooltipHtml(curves: CurveData[], hidden: string[], at: number): string {
         return [
             `<div class="font-medium">${dayLabel(at)}</div>`,
-            ...tooltipRows(curves, hidden, at).map(
+            ...tooltipRows(curves, hidden, at, slots).map(
                 ({ name, slot, value }) =>
                     `<div class="mt-1 flex items-center gap-2"><span class="size-2.5 rounded-full" style="background-color: var(--chart-${slot})"></span>` +
                     `${format.encodeHTML(name)}<span class="ml-auto pl-4 font-medium tabular-nums">${value}</span></div>`
@@ -560,10 +563,9 @@
     ): Option {
         const { data } = shown;
         const curves = dragCurves(data.curves, drag, log);
-        const slots = curveSlots(curves.map(({ name }) => name));
         // With no curve shown, every curve stays as an invisible line, so the empty plot keeps its axes in place.
         const empty = curves.every(({ name }) => hidden.includes(name));
-        const drawn = curves.flatMap((curve, index) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[index] }]));
+        const drawn = curves.flatMap((curve) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[curve.name] }]));
         const ticks = monthStarts(data.base_year);
         const label = { ...theme.axis.axisLabel, show: showLabels };
         const values = drawn.flatMap(({ curve }) => curve.points.flatMap(([, value]) => (value === null ? [] : [value])));
@@ -1274,7 +1276,7 @@
                 {/if}
                 {#if selection}
                     {@const picked = selection}
-                    {@const slots = curveSlots(picked.asset.curves.map(({ name }) => name))}
+                    {@const chipSlots = curveSlots(picked.asset.curves.map(({ name }) => name))}
                     <!-- Spans the card's full width, so the fade sits at the card edge; the padding keeps focus rings unclipped. -->
                     <div
                         {@attach edgeFade}
@@ -1289,7 +1291,7 @@
                                     <span aria-hidden="true" class="mx-0.75 h-5 w-px shrink-0 bg-border"></span>
                                 {/if}
                                 {#each group as curve (curve.id)}
-                                    {@render curveChip(curve, slots[picked.asset.curves.indexOf(curve)], picked.baseYear)}
+                                    {@render curveChip(curve, chipSlots[curve.name], picked.baseYear)}
                                 {/each}
                             {/each}
                         </div>
