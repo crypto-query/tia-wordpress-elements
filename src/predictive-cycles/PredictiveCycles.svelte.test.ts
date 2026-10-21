@@ -190,7 +190,10 @@ describe("PredictiveCycles", () => {
 
         it("is one Tab stop after the chips that tells its curves' values, with no visible hint", async () => {
             const group = await open();
-            screen.getByRole("button", { name: "How to use this chart" }).focus();
+            within(screen.getByRole("group", { name: "Curves" }))
+                .getAllByRole("button")
+                .at(-1)
+                ?.focus();
             await userEvent.tab();
             expect(group).toHaveFocus();
             await userEvent.tab();

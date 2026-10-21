@@ -957,7 +957,7 @@
                 {...props}
                 type="button"
                 aria-label="How to use this chart"
-                class="grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-sm font-semibold text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background pointer-coarse:size-11">
+                class="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-sm font-semibold text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background @max-lg:size-11 @max-lg:text-base pointer-coarse:size-11">
                 ?
             </button>
         {/snippet}
@@ -999,7 +999,7 @@
                 {...props}
                 type="button"
                 aria-label="Settings"
-                class="grid size-7.5 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background pointer-coarse:size-11">
+                class="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background @max-lg:size-11 pointer-coarse:size-11">
                 <Settings class="size-4" aria-hidden="true" />
             </button>
         {/snippet}
@@ -1056,8 +1056,10 @@
         <Card padding="none" class="@container flex flex-col">
             {#if selection}
                 {@const picked = selection}
+                <!-- Below `@lg` the cog and help share the Asset row and the Base Year wraps under it; up to `@2xl` Asset has a row of its own.
+                     The Base Year stays before the cog in the DOM, so Tab from Asset reaches it first. -->
                 <div class="flex flex-wrap items-end gap-4 border-b border-border-muted px-4 py-5 @lg:px-5">
-                    <div class="w-full @2xl:w-auto">
+                    <div class="min-w-0 grow @lg:basis-full @2xl:grow-0 @2xl:basis-auto">
                         <Combobox
                             label="Asset"
                             class="@lg:w-64"
@@ -1067,7 +1069,7 @@
                             value={picked.asset.id}
                             onValueChange={pickAsset} />
                     </div>
-                    <div class="flex flex-col items-center gap-1.5">
+                    <div class="order-last flex flex-col items-center gap-1.5 @lg:order-0">
                         <span id="{uid}-base-year" class="text-sm font-medium text-foreground">Base Year</span>
                         <div role="group" aria-labelledby="{uid}-base-year" class="flex items-center gap-1">
                             {@render stepper(-1, picked)}
@@ -1080,6 +1082,10 @@
                             {@render stepper(1, picked)}
                         </div>
                     </div>
+                    <div class="ml-auto flex shrink-0 items-center gap-2">
+                        {@render settings()}
+                        {@render help()}
+                    </div>
                 </div>
             {/if}
             <div class="flex flex-col px-4 pt-4 pb-5 @lg:px-5">
@@ -1089,30 +1095,23 @@
                 {#if selection}
                     {@const picked = selection}
                     {@const slots = curveSlots(picked.asset.curves.map(({ name }) => name))}
-                    <!-- Spans the card's full width, so the left fade sits at the card edge; Settings and help stay pinned at the right. -->
-                    <div class="-mx-4 mb-1 flex items-center gap-1 @lg:-mx-5">
-                        <!-- The padding keeps focus rings unclipped. -->
-                        <div
-                            {@attach edgeFade}
-                            class={[
-                                "flex min-w-0 flex-1 scroll-px-10 scrollbar-none items-center overflow-x-auto py-1 pr-1 pl-4 @lg:pl-5 [&::-webkit-scrollbar]:hidden",
-                                fade.left && "mask-l-from-[calc(100%-1.5rem)]",
-                                fade.right && "mask-r-from-[calc(100%-2.25rem)]"
-                            ]}>
-                            <div role="group" aria-label="Curves" class="flex shrink-0 items-center gap-1">
-                                {#each chipGroups(picked.asset.curves) as group, index (group[0].id)}
-                                    {#if index > 0}
-                                        <span aria-hidden="true" class="mx-0.75 h-5 w-px shrink-0 bg-border"></span>
-                                    {/if}
-                                    {#each group as curve (curve.id)}
-                                        {@render curveChip(curve, slots[picked.asset.curves.indexOf(curve)], picked.baseYear)}
-                                    {/each}
+                    <!-- Spans the card's full width, so the fade sits at the card edge; the padding keeps focus rings unclipped. -->
+                    <div
+                        {@attach edgeFade}
+                        class={[
+                            "-mx-4 mb-1 flex scroll-px-10 scrollbar-none items-center gap-1 overflow-x-auto px-4 py-1 @lg:-mx-5 @lg:px-5 [&::-webkit-scrollbar]:hidden",
+                            fade.left && "mask-l-from-[calc(100%-1.5rem)]",
+                            fade.right && "mask-r-from-[calc(100%-2.25rem)]"
+                        ]}>
+                        <div role="group" aria-label="Curves" class="flex shrink-0 items-center gap-1">
+                            {#each chipGroups(picked.asset.curves) as group, index (group[0].id)}
+                                {#if index > 0}
+                                    <span aria-hidden="true" class="mx-0.75 h-5 w-px shrink-0 bg-border"></span>
+                                {/if}
+                                {#each group as curve (curve.id)}
+                                    {@render curveChip(curve, slots[picked.asset.curves.indexOf(curve)], picked.baseYear)}
                                 {/each}
-                            </div>
-                        </div>
-                        <div class="flex shrink-0 items-center gap-1 py-1 pr-4 @lg:pr-5">
-                            {@render settings()}
-                            {@render help()}
+                            {/each}
                         </div>
                     </div>
                 {/if}
