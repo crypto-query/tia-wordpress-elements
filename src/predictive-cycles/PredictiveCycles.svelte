@@ -768,7 +768,9 @@
     <Button
         variant="ghost"
         size="icon"
-        class="size-10 pointer-coarse:size-11"
+        class="-my-px h-auto w-9.5 self-stretch {step < 0
+            ? 'rounded-none'
+            : 'rounded-l-none rounded-r-md'} relative border-0 before:absolute before:inset-y-px before:left-0 before:w-px before:bg-border-muted hover:bg-transparent active:bg-transparent aria-disabled:opacity-100 aria-disabled:*:opacity-50 pointer-coarse:w-11"
         aria-label={step < 0 ? "Older Base Year" : "Newer Base Year"}
         aria-disabled={target === null}
         onclick={() => pickBaseYear(target)}>
@@ -1069,16 +1071,18 @@
                             value={picked.asset.id}
                             onValueChange={pickAsset} />
                     </div>
-                    <div class="order-last flex flex-col items-center gap-1.5 @lg:order-0">
+                    <div class="order-last flex basis-full flex-col gap-1.5 @lg:order-0 @lg:w-40 @lg:shrink-0 @lg:basis-auto">
                         <span id="{uid}-base-year" class="text-sm font-medium text-foreground">Base Year</span>
-                        <div role="group" aria-labelledby="{uid}-base-year" class="flex items-center gap-1">
-                            {@render stepper(-1, picked)}
-                            <span
-                                role="status"
-                                aria-labelledby="{uid}-base-year"
-                                class="min-w-12 text-center text-md font-medium text-foreground tabular-nums">
+                        <!-- The Combobox trigger's shell; the buttons overlap its border by 1px, so they reach 44px on touch.
+                             Their divider is a pseudo-element inset by that 1px: a `border-l` would notch the field's border. -->
+                        <div
+                            role="group"
+                            aria-labelledby="{uid}-base-year"
+                            class="flex h-10 items-center rounded-md border border-border-input bg-background-alt pl-3 text-md/snug text-foreground transition-colors duration-150 ease-out-soft hover:border-border-input-hover has-focus-visible:border-border-focus pointer-coarse:h-11">
+                            <span role="status" aria-labelledby="{uid}-base-year" class="min-w-0 flex-1 tabular-nums">
                                 {picked.baseYear}
                             </span>
+                            {@render stepper(-1, picked)}
                             {@render stepper(1, picked)}
                         </div>
                     </div>
