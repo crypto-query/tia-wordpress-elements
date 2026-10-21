@@ -634,13 +634,13 @@
         <AccessCard feature="Forward Returns" {card} />
     {:else}
         <!-- A container: the Block may sit in a narrow column on a wide screen, so the layout follows the card's width. -->
-        <!-- At most the viewport height, below the admin bar when there is one; then only the year rows scroll.
+        <!-- At most the viewport height below the admin bar, less a 20px margin above and below; then only the year rows scroll.
              It keeps room for the header, the results and about two rows; in a shorter viewport the page scrolls. -->
         <Card
             padding="none"
             class="@container flex flex-col"
             data-card
-            style="max-height: max(100dvh - var(--wp-admin--admin-bar--height, 0px), {sizes.chrome +
+            style="max-height: max(100svh - var(--wp-admin--admin-bar--height, 0px) - 40px, {sizes.chrome +
                 sizes.head +
                 sizes.foot +
                 sizes.twoRows}px)">

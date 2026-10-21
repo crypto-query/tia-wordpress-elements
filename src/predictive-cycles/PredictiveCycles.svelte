@@ -173,6 +173,26 @@
     // The emphasised curve, by ECharts' own hover or by `emphasise`; the dots of the others dim with their lines.
     let lit: string | null = null;
     let width = $state(0);
+    /** The card's height without the chart box: header, chips and padding. */
+    let chrome = $state(0);
+    /** Reads both heights in one step: measured apart, the chrome and the box chase each other. */
+    function measureChrome(box: HTMLDivElement) {
+        const observer = new ResizeObserver(() => {
+            chrome = (root?.offsetHeight ?? 0) - box.offsetHeight;
+        });
+        observer.observe(box);
+        if (root) {
+            observer.observe(root);
+        }
+        return () => observer.disconnect();
+    }
+
+    /*
+     * Fill the screen below the admin bar with a 20px margin above and below, but at most square, so an upright phone
+     * gets no tall strip. On a sideways phone the floor wins and the chart alone fits. `svh`: the address bar does not resize it.
+     */
+    const screen = "100svh - var(--wp-admin--admin-bar--height, 0px) - 40px";
+    const chartBox = $derived(`height: max(min(22.5rem, ${screen}), min(${screen} - ${chrome}px, 100cqw))`);
     // The one open panel: "help", a curve id for its year popover, or none.
     let openPanel = $state<"help" | number | null>(null);
     let fade = $state.raw({ left: false, right: false });
@@ -1300,16 +1320,16 @@
                 {#if failure}
                     {@render problem(failure)}
                 {:else if !shown || !option}
-                    <div class="flex h-90 items-center justify-center sm:h-120">
+                    <div {@attach measureChrome} style={chartBox} class="flex items-center justify-center">
                         <Spinner size="lg" tone="muted" label="Loading Predictive Cycles" />
                     </div>
                 {:else}
-                    <div class="relative" aria-busy={loading ? "true" : undefined}>
+                    <div {@attach measureChrome} style={chartBox} class="relative" aria-busy={loading ? "true" : undefined}>
                         <Chart
                             {option}
                             bind:chart
                             setOptionOpts={{ replaceMerge: ["series", "yAxis"] }}
-                            class={["h-90 w-full rounded-md transition-opacity sm:h-120", loading && "opacity-50"]}
+                            class={["size-full rounded-md transition-opacity", loading && "opacity-50"]}
                             role="group"
                             tabindex={0}
                             aria-label="Predictive Cycles chart, {shown.data.id.toUpperCase()}, Base Year {shown.data.base_year}"
