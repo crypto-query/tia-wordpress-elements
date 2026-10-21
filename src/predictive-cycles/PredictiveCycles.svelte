@@ -471,6 +471,7 @@
                     type: "slider",
                     xAxisIndex: 0,
                     filterMode: "none",
+                    showDetail: false,
                     bottom: 8,
                     height: 24,
                     start: zoom.start,
