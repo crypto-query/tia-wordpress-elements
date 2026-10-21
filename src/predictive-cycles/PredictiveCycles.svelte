@@ -472,6 +472,8 @@
                     xAxisIndex: 0,
                     filterMode: "none",
                     showDetail: false,
+                    // The whole window drags, not only the thin bar on top that brush selection leaves.
+                    brushSelect: false,
                     bottom: 8,
                     height: 24,
                     start: zoom.start,
