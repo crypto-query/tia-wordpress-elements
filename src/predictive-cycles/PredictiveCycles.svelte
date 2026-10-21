@@ -187,8 +187,12 @@
         !hidden.includes(ACTUAL) &&
             (shown?.data.curves.some(({ name, points }) => name === ACTUAL && points.some(([, value]) => value !== null)) ?? false)
     );
+    // Below about 36 px a month, three-letter names crowd each other out, so every month shows its initial.
+    const initials = $derived(width > 0 && ((width - 64) * 100) / Math.max(zoom.end - zoom.start, 1) / 12 < 36);
     const option = $derived(
-        theme && shown ? chartOption(theme, shown, hidden, log, showTooltip, showLabels, zoom, drag, focused && draggable, yRange) : null
+        theme && shown
+            ? chartOption(theme, shown, hidden, log, showTooltip, showLabels, initials, zoom, drag, focused && draggable, yRange)
+            : null
     );
     const noneShown = $derived(selection !== null && selection.asset.curves.every(({ name }) => hidden.includes(name)));
 
@@ -409,6 +413,7 @@
         log: boolean,
         showTooltip: boolean,
         showLabels: boolean,
+        initials: boolean,
         zoom: Zoom,
         drag: Drag,
         focused: boolean,
@@ -477,15 +482,16 @@
                 type: "time",
                 min: firstAt,
                 max: lastAt,
-                splitLine: { show: false },
+                splitLine: { ...theme.axis.splitLine, show: true },
                 // Only a hovered line or chip draws thicker; the tooltip's pointer would draw every line so.
                 axisPointer: { triggerEmphasis: false },
                 axisTick: { ...theme.axis.axisTick, customValues: ticks },
                 axisLabel: {
                     ...label,
-                    customValues: ticks,
+                    // Each month name sits mid-month, between its two grid lines.
+                    customValues: ticks.map((at) => at + 15 * DAY),
                     hideOverlap: true,
-                    formatter: (value: number) => MONTHS[new Date(value).getUTCMonth()]
+                    formatter: (value: number) => MONTHS[new Date(value).getUTCMonth()].slice(0, initials ? 1 : 3)
                 }
             },
             yAxis: log
