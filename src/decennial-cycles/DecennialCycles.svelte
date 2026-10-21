@@ -1,50 +1,115 @@
 <script lang="ts" module>
     import { LineChart, type LineSeriesOption } from "echarts/charts";
     import {
+        DataZoomInsideComponent,
+        DataZoomSliderComponent,
         GridComponent,
         MarkLineComponent,
         TooltipComponent,
+        type DataZoomComponentOption,
         type GridComponentOption,
         type MarkLineComponentOption,
         type TooltipComponentOption
     } from "echarts/components";
     import { use, type ComposeOption } from "echarts/core";
     import { CanvasRenderer } from "echarts/renderers";
+    import { Stored } from "../shared/storage.svelte";
+    import { isMemory } from "./transforms";
 
-    use([LineChart, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer]);
+    use([LineChart, GridComponent, MarkLineComponent, TooltipComponent, DataZoomInsideComponent, DataZoomSliderComponent, CanvasRenderer]);
 
-    type Option = ComposeOption<LineSeriesOption | GridComponentOption | MarkLineComponentOption | TooltipComponentOption>;
+    type Option = ComposeOption<
+        LineSeriesOption | GridComponentOption | MarkLineComponentOption | TooltipComponentOption | DataZoomComponentOption
+    >;
+
+    /** Each instance's view; nothing is shared between instances. */
+    export const memory = new Stored("tia-elements:decennial-cycles", isMemory, {});
 </script>
 
 <script lang="ts">
-    import { format } from "echarts/core";
+    import { format, type ECharts } from "echarts/core";
+    import { RotateCcw, Settings, Spline } from "lucide-svelte";
     import { onMount } from "svelte";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
     import Chart from "tia-design-system/ui/chart/Chart.svelte";
     import { chartTheme, type ChartTheme } from "tia-design-system/ui/chart/chart-theme";
+    import Combobox from "tia-design-system/ui/combobox/Combobox.svelte";
+    import DropdownMenu from "tia-design-system/ui/dropdown-menu/DropdownMenu.svelte";
+    import DropdownMenuGroup from "tia-design-system/ui/dropdown-menu/DropdownMenuGroup.svelte";
+    import DropdownMenuItem from "tia-design-system/ui/dropdown-menu/DropdownMenuItem.svelte";
+    import DropdownMenuSeparator from "tia-design-system/ui/dropdown-menu/DropdownMenuSeparator.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
-    import type { Card as BootCard } from "../shared/boot";
+    import { asinhTicks, toAsinh } from "../shared/asinh";
+    import { isObject, type Card as BootCard } from "../shared/boot";
     import { formatTick } from "../shared/format";
+    import { normalise, withoutKey, storedPick } from "../shared/load-rules";
     import { getAssets, getDecennialCycles, type Asset, type DecennialCycles } from "./api";
-    import { axisName, caption, pickAsset, todayMarker, tooltipContent, xAxisTicks } from "./transforms";
+    import {
+        ATTRIBUTE_KEYS,
+        FULL_ZOOM,
+        axisName,
+        caption,
+        chartSummary,
+        restore,
+        todayMarker,
+        tooltipContent,
+        xAxisTicks,
+        type Zoom
+    } from "./transforms";
 
-    // `instance` is null in the editor preview; nothing reads it until picks are stored.
-    let { attributes, card }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
+    // `instance` is null in the editor preview, which neither restores nor stores a view.
+    let { attributes, card, instance }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
 
     // The one curve takes the slot of the "All" role.
     const LINE_SLOT = 2;
+    // The narrowest window, one month, so a zoom under one year shows the month ticks.
+    const MIN_SPAN = 1 / 12;
 
+    const uid = $props.id();
+    let root = $state<HTMLDivElement>();
+    let chart = $state<ECharts>();
     let theme = $state.raw<ChartTheme | null>(null);
+    let assets = $state.raw<Asset[]>([]);
     let asset = $state.raw<Asset | null>(null);
+    let log = $state(false);
+    let zoom = $state.raw<Zoom>(FULL_ZOOM);
     let shown = $state.raw<DecennialCycles | null>(null);
     let request = $state.raw<AbortController | null>(null);
+    let waiting = $state(false);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let zoomTimer: ReturnType<typeof setTimeout> | undefined;
     let failure = $state.raw<{ kind: ErrorKind; retry: () => void } | null>(null);
 
-    const option = $derived(theme && shown ? chartOption(theme, shown, 0, 10) : null);
+    const loading = $derived(waiting || request !== null);
+    const zoomed = $derived(zoom.start > 0 || zoom.end < 100);
+    // The caption and the chart name follow the data on screen, not a pick still loading; an error shows the pick.
+    const named = $derived((!failure && assets.find(({ id }) => id === shown?.id)) || asset);
+    const option = $derived(theme && shown ? chartOption(theme, shown, log, zoom) : null);
+
+    $effect(() => {
+        const echart = chart;
+        if (!echart) {
+            return;
+        }
+        const onZoom = (event: unknown) => {
+            const range: unknown = isObject(event) && Array.isArray(event.batch) ? event.batch[0] : event;
+            if (isObject(range) && typeof range.start === "number" && typeof range.end === "number") {
+                zoom = { start: range.start, end: range.end };
+                clearTimeout(zoomTimer);
+                zoomTimer = setTimeout(remember, 250);
+            }
+        };
+        echart.on("datazoom", onZoom);
+        return () => {
+            if (!echart.isDisposed()) {
+                echart.off("datazoom", onZoom);
+            }
+        };
+    });
 
     function tooltipHtml(x: number, value: number | null): string {
         const { header, rows } = tooltipContent(x, value);
@@ -58,15 +123,18 @@
         ].join("");
     }
 
-    function chartOption(theme: ChartTheme, { curve }: DecennialCycles, start: number, end: number): Option {
+    function chartOption(theme: ChartTheme, { curve }: DecennialCycles, log: boolean, zoom: Zoom): Option {
+        const [start, end] = [zoom.start / 10, zoom.end / 10];
         const { ticks, labels, format: tickLabel } = xAxisTicks(start, end);
         const label = theme.axis.axisLabel;
         const today = todayMarker(new Date());
+        // The y axis fits the window: the zoom filters the points, and Log takes its ticks from the points inside.
+        const span = { xAxisIndex: 0, filterMode: "filter", minValueSpan: MIN_SPAN, start: zoom.start, end: zoom.end } as const;
         return {
             color: theme.color,
             textStyle: theme.textStyle,
             animation: false,
-            grid: { left: 8, right: 16, top: 24, bottom: 8 },
+            grid: { left: 8, right: 16, top: 24, bottom: 76 },
             tooltip: {
                 ...theme.tooltip,
                 trigger: "axis",
@@ -78,14 +146,28 @@
                     if (!Array.isArray(data) || typeof data[0] !== "number") {
                         return "";
                     }
-                    return tooltipHtml(data[0], typeof data[1] === "number" ? data[1] : null);
+                    const value = typeof data[1] === "number" ? (log ? Math.sinh(data[1]) : data[1]) : null;
+                    return tooltipHtml(data[0], value);
                 }
             },
+            dataZoom: [
+                { ...span, type: "inside", zoomOnMouseWheel: false, moveOnMouseWheel: false, moveOnMouseMove: true },
+                {
+                    ...theme.dataZoom,
+                    ...span,
+                    type: "slider",
+                    showDetail: false,
+                    // The whole window drags, not only the thin bar on top that brush selection leaves.
+                    brushSelect: false,
+                    bottom: 8,
+                    height: 24
+                }
+            ],
             xAxis: {
                 ...theme.axis,
                 type: "value",
-                min: start,
-                max: end,
+                min: 0,
+                max: 10,
                 name: axisName(start, end),
                 nameLocation: "middle",
                 nameGap: 28,
@@ -96,12 +178,17 @@
                 axisTick: { ...theme.axis.axisTick, customValues: ticks },
                 axisLabel: { ...label, customValues: labels, hideOverlap: true, formatter: tickLabel }
             },
-            yAxis: { ...theme.axis, type: "value", scale: true, axisLabel: { ...label, formatter: formatTick } },
+            yAxis: log
+                ? logAxis(
+                      theme,
+                      curve.datapoints.flatMap(({ dec, value }) => (value === null || dec < start || dec > end ? [] : [value]))
+                  )
+                : { ...theme.axis, type: "value", scale: true, axisLabel: { ...label, formatter: formatTick } },
             series: [
                 {
                     type: "line",
                     name: curve.name,
-                    data: curve.datapoints.map(({ dec, value }) => [dec, value]),
+                    data: curve.datapoints.map(({ dec, value }) => [dec, log ? toAsinh(value) : value]),
                     showSymbol: false,
                     triggerEvent: "line",
                     lineStyle: { width: 2 },
@@ -120,14 +207,50 @@
         };
     }
 
+    /** The `asinh` y axis over the values in the window, with its ticks at round values in real %. */
+    function logAxis(theme: ChartTheme, values: number[]): Option["yAxis"] {
+        const ticks = (values.length > 0 ? asinhTicks(Math.min(...values), Math.max(...values)) : [0]).map((value) => Math.asinh(value));
+        return {
+            ...theme.axis,
+            type: "value",
+            min: ticks.at(0),
+            max: ticks.at(-1),
+            axisTick: { ...theme.axis.axisTick, customValues: ticks },
+            axisLabel: {
+                ...theme.axis.axisLabel,
+                customValues: ticks,
+                formatter: (value: number) => formatTick(Math.round(Math.sinh(value)))
+            }
+        };
+    }
+
     function fail(error: unknown, retry: () => void) {
         failure = { kind: error instanceof ApiError ? error.kind : "unavailable", retry };
+    }
+
+    /** Stores this instance's view; called on user actions only, so a load never overwrites it. */
+    function remember() {
+        clearTimeout(zoomTimer);
+        if (instance === null || !asset) {
+            return;
+        }
+        const entry = { attributes: normalise(attributes, ATTRIBUTE_KEYS), pick: { asset: asset.id, log, zoom } };
+        memory.set({ ...memory.current, [instance]: entry });
     }
 
     async function loadAssets() {
         failure = null;
         try {
-            asset = pickAsset(attributes.asset, await getAssets());
+            assets = await getAssets();
+            const entry = instance === null ? undefined : memory.current[instance];
+            if (instance !== null && entry && !storedPick(entry, attributes, ATTRIBUTE_KEYS)) {
+                // A changed default drops the view, so reverting it later does not bring it back.
+                memory.set(withoutKey(memory.current, instance));
+            }
+            const view = restore(attributes, entry, assets);
+            if (view) {
+                ({ asset, log, zoom } = view);
+            }
         } catch (error) {
             fail(error, loadAssets);
             return;
@@ -140,6 +263,8 @@
     }
 
     async function loadData() {
+        clearTimeout(timer);
+        waiting = false;
         const current = asset;
         if (!current) {
             return;
@@ -164,6 +289,34 @@
         }
     }
 
+    function pickAsset(id: string) {
+        const next = assets.find((candidate) => candidate.id === id);
+        if (!next || next.id === asset?.id) {
+            return;
+        }
+        asset = next;
+        zoom = FULL_ZOOM;
+        remember();
+        // A newer pick aborts the request in flight and loads after a short pause, so quick picks send one request.
+        request?.abort();
+        request = null;
+        clearTimeout(timer);
+        waiting = true;
+        timer = setTimeout(loadData, 150);
+    }
+
+    function pickLog(on: boolean) {
+        log = on;
+        remember();
+    }
+
+    function reset() {
+        if (zoomed) {
+            zoom = FULL_ZOOM;
+            remember();
+        }
+    }
+
     /** Reads the chart colours once from the tokens on the Block root. */
     function readTheme(root: HTMLDivElement) {
         theme = chartTheme(root);
@@ -173,7 +326,11 @@
         if (!card) {
             loadAssets();
         }
-        return () => request?.abort();
+        return () => {
+            clearTimeout(timer);
+            clearTimeout(zoomTimer);
+            request?.abort();
+        };
     });
 </script>
 
@@ -188,28 +345,81 @@
     </Alert>
 {/snippet}
 
-<div {@attach readTheme}>
+{#snippet settings()}
+    <DropdownMenu aria-label="Settings" portalTarget={root}>
+        {#snippet trigger({ props })}
+            <button
+                {...props}
+                type="button"
+                aria-label="Settings"
+                class="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background @max-lg:size-11 pointer-coarse:size-11">
+                <Settings class="size-4" aria-hidden="true" />
+            </button>
+        {/snippet}
+        <DropdownMenuGroup heading="Actions">
+            <DropdownMenuItem label="Reset" description="Shows the whole decade." disabled={!zoomed} onSelect={reset}>
+                {#snippet leadingIcon()}<RotateCcw />{/snippet}
+            </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup heading="Show">
+            <DropdownMenuItem label="Log scale" description="Makes large moves easier to compare." bind:checked={() => log, pickLog}>
+                {#snippet leadingIcon()}<Spline />{/snippet}
+            </DropdownMenuItem>
+        </DropdownMenuGroup>
+    </DropdownMenu>
+{/snippet}
+
+<!-- Positioned, so panels portalled here are placed from it; floating-ui misplaces them by the admin bar's html margin otherwise. -->
+<div bind:this={root} class="relative" {@attach readTheme}>
     {#if card}
         <AccessCard feature="Decennial Cycles" {card} />
     {:else}
         <Card padding="none" class="@container flex flex-col">
+            {#if asset}
+                <div class="flex items-end gap-4 border-b border-border-muted px-4 py-5 @lg:px-5">
+                    <div class="min-w-0 grow @lg:grow-0">
+                        <Combobox
+                            label="Asset"
+                            class="@lg:w-64"
+                            searchPlaceholder="Search assets…"
+                            items={assets.map(({ id, name, group }) => ({ value: id, label: name, group }))}
+                            portalTarget={root}
+                            value={asset.id}
+                            onValueChange={pickAsset} />
+                    </div>
+                    <div class="ml-auto flex shrink-0 items-center gap-2">
+                        {@render settings()}
+                    </div>
+                </div>
+            {/if}
             <div class="flex flex-col px-4 pt-4 pb-5 @lg:px-5">
-                {#if asset}
-                    <p class="mb-3 text-sm font-medium">{caption(asset)}</p>
+                {#if named}
+                    <p class="mb-3 text-sm font-medium">{caption(named)}</p>
                 {/if}
                 {#if failure}
                     {@render problem(failure)}
-                {:else if !shown || !option || !asset}
+                {:else if !shown || !option || !named}
                     <div class="flex h-90 items-center justify-center sm:h-120">
                         <Spinner size="lg" tone="muted" label="Loading Decennial Cycles" />
                     </div>
                 {:else}
-                    <Chart
-                        {option}
-                        setOptionOpts={{ replaceMerge: ["series"] }}
-                        class="h-90 w-full sm:h-120"
-                        role="img"
-                        aria-label="Decennial Cycles chart, {asset.name}, {asset.range.begin}–{asset.range.end}" />
+                    <div class="relative h-90 sm:h-120" aria-busy={loading ? "true" : undefined}>
+                        <Chart
+                            {option}
+                            bind:chart
+                            setOptionOpts={{ replaceMerge: ["series", "yAxis"] }}
+                            class={["size-full transition-opacity", loading && "opacity-50"]}
+                            role="img"
+                            aria-label="Decennial Cycles chart, {named.name}, {named.range.begin}–{named.range.end}"
+                            aria-describedby="{uid}-summary" />
+                        {#if loading}
+                            <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                <Spinner size="lg" tone="muted" label="Loading Decennial Cycles" />
+                            </div>
+                        {/if}
+                    </div>
+                    <p id="{uid}-summary" class="sr-only">{chartSummary(shown.curve.datapoints)}</p>
                 {/if}
             </div>
         </Card>

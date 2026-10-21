@@ -151,6 +151,20 @@ test.describe("the Block", () => {
         await expect(block(page).getByRole("heading")).toHaveCount(0);
     });
 
+    test("a Member's asset and Log scale survive a reload", async ({ page }) => {
+        await open(page, "fx-pro-active");
+        await expect(chart(page)).toBeVisible();
+        await block(page).getByRole("combobox", { name: "Asset" }).click();
+        await page.getByRole("option", { name: "Dow Jones Industrial - DJI" }).click();
+        await block(page).getByRole("button", { name: "Settings" }).click();
+        await page.getByRole("menuitemcheckbox", { name: "Log scale" }).click();
+
+        await page.reload();
+        await expect(block(page).getByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1897–2025" })).toBeVisible();
+        await block(page).getByRole("button", { name: "Settings" }).click();
+        await expect(page.getByRole("menuitemcheckbox", { name: "Log scale" })).toHaveAttribute("aria-checked", "true");
+    });
+
     test("an upstream failure shows the error and Try again", async ({ page }) => {
         await open(page, "fx-pro-active", `${stub},data-server-no-data`);
         await expect(block(page).getByText("This data is not available right now.")).toBeVisible();

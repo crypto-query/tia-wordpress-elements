@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { Asset } from "./api";
-import { axisName, caption, pickAsset, slotLabel, toSlot, todayMarker, tooltipContent, xAxisTicks } from "./transforms";
+import {
+    axisName,
+    caption,
+    chartSummary,
+    isMemory,
+    pickAsset,
+    restore,
+    slotLabel,
+    toSlot,
+    todayMarker,
+    tooltipContent,
+    xAxisTicks
+} from "./transforms";
 
 const asset = (id: string): Asset => ({
     id,
@@ -112,5 +124,87 @@ describe("tooltipContent", () => {
 describe("caption", () => {
     it("joins the title and range with an en dash", () => {
         expect(caption(asset("dji"))).toBe("DJI 10-Year Cycle · 1897\u20132025");
+    });
+});
+
+describe("restore", () => {
+    const assets = [asset("dji"), asset("spx")];
+    const entry = (attribute: string | null, pick: { asset: string; log: boolean; zoom: { start: number; end: number } }) => ({
+        attributes: { asset: attribute },
+        pick
+    });
+
+    it("starts from the attribute with no stored view", () => {
+        expect(restore({ asset: "spx" }, undefined, assets)).toEqual({ asset: assets[1], log: false, zoom: { start: 0, end: 100 } });
+    });
+
+    it("takes the stored view made under the same attribute", () => {
+        const stored = entry(null, { asset: "spx", log: true, zoom: { start: 20, end: 25 } });
+        expect(restore({}, stored, assets)).toEqual({ asset: assets[1], log: true, zoom: { start: 20, end: 25 } });
+    });
+
+    it("drops the stored view when the attribute changed", () => {
+        const stored = entry(null, { asset: "spx", log: true, zoom: { start: 20, end: 25 } });
+        expect(restore({ asset: "dji" }, stored, assets)).toEqual({ asset: assets[0], log: false, zoom: { start: 0, end: 100 } });
+    });
+
+    it("falls back to the attribute and the whole decade for a gone asset, and keeps Log", () => {
+        const stored = entry("spx", { asset: "gone", log: true, zoom: { start: 20, end: 25 } });
+        expect(restore({ asset: "spx" }, stored, assets)).toEqual({ asset: assets[1], log: true, zoom: { start: 0, end: 100 } });
+    });
+
+    it("clamps a stored zoom", () => {
+        const stored = entry(null, { asset: "dji", log: false, zoom: { start: -5, end: 140 } });
+        expect(restore({}, stored, assets)?.zoom).toEqual({ start: 0, end: 100 });
+    });
+
+    it("gives null for an empty list", () => {
+        expect(restore({}, undefined, [])).toBeNull();
+    });
+});
+
+describe("isMemory", () => {
+    const pick = { asset: "dji", log: false, zoom: { start: 0, end: 100 } };
+
+    it("accepts views per instance", () => {
+        expect(isMemory({})).toBe(true);
+        expect(isMemory({ "1:0": { attributes: { asset: null }, pick } })).toBe(true);
+    });
+
+    it.each([null, [], { "1:0": { attributes: {}, pick: { ...pick, log: "yes" } } }, { "1:0": { pick } }])("rejects %j", (value) => {
+        expect(isMemory(value)).toBe(false);
+    });
+});
+
+describe("chartSummary", () => {
+    const at = (year: number, slot: number) => year + slot / 366;
+
+    it("gives each Decade Year's last value, then the low and the high with their dates", () => {
+        const points = Array.from({ length: 10 }, (_, year) => [
+            { dec: at(year, 0), value: year },
+            { dec: at(year, 365), value: year + 0.5 }
+        ]).flat();
+        points[5] = { dec: at(2, 283), value: -5 };
+        expect(chartSummary(points)).toBe(
+            "Years ending in 0 end at +0.50%, 1 at +1.50%, 2 at \u22125.00%, 3 at +3.50%, 4 at +4.50%, 5 at +5.50%, " +
+                "6 at +6.50%, 7 at +7.50%, 8 at +8.50%, 9 at +9.50%. " +
+                "Low \u22125.00% on Oct 10 of years ending in 2. High +9.50% on Dec 31 of years ending in 9."
+        );
+    });
+
+    it("skips nulls and a Decade Year with no value", () => {
+        const points = [
+            { dec: at(0, 0), value: 0 },
+            { dec: at(0, 365), value: null },
+            { dec: at(1, 0), value: null },
+            { dec: at(2, 0), value: 2 }
+        ];
+        expect(chartSummary(points)).toBe(
+            "Years ending in 0 end at 0.00%, 2 at +2.00%. Low 0.00% on Jan 1 of years ending in 0. High +2.00% on Jan 1 of years ending in 2."
+        );
+    });
+
+    it("is empty with no value", () => {
+        expect(chartSummary([{ dec: 0, value: null }])).toBe("");
     });
 });
