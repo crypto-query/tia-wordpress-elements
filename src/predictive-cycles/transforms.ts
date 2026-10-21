@@ -26,14 +26,16 @@ export function stepYear(years: number[], year: number, step: -1 | 1): number | 
 /** Excluded years (or offsets) per curve id. */
 export type Exclusions = Record<number, number[]>;
 
-/** Every curve of the asset; a year-curve sends only its included years, and is left out with none. */
+/** Every curve of the asset; a year-curve sends only its included years, and is left out with none before the Base Year. */
 export function dataRequest({ asset, baseYear }: Selection, excluded: Exclusions): DataRequest {
     return {
         id: asset.id,
         base_year: baseYear,
-        curves: asset.curves.flatMap(({ id, years }) => {
-            const included = years?.filter((year) => !(excluded[id] ?? []).includes(year));
-            return !included ? [{ id }] : included.length > 0 ? [{ id, years: included }] : [];
+        curves: asset.curves.flatMap((curve) => {
+            const { id, years } = curve;
+            const own = excluded[id] ?? [];
+            const included = years?.filter((year) => !own.includes(year));
+            return !included ? [{ id }] : yearCount(curve, baseYear, own).included > 0 ? [{ id, years: included }] : [];
         })
     };
 }
@@ -41,8 +43,8 @@ export function dataRequest({ asset, baseYear }: Selection, excluded: Exclusions
 /** Upstream lists calendar years, or offsets before the Base Year as small numbers (Decade offsets, "20 & 60"). */
 const isOffsets = (values: number[]) => values.every((value) => value < 1000);
 
-/** An included chip that cannot toggle: the last one before the Base Year, or a calendar year not before it (upstream drops those). */
-export type ChipLock = "last" | "unavailable" | null;
+/** An included chip that cannot toggle: a calendar year not before the Base Year (upstream drops those). */
+export type ChipLock = "unavailable" | null;
 
 export type Chip = { value: number; text: string; name: string; included: boolean; lock: ChipLock };
 
@@ -50,10 +52,9 @@ export type Chip = { value: number; text: string; name: string; included: boolea
 export function chips({ years = [] }: Curve, baseYear: number, excluded: number[] = []): Chip[] {
     const offsets = isOffsets(years);
     const available = (value: number) => offsets || value < baseYear;
-    const counted = years.filter((value) => available(value) && !excluded.includes(value));
     return years.map((value) => {
         const included = !excluded.includes(value);
-        const lock = !included ? null : !available(value) ? "unavailable" : counted.length === 1 ? "last" : null;
+        const lock = included && !available(value) ? "unavailable" : null;
         const year = offsets ? baseYear - value : value;
         const name = offsets ? `${year} (${value} years before ${baseYear})` : String(year);
         return { value, text: String(year), name, included, lock };

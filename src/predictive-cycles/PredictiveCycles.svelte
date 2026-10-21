@@ -56,7 +56,6 @@
         ChevronLeft,
         ChevronRight,
         Eraser,
-        Lock,
         MessageSquareText,
         RotateCcw,
         Settings,
@@ -242,7 +241,11 @@
               )
             : null
     );
-    const noneShown = $derived(selection !== null && selection.asset.curves.every(({ name }) => hidden.includes(name)));
+    /** A curve the chart draws: not hidden, and a year-curve with a year before the Base Year left. */
+    const drawsLine = (curve: Curve) =>
+        !hidden.includes(curve.name) &&
+        (!curve.years || (selection !== null && yearCount(curve, selection.baseYear, excluded[curve.id] ?? []).included > 0));
+    const noneShown = $derived(selection !== null && !selection.asset.curves.some(drawsLine));
 
     // Every pick, a year chip here or in another instance, and Reset change the request; refetch debounces quick changes.
     $effect(() => {
@@ -586,6 +589,12 @@
         // With no curve shown, every curve stays as an invisible line, so the empty plot keeps its axes in place.
         const empty = curves.every(({ name }) => hidden.includes(name));
         const drawn = curves.flatMap((curve) => (hidden.includes(curve.name) && !empty ? [] : [{ curve, slot: slots[curve.name] }]));
+        // The slider's preview of an empty plot fades instead of going: ECharts places the slider by its drawn outline,
+        // and the preview's line widens that outline, so dropping it would shift the slider. `area` is ECharts' default.
+        const preview = (style: typeof theme.dataZoom.dataBackground, area: number) => ({
+            lineStyle: { ...style?.lineStyle, opacity: empty ? 0 : 1 },
+            areaStyle: { ...style?.areaStyle, opacity: empty ? 0 : area }
+        });
         const ticks = monthStarts(data.base_year);
         const label = { ...theme.axis.axisLabel, show: showLabels };
         const values = drawn.flatMap(({ curve }) => curve.points.flatMap(([, value]) => (value === null ? [] : [value])));
@@ -648,6 +657,8 @@
                     xAxisIndex: 0,
                     filterMode: "none",
                     showDetail: false,
+                    dataBackground: preview(theme.dataZoom.dataBackground, 0.2),
+                    selectedDataBackground: preview(theme.dataZoom.selectedDataBackground, 0.3),
                     // The whole window drags, not only the thin bar on top that brush selection leaves.
                     brushSelect: false,
                     bottom: 8,
@@ -884,8 +895,13 @@
         };
     }
 
-    function showCurve(name: string, shown: boolean) {
+    /** Showing a curve with no year left includes all its years again, so the chip always draws a line. */
+    function showCurve(curve: Curve, shown: boolean) {
+        const { name } = curve;
         hidden = shown ? hidden.filter((other) => other !== name) : [...hidden, name];
+        if (shown && !drawsLine(curve)) {
+            setExcluded(curve, []);
+        }
         remember();
     }
 
@@ -900,7 +916,8 @@
      * curve: a curve hidden or rebuilt while emphasised would leave the others faded.
      */
     function emphasise(name: string, on: boolean) {
-        if (on && hidden.includes(name)) {
+        const curve = selection?.asset.curves.find((other) => other.name === name);
+        if (on && (!curve || !drawsLine(curve))) {
             return;
         }
         chart?.dispatchAction(on ? { type: "highlight", seriesName: name } : { type: "downplay" });
@@ -1005,12 +1022,8 @@
             lock === "unavailable"
                 ? "cursor-not-allowed border-dotted data-[state=on]:border-border-input data-[state=on]:bg-background-subtle data-[state=on]:enabled:text-foreground-subtle"
                 : "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-background-muted data-[state=on]:border-[color-mix(in_srgb,var(--chip)_55%,var(--popover-background))] data-[state=on]:bg-[color-mix(in_srgb,var(--chip)_15%,var(--popover-background))] data-[state=on]:enabled:text-foreground",
-            lock === "last" && "cursor-not-allowed",
             !lock && "data-[state=on]:hover:border-(--chip)"
         ]}>
-        {#if lock === "last"}
-            <Lock class="size-2.5 text-foreground-muted" aria-hidden="true" />
-        {/if}
         {text}
     </Toggle>
 {/snippet}
@@ -1033,9 +1046,7 @@
     <div role="group" aria-label={yearsTitle(curve.name)} class="grid grid-cols-5 gap-1.5">
         {#each chips(curve, baseYear, own) as one (one.value)}
             {#if one.lock}
-                <Tooltip
-                    content={one.lock === "last" ? "At least one year must stay included" : `${one.text} is not before the Base Year`}
-                    portalTarget={root}>
+                <Tooltip content="{one.text} is not before the Base Year" portalTarget={root}>
                     {#snippet trigger({ props })}
                         {@render yearToggle(curve, one, props)}
                     {/snippet}
@@ -1045,15 +1056,11 @@
             {/if}
         {/each}
     </div>
-    <!-- Clear in the Settings menu excludes every year; the chips themselves keep one. -->
-    {#if count.included > 0}
-        <p class="mt-1 border-t border-border-muted pt-2 text-2xs text-foreground-subtle">At least one year must stay included</p>
-    {/if}
 {/snippet}
 
 {#snippet curveChip(curve: Curve, slot: number, baseYear: number)}
     {@const name = curve.name}
-    {@const on = !hidden.includes(name)}
+    {@const on = drawsLine(curve)}
     {@const own = excluded[curve.id] ?? []}
     {@const hover = {
         onmouseenter: () => emphasise(name, true),
@@ -1072,7 +1079,7 @@
                     variant="outline"
                     size="sm"
                     aria-label={shortName(name) === name ? undefined : name}
-                    bind:pressed={() => on, (next) => showCurve(name, next)}
+                    bind:pressed={() => on, (next) => showCurve(curve, next)}
                     class={[
                         "shrink-0 gap-1 pl-1.75 font-medium pointer-coarse:h-11",
                         "border-border bg-surface text-foreground-subtle not-data-[state=on]:hover:border-border-input not-data-[state=on]:enabled:hover:bg-surface not-data-[state=on]:enabled:hover:text-foreground-subtle",
@@ -1170,7 +1177,7 @@
                 <span class="block text-sm font-semibold text-foreground">Change the years</span>
                 Open the year badge, for example
                 <span class="rounded-full border border-border px-1.5 font-semibold text-foreground tabular-nums">8/10</span>, on Bear,
-                Bull, Halving or Decade offsets. This changes the average and loads data again. At least one year stays included.
+                Bull, Halving or Decade offsets. This changes the average and loads data again.
             </li>
             <li>
                 <span class="block text-sm font-semibold text-foreground">Move Actual</span>

@@ -247,6 +247,15 @@ describe("dataRequest", () => {
 
         expect(request.curves).toEqual([{ id: 0 }]);
     });
+
+    it("leaves out a year-curve whose included years are all at or after the Base Year", () => {
+        const request = dataRequest(
+            { asset: { ...btc, curves: [{ id: 0, name: "Actual" }, halving] }, baseYear: 2024 },
+            { 11: [2012, 2016, 2020] }
+        );
+
+        expect(request.curves).toEqual([{ id: 0 }]);
+    });
 });
 
 describe("chips", () => {
@@ -272,16 +281,16 @@ describe("chips", () => {
     const locks = (curve: Curve, baseYear: number, excluded: number[]) =>
         chips(curve, baseYear, excluded).map(({ value, included, lock }) => [value, included, lock]);
 
-    it("locks a year at or after the Base Year, and the last included year before it", () => {
+    it("locks a year at or after the Base Year, and never the last included year before it", () => {
         expect(locks(halving, 2024, [2012, 2016])).toEqual([
             [2012, false, null],
             [2016, false, null],
-            [2020, true, "last"],
+            [2020, true, null],
             [2024, true, "unavailable"]
         ]);
     });
 
-    it("locks no last year when every included year is at or after the Base Year", () => {
+    it("locks every included year at or after the Base Year", () => {
         expect(locks(halving, 2016, [2012])).toEqual([
             [2012, false, null],
             [2016, true, "unavailable"],
@@ -312,7 +321,7 @@ describe("chips", () => {
         expect(locks(decades, 2026, [10, 20])).toEqual([
             [10, false, null],
             [20, false, null],
-            [30, true, "last"]
+            [30, true, null]
         ]);
     });
 });
@@ -398,12 +407,12 @@ describe("toggleYear", () => {
         expect(toggleYear(bear, 2026, [2018, 2014], 2018)).toEqual([2014]);
     });
 
-    it("keeps the last included year", () => {
-        expect(toggleYear(bear, 2026, [2014, 2022], 2018)).toEqual([2014, 2022]);
+    it("excludes the last included year too", () => {
+        expect(toggleYear(bear, 2026, [2014, 2022], 2018)).toEqual([2014, 2022, 2018]);
     });
 
-    it("keeps the last included year before the Base Year, and leaves the later years as they are", () => {
-        expect(toggleYear(halving, 2024, [2012, 2016], 2020)).toEqual([2012, 2016]);
+    it("excludes the last included year before the Base Year, and leaves the later years as they are", () => {
+        expect(toggleYear(halving, 2024, [2012, 2016], 2020)).toEqual([2012, 2016, 2020]);
         expect(toggleYear(halving, 2024, [2012, 2016], 2024)).toEqual([2012, 2016]);
     });
 

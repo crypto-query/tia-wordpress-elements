@@ -507,7 +507,9 @@ describe("PredictiveCycles", () => {
             group.style.height = "360px";
             await new Promise((resolve) => setTimeout(resolve, 100));
             const [x, y] = actualPixel(group, day(2, 1));
-            pointer(group)("mousemove", x, y + 30);
+            // The real pointer: a synthetic move leaves it where an earlier test put it, and the menu opening there
+            // takes it out of the chart.
+            await userEvent.hover(group, { position: { x, y: y + 30 } });
             await waitFor(() => expect(within(group).getByText("Mar 1 · day 60")).toBeVisible());
             const echart = getInstanceByDom(group);
             if (!echart) {
@@ -518,12 +520,10 @@ describe("PredictiveCycles", () => {
             // By keyboard: a click moves the real pointer, which would leave the chart.
             screen.getByRole("button", { name: "Settings" }).focus();
             await userEvent.keyboard("{Enter}");
-            within(await screen.findByRole("menu", { name: "Settings" }))
-                .getByRole("menuitemcheckbox", { name: "Tooltip" })
-                .focus();
-            // The open menu can land under the real pointer, which leaves the chart; the pointer comes back to it.
-            pointer(group)("mousemove", x, y + 30);
-            await userEvent.keyboard("{Enter}");
+            // A synthetic click: Enter on the focused item raced the menu's own focus on opening.
+            await fireEvent.click(
+                within(await screen.findByRole("menu", { name: "Settings" })).getByRole("menuitemcheckbox", { name: "Tooltip" })
+            );
             await waitFor(() => expect(hidden).toHaveBeenCalledWith({ type: "hideTip" }));
             expect(dots(group)).toHaveLength(0);
         });
@@ -772,7 +772,7 @@ describe("PredictiveCycles", () => {
             expect(bull).toHaveAttribute("aria-expanded", "true");
             expect(bull).toHaveAttribute("aria-controls", dialog.id);
             expect(within(dialog).getByText("10 of 10 included")).toBeInTheDocument();
-            expect(within(dialog).getByText("At least one year must stay included")).toBeInTheDocument();
+            expect(within(dialog).queryByText("At least one year must stay included")).not.toBeInTheDocument();
 
             await fireEvent.click(within(dialog).getByRole("button", { name: "2013" }));
             expect(within(dialog).getByRole("button", { name: "2013" })).not.toBePressed();
@@ -858,18 +858,25 @@ describe("PredictiveCycles", () => {
 
         it("shows and hides curves locally, never disabled, and asks for one when none shows", async () => {
             await open([asset]);
+            const group = await chart();
             const actual = chip("Actual");
             const all = chip("All");
             expect(actual).toBePressed();
+            const preview = () =>
+                (getInstanceByDom(group)?.getOption() as { dataZoom: { dataBackground: { lineStyle: { opacity: number } } }[] }).dataZoom[0]
+                    .dataBackground.lineStyle.opacity;
+            expect(preview()).toBe(1);
 
             await fireEvent.click(actual);
             await fireEvent.click(all);
             expect(actual).not.toBePressed();
             expect(all).toBeEnabled();
             expect(screen.getByText("Select a curve to show")).toBeInTheDocument();
+            await waitFor(() => expect(preview()).toBe(0));
 
             await fireEvent.click(all);
             expect(screen.queryByText("Select a curve to show")).not.toBeInTheDocument();
+            await waitFor(() => expect(preview()).toBe(1));
             await new Promise((resolve) => setTimeout(resolve, 200));
             expect(getPredictiveCycles).toHaveBeenCalledOnce();
         });
@@ -881,7 +888,7 @@ describe("PredictiveCycles", () => {
             return (year: string) => within(dialog).getByRole("button", { name: year });
         }
 
-        it("excludes a year with its toggle, refetches, and keeps the last year included", async () => {
+        it("excludes a year with its toggle, refetches, and excludes the last year too", async () => {
             await open([eth], { baseYear: 2025 });
             const year = await openYears(/^Bear years/, "Bear years");
 
@@ -890,15 +897,36 @@ describe("PredictiveCycles", () => {
             await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2014, 2022] }));
 
             await fireEvent.click(year("2014"));
-            expect(year("2022")).toHaveAttribute("aria-disabled", "true");
-            expect(year("2022")).toBeEnabled();
-            await fireEvent.click(year("2022"));
-            expect(year("2022")).toHaveAttribute("aria-pressed", "true");
-            expect(screen.getByText("1 of 3 included")).toBeInTheDocument();
+            expect(year("2022")).not.toHaveAttribute("aria-disabled");
             await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2022] }));
+            await fireEvent.click(year("2022"));
+            expect(year("2022")).not.toBePressed();
+            expect(screen.getByText("0 of 3 included")).toBeInTheDocument();
+            await waitFor(() => expect(lastRequest()?.curves.map(({ id }) => id)).not.toContain(1));
 
             await fireEvent.click(year("2018"));
-            expect(year("2022")).not.toHaveAttribute("aria-disabled", "true");
+            await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2018] }));
+        });
+
+        it("turns the chip of a curve with no year left off, and pressing it includes every year again", async () => {
+            await open([eth], { baseYear: 2025 });
+            const year = await openYears(/^Bear years/, "Bear years");
+            for (const name of ["2014", "2018", "2022"]) {
+                await fireEvent.click(year(name));
+            }
+            expect(chip("Bear")).not.toBePressed();
+            await userEvent.keyboard("{Escape}");
+            await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+            await fireEvent.click(chip("Actual"));
+            await fireEvent.click(chip("Decade offsets"));
+            expect(await screen.findByText("Select a curve to show")).toBeInTheDocument();
+
+            await fireEvent.click(chip("Bear"));
+            expect(chip("Bear")).toBePressed();
+            expect(badge(/^Bear years/)).toHaveTextContent("3/3");
+            await waitFor(() => expect(lastRequest()?.curves).toContainEqual({ id: 1, years: [2014, 2018, 2022] }));
+            expect(screen.queryByText("Select a curve to show")).not.toBeInTheDocument();
         });
 
         it("makes a year at or after the Base Year unavailable, still sends it, and frees it on a newer Base Year", async () => {
@@ -913,7 +941,7 @@ describe("PredictiveCycles", () => {
             await fireEvent.click(year("2012"));
             await fireEvent.click(year("2016"));
             expect(year("2024")).toBePressed();
-            expect(year("2020")).toHaveAttribute("aria-disabled", "true");
+            expect(year("2020")).not.toHaveAttribute("aria-disabled");
             await waitFor(() => expect(lastRequest()?.curves[1]).toEqual({ id: 1, years: [2020, 2024] }));
 
             await fireEvent.click(screen.getByRole("button", { name: "Newer Base Year" }));
