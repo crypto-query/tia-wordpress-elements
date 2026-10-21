@@ -157,4 +157,66 @@ test.describe("the Block", () => {
         await expect(block(page).getByRole("button", { name: "Try again" })).toBeVisible();
         await expect(chart(page)).toHaveCount(0);
     });
+
+    test("an admin picks the default asset in the inspector and the preview follows", async ({ page }) => {
+        const id = wp(
+            "post",
+            "create",
+            "--post_type=page",
+            "--post_title=Decennial Cycles e2e",
+            "--post_content=<!-- wp:tia-elements/decennial-cycles /-->",
+            "--porcelain"
+        );
+        try {
+            await logIn(page, "admin", "admin");
+            await page.context().addCookies([{ name: "tia_elements_test", value: stub, url: "http://localhost:8000" }]);
+            await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
+            const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-decennial-cycles");
+
+            await preview.getByText("All Ordinaries 10-Year Cycle · 1959–2025").click();
+            const inspector = page.getByRole("region", { name: "Editor settings" });
+            await expect(inspector.getByRole("combobox", { name: "Asset" })).toHaveValue("");
+            await inspector.getByRole("combobox", { name: "Asset" }).selectOption("dji");
+            await expect(preview.getByText("Dow Jones Industrial 10-Year Cycle · 1897–2025")).toBeVisible();
+        } finally {
+            wp("post", "delete", id, "--force");
+        }
+    });
+
+    test("an editor who is not a Member sees the placeholder and read-only defaults", async ({ page }) => {
+        const id = wp(
+            "post",
+            "create",
+            "--post_type=page",
+            "--post_title=Decennial Cycles e2e",
+            "--post_content=<!-- wp:tia-elements/decennial-cycles /-->",
+            "--porcelain"
+        );
+        const user = wp(
+            "user",
+            "create",
+            "dc-e2e-editor",
+            "dc-e2e-editor@example.test",
+            "--role=editor",
+            "--user_pass=password",
+            "--porcelain"
+        );
+        try {
+            wp("user", "meta", "update", user, "wp_persisted_preferences", '{"core/edit-post":{"welcomeGuide":false}}', "--format=json");
+            await logIn(page, "dc-e2e-editor");
+            await page.context().addCookies([{ name: "tia_elements_test", value: stub, url: "http://localhost:8000" }]);
+            await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
+            const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-decennial-cycles");
+
+            await expect(preview.getByText("Preview needs TIA Pro access")).toBeVisible();
+            await expect(preview.getByRole("img")).toHaveCount(0);
+            await preview.getByText("Preview needs TIA Pro access").click();
+            const inspector = page.getByRole("region", { name: "Editor settings" });
+            await expect(inspector.getByText("Asset: First asset")).toBeVisible();
+            await expect(inspector.getByRole("combobox", { name: "Asset" })).toHaveCount(0);
+        } finally {
+            wp("user", "delete", user, "--yes");
+            wp("post", "delete", id, "--force");
+        }
+    });
 });
