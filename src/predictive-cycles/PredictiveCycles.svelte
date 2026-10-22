@@ -85,6 +85,7 @@
     import { isObject, type Card as BootCard } from "../shared/boot";
     import { formatTick } from "../shared/format";
     import { normalise, storedPick, withoutKey } from "../shared/load-rules";
+    import { Chrome, fitHeight } from "../shared/fit-screen.svelte";
     import { getAssets, getPredictiveCycles, type Asset, type Curve, type CurveData, type PredictiveCycles, type Selection } from "./api";
     import {
         ACTUAL,
@@ -173,26 +174,7 @@
     // The emphasised curve, by ECharts' own hover or by `emphasise`; the dots of the others dim with their lines.
     let lit: string | null = null;
     let width = $state(0);
-    /** The card's height without the chart box: header, chips and padding. */
-    let chrome = $state(0);
-    /** Reads both heights in one step: measured apart, the chrome and the box chase each other. */
-    function measureChrome(box: HTMLDivElement) {
-        const observer = new ResizeObserver(() => {
-            chrome = (root?.offsetHeight ?? 0) - box.offsetHeight;
-        });
-        observer.observe(box);
-        if (root) {
-            observer.observe(root);
-        }
-        return () => observer.disconnect();
-    }
-
-    /*
-     * Fill the screen below the admin bar with a 20px margin above and below, but at most square, so an upright phone
-     * gets no tall strip. On a sideways phone the floor wins and the chart alone fits. `svh`: the address bar does not resize it.
-     */
-    const screen = "100svh - var(--wp-admin--admin-bar--height, 0px) - 40px";
-    const chartBox = $derived(`height: max(min(22.5rem, ${screen}), min(${screen} - ${chrome}px, 100cqw))`);
+    const chrome = new Chrome(() => root);
     // The one open panel: "help", a curve id for its year popover, or none.
     let openPanel = $state<"help" | number | null>(null);
     let fade = $state.raw({ left: false, right: false });
@@ -1328,11 +1310,15 @@
                 {#if failure}
                     {@render problem(failure)}
                 {:else if !shown || !option}
-                    <div {@attach measureChrome} style={chartBox} class="flex items-center justify-center">
+                    <div {@attach chrome.measure} style={fitHeight(chrome.height)} class="flex items-center justify-center">
                         <Spinner size="lg" tone="muted" label="Loading Predictive Cycles" />
                     </div>
                 {:else}
-                    <div {@attach measureChrome} style={chartBox} class="relative" aria-busy={loading ? "true" : undefined}>
+                    <div
+                        {@attach chrome.measure}
+                        style={fitHeight(chrome.height)}
+                        class="relative"
+                        aria-busy={loading ? "true" : undefined}>
                         <Chart
                             {option}
                             bind:chart

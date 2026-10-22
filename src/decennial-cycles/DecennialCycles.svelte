@@ -49,6 +49,7 @@
     import { isObject, type Card as BootCard } from "../shared/boot";
     import { formatTick } from "../shared/format";
     import { normalise, withoutKey, storedPick } from "../shared/load-rules";
+    import { Chrome, fitHeight } from "../shared/fit-screen.svelte";
     import { getAssets, getDecennialCycles, type Asset, type DecennialCycles } from "./api";
     import {
         ATTRIBUTE_KEYS,
@@ -74,6 +75,7 @@
     const uid = $props.id();
     let root = $state<HTMLDivElement>();
     let width = $state(0);
+    const chrome = new Chrome(() => root);
     const coarse = new MediaQuery("(pointer: coarse)");
     // Below the `@lg` container step, the help opens as a bottom sheet.
     const narrow = $derived(width > 0 && width < 512);
@@ -500,11 +502,15 @@
                 {#if failure}
                     {@render problem(failure)}
                 {:else if !shown || !option || !named}
-                    <div class="flex h-90 items-center justify-center sm:h-120">
+                    <div {@attach chrome.measure} style={fitHeight(chrome.height)} class="flex items-center justify-center">
                         <Spinner size="lg" tone="muted" label="Loading Decennial Cycles" />
                     </div>
                 {:else}
-                    <div class="relative h-90 sm:h-120" aria-busy={loading ? "true" : undefined}>
+                    <div
+                        {@attach chrome.measure}
+                        style={fitHeight(chrome.height)}
+                        class="relative"
+                        aria-busy={loading ? "true" : undefined}>
                         <Chart
                             {option}
                             bind:chart

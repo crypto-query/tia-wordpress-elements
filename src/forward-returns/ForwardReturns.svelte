@@ -32,6 +32,7 @@
     import type { Card as BootCard } from "../shared/boot";
     import { formatReturn } from "../shared/format";
     import { clamp, normalise, storedPick, withoutKey } from "../shared/load-rules";
+    import { SCREEN } from "../shared/fit-screen.svelte";
     import { getAssets, getForwardReturns, type Asset, type ForwardReturns, type Selection } from "./api";
     import {
         ATTRIBUTE_KEYS,
@@ -640,10 +641,7 @@
             padding="none"
             class="@container flex flex-col"
             data-card
-            style="max-height: max(100svh - var(--wp-admin--admin-bar--height, 0px) - 40px, {sizes.chrome +
-                sizes.head +
-                sizes.foot +
-                sizes.twoRows}px)">
+            style="max-height: max({SCREEN}, {sizes.chrome + sizes.head + sizes.foot + sizes.twoRows}px)">
             {#if selection}
                 {@const picked = selection}
                 <!-- Below `@lg` the cog and help share the Asset row and the toggle wraps under it; up to `@3xl` Asset has a row of its own.

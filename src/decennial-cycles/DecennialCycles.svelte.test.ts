@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
-import { userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "@vitest/browser/context";
 import { getInstanceByDom } from "echarts/core";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { ApiError } from "../shared/api";
@@ -197,6 +197,20 @@ describe("DecennialCycles", () => {
             render(DecennialCycles, { ...props, attributes, instance });
             return screen.findByRole("img", { name: /^Decennial Cycles chart/ });
         }
+
+        it("makes the chart square on an upright phone", async () => {
+            await page.viewport(414, 896);
+            const box = (await open()).parentElement;
+            await waitFor(() => expect(box?.offsetHeight).toBe(box?.offsetWidth));
+        });
+
+        it("fills a wide screen, less a 20px margin above and below the card", async () => {
+            await page.viewport(1280, 720);
+            onTestFinished(() => page.viewport(414, 896));
+            await open();
+            const card = document.body.querySelector(":scope > div > div");
+            await waitFor(() => expect(card instanceof HTMLElement && card.offsetHeight).toBe(720 - 40));
+        });
 
         it("has the grouped Asset select and a Settings menu with Reset and Log scale", async () => {
             await open();
