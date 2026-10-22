@@ -18,15 +18,15 @@ afterEach(() => {
 });
 
 const props = { attributes: { asset: "spx" }, card: null, instance: "1:0" };
-const asset = (id: string, name: string, title: string): Asset => ({
+const asset = (id: string, name: string, title: string, begin = 1897): Asset => ({
     id,
     name,
     title,
-    range: { begin: 1897, end: 2025 },
+    range: { begin, end: 2025 },
     group: "Indices"
 });
 const assets = [
-    asset("dji", "Dow Jones Industrial - DJI", "Dow Jones Industrial 10-Year Cycle"),
+    asset("dji", "Dow Jones Industrial - DJI", "Dow Jones Industrial 10-Year Cycle", 1900),
     asset("spx", "S&P 500 - SPX", "S&P 500 10-Year Cycle")
 ];
 const data: Data = {
@@ -85,7 +85,11 @@ describe("DecennialCycles", () => {
         render(DecennialCycles, props);
 
         expect(screen.getByRole("status", { name: "Loading Decennial Cycles" })).toBeInTheDocument();
-        expect(await screen.findByText("S&P 500 10-Year Cycle · 1897–2025")).toBeInTheDocument();
+        const caption = await screen.findByText("10-Year Cycle · 1897–2025");
+        // In the header, between the Asset select and the Settings cog.
+        const [select, settings] = [screen.getByRole("combobox", { name: "Asset" }), screen.getByRole("button", { name: "Settings" })];
+        expect(select.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(caption.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.getByRole("status", { name: "Loading Decennial Cycles" })).toBeInTheDocument();
 
         resolve(data);
@@ -144,7 +148,7 @@ describe("DecennialCycles", () => {
         vi.mocked(getDecennialCycles).mockResolvedValue({ ...data, id: "dji" });
         render(DecennialCycles, { ...props, attributes: { asset: "gone" } });
 
-        await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1897–2025" });
+        await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1900–2025" });
         expect(getDecennialCycles).toHaveBeenCalledWith("dji", expect.any(AbortSignal));
     });
 
@@ -283,7 +287,7 @@ describe("DecennialCycles", () => {
                 await userEvent.click(await screen.findByRole("option", { name }));
             }
             expect(stored()).toEqual({ asset: "dji", log: false, labels: true, today: true, zoom: { start: 0, end: 100 } });
-            await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1897–2025" });
+            await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1900–2025" });
             expect(vi.mocked(getDecennialCycles).mock.calls.map(([id]) => id)).toEqual(["spx", "dji"]);
         });
 
@@ -296,9 +300,9 @@ describe("DecennialCycles", () => {
             await zoomTo(30, 40);
 
             await screen.findByRole("alert");
-            expect(screen.getByText("Dow Jones Industrial 10-Year Cycle · 1897–2025")).toBeInTheDocument();
+            expect(screen.getByText("10-Year Cycle · 1900–2025")).toBeInTheDocument();
             await fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
-            await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1897–2025" });
+            await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1900–2025" });
             const [, slider] = (await chartOption())?.dataZoom as Zoom[];
             expect(slider).toMatchObject({ start: 30, end: 40 });
         });
@@ -335,7 +339,7 @@ describe("DecennialCycles", () => {
             const pick = { asset: "dji", log: true, zoom: { start: 20, end: 25 } };
             memory.set({ "1:0": { attributes: { asset: "spx" }, pick } });
             await open();
-            await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1897–2025" });
+            await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1900–2025" });
             expect(await logScale()).toHaveAttribute("aria-checked", "true");
             await closeMenu();
             const [, slider] = (await chartOption())?.dataZoom as Zoom[];

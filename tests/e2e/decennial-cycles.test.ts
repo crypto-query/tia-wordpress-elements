@@ -132,7 +132,7 @@ test.describe("the Block", () => {
         );
         await open(page, "fx-pro-active");
 
-        await expect(block(page).getByText("All Ordinaries 10-Year Cycle · 1959–2025")).toBeVisible();
+        await expect(block(page).getByText("10-Year Cycle · 1959–2025")).toBeVisible();
         await expect(block(page).getByRole("status", { name: "Loading Decennial Cycles" })).toBeVisible();
         release();
         await expect(chart(page)).toBeVisible();
@@ -187,11 +187,11 @@ test.describe("the Block", () => {
             await page.goto(`/wp-admin/post.php?post=${id}&action=edit`);
             const preview = page.frameLocator('iframe[name="editor-canvas"]').locator(".wp-block-tia-elements-decennial-cycles");
 
-            await preview.getByText("All Ordinaries 10-Year Cycle · 1959–2025").click();
+            await preview.getByText("10-Year Cycle · 1959–2025").click();
             const inspector = page.getByRole("region", { name: "Editor settings" });
             await expect(inspector.getByRole("combobox", { name: "Asset" })).toHaveValue("");
             await inspector.getByRole("combobox", { name: "Asset" }).selectOption("dji");
-            await expect(preview.getByText("Dow Jones Industrial 10-Year Cycle · 1897–2025")).toBeVisible();
+            await expect(preview.getByText("10-Year Cycle · 1897–2025")).toBeVisible();
         } finally {
             wp("post", "delete", id, "--force");
         }

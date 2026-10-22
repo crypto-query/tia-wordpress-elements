@@ -122,8 +122,8 @@ describe("tooltipContent", () => {
 });
 
 describe("caption", () => {
-    it("joins the title and range with an en dash", () => {
-        expect(caption(asset("dji"))).toBe("DJI 10-Year Cycle · 1897\u20132025");
+    it("names the cycle and the range with an en dash, without the asset", () => {
+        expect(caption(asset("dji"))).toBe("10-Year Cycle · 1897\u20132025");
     });
 });
 

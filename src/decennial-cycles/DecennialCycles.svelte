@@ -471,8 +471,9 @@
     {:else}
         <Card padding="none" class="@container flex flex-col">
             {#if asset}
-                <div class="flex items-end gap-4 border-b border-border-muted px-4 py-5 @lg:px-5">
-                    <div class="min-w-0 grow @lg:grow-0">
+                <div
+                    class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4 border-b border-border-muted px-4 py-5 @lg:px-5 @min-[39rem]:grid-cols-[auto_1fr_auto] @min-[60rem]:grid-cols-[1fr_auto_1fr]">
+                    <div class="min-w-0 @min-[39rem]:min-w-auto">
                         <Combobox
                             label="Asset"
                             class="@lg:w-64"
@@ -482,16 +483,20 @@
                             value={asset.id}
                             onValueChange={pickAsset} />
                     </div>
-                    <div class="ml-auto flex shrink-0 items-center gap-2">
+                    {#if named}
+                        <!-- Under the select until all three fit on one row; then centred between them, and on the card once the sides have room. -->
+                        <p
+                            class="row-start-2 text-base font-medium whitespace-nowrap text-foreground @min-[39rem]:col-start-2 @min-[39rem]:row-start-1 @min-[39rem]:flex @min-[39rem]:h-10 @min-[39rem]:items-center @min-[39rem]:justify-center @min-[39rem]:pointer-coarse:h-11">
+                            {caption(named)}
+                        </p>
+                    {/if}
+                    <div class="flex items-center justify-end gap-2 @min-[39rem]:col-start-3">
                         {@render settings()}
                         {@render help()}
                     </div>
                 </div>
             {/if}
             <div class="flex flex-col px-4 pt-4 pb-5 @lg:px-5">
-                {#if named}
-                    <p class="mb-3 text-sm font-medium">{caption(named)}</p>
-                {/if}
                 {#if failure}
                     {@render problem(failure)}
                 {:else if !shown || !option || !named}

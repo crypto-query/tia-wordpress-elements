@@ -80,7 +80,8 @@ export function tooltipContent(x: number, value: number | null): { header: strin
     };
 }
 
-export const caption = ({ title, range }: Asset) => `${title} · ${range.begin}\u2013${range.end}`;
+/** No asset name: the Asset select beside it shows that. */
+export const caption = ({ range }: Asset) => `10-Year Cycle · ${range.begin}\u2013${range.end}`;
 
 /** The Block attributes a stored pick is tied to. */
 export const ATTRIBUTE_KEYS = ["asset"] as const;
