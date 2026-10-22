@@ -129,28 +129,48 @@ describe("caption", () => {
 
 describe("restore", () => {
     const assets = [asset("dji"), asset("spx")];
-    const entry = (attribute: string | null, pick: { asset: string; log: boolean; zoom: { start: number; end: number } }) => ({
+    const shown = { labels: true, today: true };
+    const entry = (
+        attribute: string | null,
+        pick: { asset: string; log: boolean; labels?: boolean; today?: boolean; zoom: { start: number; end: number } }
+    ) => ({
         attributes: { asset: attribute },
         pick
     });
 
     it("starts from the attribute with no stored view", () => {
-        expect(restore({ asset: "spx" }, undefined, assets)).toEqual({ asset: assets[1], log: false, zoom: { start: 0, end: 100 } });
+        expect(restore({ asset: "spx" }, undefined, assets)).toEqual({
+            ...shown,
+            asset: assets[1],
+            log: false,
+            zoom: { start: 0, end: 100 }
+        });
     });
 
     it("takes the stored view made under the same attribute", () => {
         const stored = entry(null, { asset: "spx", log: true, zoom: { start: 20, end: 25 } });
-        expect(restore({}, stored, assets)).toEqual({ asset: assets[1], log: true, zoom: { start: 20, end: 25 } });
+        expect(restore({}, stored, assets)).toEqual({ ...shown, asset: assets[1], log: true, zoom: { start: 20, end: 25 } });
     });
 
     it("drops the stored view when the attribute changed", () => {
-        const stored = entry(null, { asset: "spx", log: true, zoom: { start: 20, end: 25 } });
-        expect(restore({ asset: "dji" }, stored, assets)).toEqual({ asset: assets[0], log: false, zoom: { start: 0, end: 100 } });
+        const stored = entry(null, { asset: "spx", log: true, labels: false, today: false, zoom: { start: 20, end: 25 } });
+        expect(restore({ asset: "dji" }, stored, assets)).toEqual({ ...shown, asset: assets[0], log: false, zoom: { start: 0, end: 100 } });
     });
 
-    it("falls back to the attribute and the whole decade for a gone asset, and keeps Log", () => {
-        const stored = entry("spx", { asset: "gone", log: true, zoom: { start: 20, end: 25 } });
-        expect(restore({ asset: "spx" }, stored, assets)).toEqual({ asset: assets[1], log: true, zoom: { start: 0, end: 100 } });
+    it("falls back to the attribute and the whole decade for a gone asset, and keeps what Show sets", () => {
+        const stored = entry("spx", { asset: "gone", log: true, labels: false, today: false, zoom: { start: 20, end: 25 } });
+        expect(restore({ asset: "spx" }, stored, assets)).toEqual({
+            asset: assets[1],
+            log: true,
+            labels: false,
+            today: false,
+            zoom: { start: 0, end: 100 }
+        });
+    });
+
+    it("shows the axis labels and Today for a view stored before they could be hidden", () => {
+        const stored = entry(null, { asset: "dji", log: false, zoom: { start: 0, end: 100 } });
+        expect(restore({}, stored, assets)).toMatchObject(shown);
     });
 
     it("clamps a stored zoom", () => {
@@ -169,9 +189,16 @@ describe("isMemory", () => {
     it("accepts views per instance", () => {
         expect(isMemory({})).toBe(true);
         expect(isMemory({ "1:0": { attributes: { asset: null }, pick } })).toBe(true);
+        expect(isMemory({ "1:0": { attributes: { asset: null }, pick: { ...pick, labels: false, today: true } } })).toBe(true);
     });
 
-    it.each([null, [], { "1:0": { attributes: {}, pick: { ...pick, log: "yes" } } }, { "1:0": { pick } }])("rejects %j", (value) => {
+    it.each([
+        null,
+        [],
+        { "1:0": { attributes: {}, pick: { ...pick, log: "yes" } } },
+        { "1:0": { attributes: {}, pick: { ...pick, today: 0 } } },
+        { "1:0": { pick } }
+    ])("rejects %j", (value) => {
         expect(isMemory(value)).toBe(false);
     });
 });

@@ -269,7 +269,7 @@ describe("DecennialCycles", () => {
             const item = await reset();
             expect(item).toHaveAttribute("aria-disabled", "false");
             await userEvent.click(item);
-            expect(stored()).toEqual({ asset: "spx", log: true, zoom: { start: 0, end: 100 } });
+            expect(stored()).toEqual({ asset: "spx", log: true, labels: true, today: true, zoom: { start: 0, end: 100 } });
             const [, slider] = (await chartOption())?.dataZoom as Zoom[];
             expect(slider).toMatchObject({ start: 0, end: 100 });
             expect(await reset()).toHaveAttribute("aria-disabled", "true");
@@ -282,7 +282,7 @@ describe("DecennialCycles", () => {
                 await userEvent.click(screen.getByRole("combobox", { name: "Asset" }));
                 await userEvent.click(await screen.findByRole("option", { name }));
             }
-            expect(stored()).toEqual({ asset: "dji", log: false, zoom: { start: 0, end: 100 } });
+            expect(stored()).toEqual({ asset: "dji", log: false, labels: true, today: true, zoom: { start: 0, end: 100 } });
             await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1897–2025" });
             expect(vi.mocked(getDecennialCycles).mock.calls.map(([id]) => id)).toEqual(["spx", "dji"]);
         });
@@ -301,6 +301,34 @@ describe("DecennialCycles", () => {
             await screen.findByRole("img", { name: "Decennial Cycles chart, Dow Jones Industrial - DJI, 1897–2025" });
             const [, slider] = (await chartOption())?.dataZoom as Zoom[];
             expect(slider).toMatchObject({ start: 30, end: 40 });
+        });
+
+        it("hides the axis labels and the Today line from the Show switches, and stores both", async () => {
+            await open();
+            const show = async (name: string) => within(await settings()).getByRole("menuitemcheckbox", { name });
+            expect(await show("Axis labels")).toHaveAttribute("aria-checked", "true");
+            expect(await show("Today")).toHaveAttribute("aria-checked", "true");
+            const items = within(await settings()).getAllByRole("menuitemcheckbox");
+            expect([await show("Today"), await show("Axis labels"), await logScale()]).toEqual(items);
+
+            await userEvent.click(await show("Axis labels"));
+            await userEvent.click(await show("Today"));
+            expect(stored()).toMatchObject({ labels: false, today: false });
+            const option = await chartOption();
+            const [x] = option?.xAxis as (XAxis & { axisLabel: { show: boolean } })[];
+            const [y] = option?.yAxis as { axisLabel: { show: boolean } }[];
+            const [series] = option?.series as Series[];
+            expect([x.axisLabel.show, x.name, y.axisLabel.show]).toEqual([false, "", false]);
+            expect(series.markLine).toBeUndefined();
+
+            await userEvent.click(await logScale());
+            const [logY] = (await chartOption())?.yAxis as { axisLabel: { show: boolean } }[];
+            expect(logY.axisLabel.show).toBe(false);
+            cleanup();
+
+            await open();
+            expect(await show("Axis labels")).toHaveAttribute("aria-checked", "false");
+            expect(await show("Today")).toHaveAttribute("aria-checked", "false");
         });
 
         it("restores the stored view, and drops it when the attribute changed", async () => {

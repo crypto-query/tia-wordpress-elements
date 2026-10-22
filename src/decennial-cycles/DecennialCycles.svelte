@@ -28,7 +28,7 @@
 
 <script lang="ts">
     import { format, type ECharts } from "echarts/core";
-    import { RotateCcw, Settings, Spline } from "lucide-svelte";
+    import { CalendarDays, RotateCcw, Settings, Spline, Type } from "lucide-svelte";
     import { onMount } from "svelte";
     import { MediaQuery } from "svelte/reactivity";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
@@ -82,6 +82,8 @@
     let assets = $state.raw<Asset[]>([]);
     let asset = $state.raw<Asset | null>(null);
     let log = $state(false);
+    let showLabels = $state(true);
+    let showToday = $state(true);
     let zoom = $state.raw<Zoom>(FULL_ZOOM);
     let shown = $state.raw<DecennialCycles | null>(null);
     let request = $state.raw<AbortController | null>(null);
@@ -94,7 +96,7 @@
     const zoomed = $derived(zoom.start > 0 || zoom.end < 100);
     // The caption and the chart name follow the data on screen, not a pick still loading; an error shows the pick.
     const named = $derived((!failure && assets.find(({ id }) => id === shown?.id)) || asset);
-    const option = $derived(theme && shown ? chartOption(theme, shown, log, zoom) : null);
+    const option = $derived(theme && shown ? chartOption(theme, shown, log, zoom, showLabels, showToday) : null);
 
     $effect(() => {
         const echart = chart;
@@ -129,7 +131,14 @@
         ].join("");
     }
 
-    function chartOption(theme: ChartTheme, { curve }: DecennialCycles, log: boolean, zoom: Zoom): Option {
+    function chartOption(
+        theme: ChartTheme,
+        { curve }: DecennialCycles,
+        log: boolean,
+        zoom: Zoom,
+        showLabels: boolean,
+        showToday: boolean
+    ): Option {
         const [start, end] = [zoom.start / 10, zoom.end / 10];
         const { ticks, labels, format: tickLabel } = xAxisTicks(start, end);
         const label = theme.axis.axisLabel;
@@ -177,7 +186,7 @@
                 type: "value",
                 min: 0,
                 max: 10,
-                name: axisName(start, end),
+                name: showLabels ? axisName(start, end) : "",
                 nameLocation: "middle",
                 nameGap: 28,
                 nameTextStyle: label,
@@ -185,14 +194,15 @@
                 // Only a hovered line draws thicker; the tooltip's pointer would draw it so all the time.
                 axisPointer: { snap: true, triggerEmphasis: false },
                 axisTick: { ...theme.axis.axisTick, customValues: ticks },
-                axisLabel: { ...label, customValues: labels, hideOverlap: true, formatter: tickLabel }
+                axisLabel: { ...label, show: showLabels, customValues: labels, hideOverlap: true, formatter: tickLabel }
             },
             yAxis: log
                 ? logAxis(
                       theme,
-                      curve.datapoints.flatMap(({ dec, value }) => (value === null || dec < start || dec > end ? [] : [value]))
+                      curve.datapoints.flatMap(({ dec, value }) => (value === null || dec < start || dec > end ? [] : [value])),
+                      showLabels
                   )
-                : { ...theme.axis, type: "value", scale: true, axisLabel: { ...label, formatter: formatTick } },
+                : { ...theme.axis, type: "value", scale: true, axisLabel: { ...label, show: showLabels, formatter: formatTick } },
             series: [
                 {
                     type: "line",
@@ -204,32 +214,34 @@
                     lineStyle: { width: 3 },
                     emphasis: { focus: "none", lineStyle: { width: 4 } },
                     color: theme.color[LINE_SLOT - 1],
-                    markLine: {
-                        silent: true,
-                        symbol: "none",
-                        label: {
-                            ...label,
-                            position: "end",
-                            formatter: today.label,
-                            align,
-                            color: theme.textStyle.color,
-                            backgroundColor: theme.tooltip.backgroundColor,
-                            borderColor: label.color,
-                            borderWidth: 1,
-                            borderRadius: 999,
-                            padding: [3, 8]
-                        },
-                        lineStyle: { color: label.color, type: "dashed", width: 1 },
-                        emphasis: { disabled: true },
-                        data: [{ xAxis: today.at }]
-                    }
+                    markLine: showToday
+                        ? {
+                              silent: true,
+                              symbol: "none",
+                              label: {
+                                  ...label,
+                                  position: "end",
+                                  formatter: today.label,
+                                  align,
+                                  color: theme.textStyle.color,
+                                  backgroundColor: theme.tooltip.backgroundColor,
+                                  borderColor: label.color,
+                                  borderWidth: 1,
+                                  borderRadius: 999,
+                                  padding: [3, 8]
+                              },
+                              lineStyle: { color: label.color, type: "dashed", width: 1 },
+                              emphasis: { disabled: true },
+                              data: [{ xAxis: today.at }]
+                          }
+                        : undefined
                 }
             ]
         };
     }
 
     /** The `asinh` y axis over the values in the window, with its ticks at round values in real %. */
-    function logAxis(theme: ChartTheme, values: number[]): Option["yAxis"] {
+    function logAxis(theme: ChartTheme, values: number[], showLabels: boolean): Option["yAxis"] {
         const ticks = (values.length > 0 ? asinhTicks(Math.min(...values), Math.max(...values)) : [0]).map((value) => Math.asinh(value));
         return {
             ...theme.axis,
@@ -239,6 +251,7 @@
             axisTick: { ...theme.axis.axisTick, customValues: ticks },
             axisLabel: {
                 ...theme.axis.axisLabel,
+                show: showLabels,
                 customValues: ticks,
                 formatter: (value: number) => formatTick(Math.round(Math.sinh(value)))
             }
@@ -255,7 +268,10 @@
         if (instance === null || !asset) {
             return;
         }
-        const entry = { attributes: normalise(attributes, ATTRIBUTE_KEYS), pick: { asset: asset.id, log, zoom } };
+        const entry = {
+            attributes: normalise(attributes, ATTRIBUTE_KEYS),
+            pick: { asset: asset.id, log, labels: showLabels, today: showToday, zoom }
+        };
         memory.set({ ...memory.current, [instance]: entry });
     }
 
@@ -271,6 +287,8 @@
             const view = restore(attributes, entry, assets);
             if (view) {
                 ({ asset, log, zoom } = view);
+                showLabels = view.labels;
+                showToday = view.today;
             }
         } catch (error) {
             fail(error, loadAssets);
@@ -391,7 +409,7 @@
             {@render helpItem("Zoom", "Drag the handles of the slider under the chart. Drag the chart to move along the decade.")}
             {@render helpItem(
                 "Settings",
-                "The cog holds Reset and Log scale. Reset shows the whole decade again and keeps the asset and Log scale."
+                "The cog holds Reset, Today, Axis labels and Log scale. Reset shows the whole decade again and keeps the asset and what Show sets."
             )}
         </ul>
     </Popover>
@@ -415,6 +433,30 @@
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup heading="Show">
+            <DropdownMenuItem
+                label="Today"
+                description="The dashed line where today falls in the decade."
+                bind:checked={
+                    () => showToday,
+                    (on) => {
+                        showToday = on;
+                        remember();
+                    }
+                }>
+                {#snippet leadingIcon()}<CalendarDays />{/snippet}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                label="Axis labels"
+                description="Years, months and % values on the axes."
+                bind:checked={
+                    () => showLabels,
+                    (on) => {
+                        showLabels = on;
+                        remember();
+                    }
+                }>
+                {#snippet leadingIcon()}<Type />{/snippet}
+            </DropdownMenuItem>
             <DropdownMenuItem label="Log scale" description="Makes large moves easier to compare." bind:checked={() => log, pickLog}>
                 {#snippet leadingIcon()}<Spline />{/snippet}
             </DropdownMenuItem>

@@ -91,7 +91,8 @@ export type Zoom = { start: number; end: number };
 export const FULL_ZOOM: Zoom = { start: 0, end: 100 };
 
 /** One instance's view; the zoom belongs to its asset. */
-export type InstancePick = { asset: string; log: boolean; zoom: Zoom };
+/** `labels` and `today` came later, so a stored pick may lack them; they default to on. */
+export type InstancePick = { asset: string; log: boolean; labels?: boolean; today?: boolean; zoom: Zoom };
 
 /** What `localStorage` keeps: each instance's view, nothing shared. */
 export type Memory = Record<string, InstanceEntry<InstancePick>>;
@@ -100,6 +101,8 @@ const isPick = (value: unknown) =>
     isObject(value) &&
     typeof value.asset === "string" &&
     typeof value.log === "boolean" &&
+    ["undefined", "boolean"].includes(typeof value.labels) &&
+    ["undefined", "boolean"].includes(typeof value.today) &&
     isObject(value.zoom) &&
     Number.isFinite(value.zoom.start) &&
     Number.isFinite(value.zoom.end);
@@ -112,19 +115,19 @@ const isEntry = (value: unknown) =>
 
 export const isMemory = (value: unknown): value is Memory => isObject(value) && Object.values(value).every(isEntry);
 
-export type View = { asset: Asset; log: boolean; zoom: Zoom };
+export type View = { asset: Asset; log: boolean; labels: boolean; today: boolean; zoom: Zoom };
 
-/** The view to start with: the stored one unless the attribute changed. A stored asset that is gone falls back to the attribute rule and the whole decade. */
+/** The view to start with: the stored one unless the attribute changed. A stored asset that is gone falls back to the attribute rule and the whole decade, keeping what Show sets. */
 export function restore(attributes: Record<string, unknown>, entry: InstanceEntry<InstancePick> | undefined, assets: Asset[]): View | null {
     const pick = storedPick(entry, attributes, ATTRIBUTE_KEYS);
     const stored = pick && assets.find(({ id }) => id === pick.asset);
-    const log = pick?.log ?? false;
+    const kept = { log: pick?.log ?? false, labels: pick?.labels ?? true, today: pick?.today ?? true };
     if (!pick || !stored) {
         const asset = pickAsset(attributes.asset, assets);
-        return asset && { asset, log, zoom: FULL_ZOOM };
+        return asset && { asset, ...kept, zoom: FULL_ZOOM };
     }
     const start = clamp(pick.zoom.start, 0, 100);
-    return { asset: stored, log, zoom: { start, end: clamp(pick.zoom.end, start, 100) } };
+    return { asset: stored, ...kept, zoom: { start, end: clamp(pick.zoom.end, start, 100) } };
 }
 
 /** For screen readers: each Decade Year's last value, then the low and the high with their dates. Nulls are left out. */
