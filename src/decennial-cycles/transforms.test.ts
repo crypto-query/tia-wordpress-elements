@@ -58,9 +58,9 @@ describe("toSlot and slotLabel", () => {
 
 describe("todayMarker", () => {
     it("places a date by its UTC day of the year, labelled with the year", () => {
-        expect(todayMarker(new Date(Date.UTC(2026, 0, 1)))).toEqual({ at: 6, label: "2026" });
-        expect(todayMarker(new Date(Date.UTC(2024, 1, 29)))).toEqual({ at: 4 + 59 / 366, label: "2024" });
-        expect(todayMarker(new Date(Date.UTC(2030, 11, 31, 23, 59)))).toEqual({ at: 364 / 366, label: "2030" });
+        expect(todayMarker(new Date(Date.UTC(2026, 0, 1)))).toEqual({ at: 6, label: "Today · 2026" });
+        expect(todayMarker(new Date(Date.UTC(2024, 1, 29)))).toEqual({ at: 4 + 59 / 366, label: "Today · 2024" });
+        expect(todayMarker(new Date(Date.UTC(2030, 11, 31, 23, 59)))).toEqual({ at: 364 / 366, label: "Today · 2030" });
     });
 
     it("puts a non-leap Mar 1 on slot 59", () => {

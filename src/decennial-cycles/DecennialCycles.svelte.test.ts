@@ -46,7 +46,7 @@ type Series = {
     data: unknown[];
     lineStyle: { width: number };
     emphasis: { lineStyle: { width: number } };
-    markLine: { data: { xAxis: number }[] };
+    markLine: { data: { xAxis: number }[]; label: Record<string, unknown> };
 };
 
 const chart = () => screen.findByRole("img", { name: "Decennial Cycles chart, S&P 500 - SPX, 1897–2025" });
@@ -102,6 +102,25 @@ describe("DecennialCycles", () => {
         expect(series.lineStyle.width).toBe(3);
         expect(series.emphasis.lineStyle.width).toBe(4);
         expect(series.markLine.data[0].xAxis).toBeCloseTo(todayMarker(new Date()).at);
+        expect(series.markLine.label).toMatchObject({ formatter: todayMarker(new Date()).label, borderWidth: 1 });
+    });
+
+    it("turns the today pill inward near either edge of the window, so it stays inside the chart", async () => {
+        vi.mocked(getAssets).mockResolvedValue(assets);
+        vi.mocked(getDecennialCycles).mockResolvedValue(data);
+        render(DecennialCycles, props);
+        await chart();
+        const at = todayMarker(new Date()).at * 10;
+        const label = async () => ((await chartOption())?.series as Series[])[0].markLine.label;
+        expect(await label()).toMatchObject({ align: at < 10 ? "left" : at > 90 ? "right" : "center" });
+
+        // A one-year window with today at most 5% from its start, then from its end; both lie inside 0–100.
+        const start = Math.max(0, at - 0.5);
+        await zoomTo(start, start + 10);
+        await waitFor(async () => expect(await label()).toMatchObject({ align: "left" }));
+        const end = Math.min(100, at + 0.5);
+        await zoomTo(end - 10, end);
+        await waitFor(async () => expect(await label()).toMatchObject({ align: "right" }));
     });
 
     it("draws the line in --chart-1, the colour of Actual on Predictive Cycles", async () => {

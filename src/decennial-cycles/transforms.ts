@@ -35,7 +35,7 @@ export function slotLabel(slot: number): string {
 export function todayMarker(now: Date): { at: number; label: string } {
     const year = now.getUTCFullYear();
     const day = (Date.UTC(year, now.getUTCMonth(), now.getUTCDate()) - Date.UTC(year, 0, 1)) / 86_400_000;
-    return { at: (year % 10) + day / SLOTS, label: String(year) };
+    return { at: (year % 10) + day / SLOTS, label: `Today · ${year}` };
 }
 
 /**

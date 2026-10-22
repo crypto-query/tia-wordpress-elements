@@ -134,6 +134,9 @@
         const { ticks, labels, format: tickLabel } = xAxisTicks(start, end);
         const label = theme.axis.axisLabel;
         const today = todayMarker(new Date());
+        // Centred, the pill would reach past the plot within its half width of an edge, so there it turns inward.
+        const place = (today.at - start) / (end - start);
+        const align = place < 0.1 ? "left" : place > 0.9 ? "right" : "center";
         // The y axis fits the window: the zoom filters the points, and Log takes its ticks from the points inside.
         const span = { xAxisIndex: 0, filterMode: "filter", minValueSpan: MIN_SPAN, start: zoom.start, end: zoom.end } as const;
         return {
@@ -204,7 +207,18 @@
                     markLine: {
                         silent: true,
                         symbol: "none",
-                        label: { ...label, position: "end", formatter: today.label },
+                        label: {
+                            ...label,
+                            position: "end",
+                            formatter: today.label,
+                            align,
+                            color: theme.textStyle.color,
+                            backgroundColor: theme.tooltip.backgroundColor,
+                            borderColor: label.color,
+                            borderWidth: 1,
+                            borderRadius: 999,
+                            padding: [3, 8]
+                        },
                         lineStyle: { color: label.color, type: "dashed", width: 1 },
                         emphasis: { disabled: true },
                         data: [{ xAxis: today.at }]
