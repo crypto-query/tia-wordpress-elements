@@ -66,8 +66,8 @@
     // `instance` is null in the editor preview, which neither restores nor stores a view.
     let { attributes, card, instance }: { attributes: Record<string, unknown>; card: BootCard | null; instance: string | null } = $props();
 
-    // The one curve takes the slot of the "All" role.
-    const LINE_SLOT = 2;
+    // Lines take `--chart-n` in order, as on Predictive Cycles, so the one line has Actual's colour.
+    const LINE_SLOT = 1;
     // The narrowest window, one month, so a zoom under one year shows the month ticks.
     const MIN_SPAN = 1 / 12;
 
@@ -197,8 +197,9 @@
                     data: curve.datapoints.map(({ dec, value }) => [dec, log ? toAsinh(value) : value]),
                     showSymbol: false,
                     triggerEvent: "line",
-                    lineStyle: { width: 2 },
-                    emphasis: { focus: "none", lineStyle: { width: 3 } },
+                    // As thick as Actual on Predictive Cycles.
+                    lineStyle: { width: 3 },
+                    emphasis: { focus: "none", lineStyle: { width: 4 } },
                     color: theme.color[LINE_SLOT - 1],
                     markLine: {
                         silent: true,

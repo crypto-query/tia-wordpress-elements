@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { userEvent } from "@vitest/browser/context";
 import { getInstanceByDom } from "echarts/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { ApiError } from "../shared/api";
 import { getAssets, getDecennialCycles, type Asset, type DecennialCycles as Data } from "./api";
 import DecennialCycles, { memory } from "./DecennialCycles.svelte";
@@ -41,7 +41,13 @@ const data: Data = {
     }
 };
 
-type Series = { type: string; data: unknown[]; lineStyle: { width: number }; markLine: { data: { xAxis: number }[] } };
+type Series = {
+    type: string;
+    data: unknown[];
+    lineStyle: { width: number };
+    emphasis: { lineStyle: { width: number } };
+    markLine: { data: { xAxis: number }[] };
+};
 
 const chart = () => screen.findByRole("img", { name: "Decennial Cycles chart, S&P 500 - SPX, 1897–2025" });
 const stored = () => memory.current["1:0"]?.pick;
@@ -93,8 +99,25 @@ describe("DecennialCycles", () => {
             [5, 12.5],
             [9.997, null]
         ]);
-        expect(series.lineStyle.width).toBe(2);
+        expect(series.lineStyle.width).toBe(3);
+        expect(series.emphasis.lineStyle.width).toBe(4);
         expect(series.markLine.data[0].xAxis).toBeCloseTo(todayMarker(new Date()).at);
+    });
+
+    it("draws the line in --chart-1, the colour of Actual on Predictive Cycles", async () => {
+        // The tokens come from the design system's CSS, which the tests do not load.
+        const slots = Array.from({ length: 11 }, (_, index) => `--chart-${index + 1}`);
+        slots.forEach((slot, index) => document.documentElement.style.setProperty(slot, `rgb(${index + 1}, 0, 0)`));
+        onTestFinished(() => slots.forEach((slot) => document.documentElement.style.removeProperty(slot)));
+        vi.mocked(getAssets).mockResolvedValue(assets);
+        vi.mocked(getDecennialCycles).mockResolvedValue(data);
+        render(DecennialCycles, props);
+
+        const [series] = getInstanceByDom(await chart())?.getOption().series as (Series & { color: string })[];
+        const probe = document.body.appendChild(document.createElement("span"));
+        probe.style.color = series.color;
+        expect(getComputedStyle(probe).color).toBe("rgb(1, 0, 0)");
+        probe.remove();
     });
 
     it("falls back to the first asset for a gone attribute", async () => {
