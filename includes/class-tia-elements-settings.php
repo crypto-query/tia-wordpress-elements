@@ -348,14 +348,16 @@ final class TIA_Elements_Settings {
 	}
 
 	/**
-	 * One asset field's rows: every upstream asset once, ordered by group and then by label.
+	 * One asset field's rows: every upstream asset once, then each enabled asset upstream lacks.
+	 *
+	 * Ordered by group and then by label; an asset in no list has group `''` and comes last.
 	 *
 	 * @param array<mixed>                $items    Upstream rows or assets; malformed items are skipped.
 	 * @param array<string>               $keys     The field's key fields, such as base and quote.
 	 * @param string                      $label    The upstream field that holds the label.
 	 * @param array<array<string, mixed>> $enabled  The enabled assets.
 	 * @param array<array<string, mixed>> $defaults The default assets; they give a group to an asset the list lacks.
-	 * @return list<array{asset: array<string, string>, label: string, group: string, enabled: bool}>
+	 * @return list<array{asset: array<string, string>, label: string, group: string, enabled: bool, upstream: bool}>
 	 */
 	public static function asset_rows( array $items, array $keys, string $label, array $enabled, array $defaults ): array {
 		$groups = array();
@@ -374,15 +376,32 @@ final class TIA_Elements_Settings {
 			}
 			$key            = implode( "\0", $asset );
 			$rows[ $key ] ??= array(
-				'asset'   => $asset,
-				'label'   => $item[ $label ],
-				'group'   => $groups[ $key ] ?? self::ASSET_GROUPS[0],
-				'enabled' => isset( $enabled[ $key ] ),
+				'asset'    => $asset,
+				'label'    => $item[ $label ],
+				'group'    => $groups[ $key ] ?? '',
+				'enabled'  => isset( $enabled[ $key ] ),
+				'upstream' => true,
 			);
 		}
+		foreach ( array_diff_key( $enabled, $rows ) as $asset ) {
+			$group = $asset['group'];
+			unset( $asset['group'] );
+			$rows[] = array(
+				'asset'    => $asset,
+				'label'    => implode( '/', $asset ),
+				'group'    => $group,
+				'enabled'  => true,
+				'upstream' => false,
+			);
+		}
+
+		$rank = static function ( string $group ): int {
+			$rank = array_search( $group, self::ASSET_GROUPS, true );
+			return false === $rank ? count( self::ASSET_GROUPS ) : $rank;
+		};
 		usort(
 			$rows,
-			static fn( $a, $b ) => array( array_search( $a['group'], self::ASSET_GROUPS, true ), strtolower( $a['label'] ) ) <=> array( array_search( $b['group'], self::ASSET_GROUPS, true ), strtolower( $b['label'] ) )
+			static fn( $a, $b ) => array( $rank( $a['group'] ), strtolower( $a['label'] ) ) <=> array( $rank( $b['group'] ), strtolower( $b['label'] ) )
 		);
 
 		return $rows;
@@ -391,15 +410,15 @@ final class TIA_Elements_Settings {
 	/**
 	 * The value to save for a submitted asset field.
 	 *
-	 * The form lists only upstream assets, so a stored asset the form lacks stays enabled.
-	 *
-	 * @param mixed                       $input    The form's `rows`, or an asset list; not an array when the field was absent from the form.
-	 * @param array<string>               $keys     The field's key fields, such as base and quote.
-	 * @param mixed                       $stored   The stored value; false when never saved.
-	 * @param array<array<string, mixed>> $defaults The default assets.
+	 * @param mixed                       $input      The form's `rows`, or an asset list; not an array when the field was absent from the form.
+	 * @param array<string>               $keys       The field's key fields, such as base and quote.
+	 * @param mixed                       $stored     The stored value; false when never saved.
+	 * @param array<array<string, mixed>> $defaults   The default assets.
+	 * @param array<string>               $ungrouped  Set to the enabled rows left out for want of a group, as `key/key`.
 	 * @return mixed The stored value when the field was absent or a never-saved field equals the default, else the enabled assets.
 	 */
-	public static function submitted_assets( mixed $input, array $keys, mixed $stored, array $defaults ): mixed {
+	public static function submitted_assets( mixed $input, array $keys, mixed $stored, array $defaults, array &$ungrouped = array() ): mixed {
+		$ungrouped = array();
 		// WordPress passes null for a registered option absent from $_POST; saving it would wipe the list.
 		if ( ! is_array( $input ) ) {
 			return $stored;
@@ -409,22 +428,18 @@ final class TIA_Elements_Settings {
 			return array_values( self::valid_assets( $input, $keys ) );
 		}
 
-		$shown  = array();
 		$assets = array();
 		foreach ( $input['rows'] as $row ) {
 			$asset = is_array( $row ) ? self::asset_of( $row, $keys ) : null;
-			if ( null === $asset ) {
+			if ( null === $asset || empty( $row['enabled'] ) ) {
 				continue;
 			}
-			$key           = implode( "\0", $asset );
-			$shown[ $key ] = true;
-			if ( ! empty( $row['enabled'] ) && in_array( $row['group'] ?? null, self::ASSET_GROUPS, true ) ) {
-				$assets[ $key ] = $asset + array( 'group' => $row['group'] );
+			if ( ! in_array( $row['group'] ?? null, self::ASSET_GROUPS, true ) ) {
+				$ungrouped[] = implode( '/', $asset );
+				continue;
 			}
+			$assets[ implode( "\0", $asset ) ] = $asset + array( 'group' => $row['group'] );
 		}
-
-		$current = self::valid_assets( is_array( $stored ) ? $stored : $defaults, $keys );
-		$assets += array_diff_key( $current, $shown );
 
 		if ( false === $stored && self::same_assets( $assets, self::valid_assets( $defaults, $keys ) ) ) {
 			return false;

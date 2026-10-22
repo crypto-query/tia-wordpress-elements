@@ -103,14 +103,29 @@ test("an admin disables an asset, and the asset route no longer lists it", async
     const field = page.getByRole("group", { name: "Predictive Cycles assets" });
     const source = page.locator("tr", { has: field }).getByText(/^Source: /);
     await expect(source).toHaveText("Source: default");
-    // Group, then label; `foo` is in no list, so it is off in the first group.
-    await expect(field.locator("label")).toHaveText(["Bitcoin - BTC", "Foo - not enabled", "Gold - XAU", "Dow Jones Industrial - DJI"]);
+    // Group, then label. The defaults upstream lacks show by id; `foo` is in no list, so it has no group and comes last.
+    await expect(field.locator("label")).toHaveText([
+        "Bitcoin - BTC",
+        "eth",
+        "Gold - XAU",
+        "xag",
+        "Dow Jones Industrial - DJI",
+        "ndx",
+        "spx",
+        "xao",
+        "xjo",
+        "Foo - not enabled"
+    ]);
+    await expect(field.getByRole("row", { name: "xag" })).toContainText("(not in the upstream list)");
+    await expect(field.getByRole("combobox", { name: "Group of Foo - not enabled" })).toHaveValue("");
     await expect(field.getByRole("combobox", { name: "Group of Gold - XAU" })).toHaveValue("Metals");
 
     await field.getByRole("checkbox", { name: "Gold - XAU" }).uncheck();
+    await field.getByRole("checkbox", { name: "Foo - not enabled" }).check();
     await page.getByRole("button", { name: "Save Changes" }).click();
 
-    await expect(page.getByText("Settings saved.")).toBeVisible();
+    await expect(page.getByText("Predictive Cycles assets: choose a group to enable foo.")).toBeVisible();
+    await expect(field.getByRole("checkbox", { name: "Foo - not enabled" })).not.toBeChecked();
     await expect(source).toHaveText("Source: option");
     await expect(field.getByRole("checkbox", { name: "Gold - XAU" })).not.toBeChecked();
 
@@ -144,4 +159,29 @@ test("with upstream down the saved list shows read-only, and a save of another f
     await expect(page.getByText("Settings saved.")).toBeVisible();
     await expect(page.getByLabel("Suite product ID")).toHaveValue("prod_e2e");
     expect(JSON.parse(wp("option", "get", "tia_predictive_cycles_assets", "--format=json"))).toEqual(saved);
+});
+
+test("an admin removes an asset that upstream no longer lists", async ({ page, context }) => {
+    wp(
+        "option",
+        "update",
+        "tia_predictive_cycles_assets",
+        JSON.stringify([
+            { id: "btc", group: "Crypto" },
+            { id: "gone", group: "Metals" }
+        ]),
+        "--format=json"
+    );
+    await context.addCookies([cookie("data-server-stub,supabase-stub")]);
+
+    await openSettings(page);
+    const field = page.getByRole("group", { name: "Predictive Cycles assets" });
+    await expect(field.getByRole("row", { name: "gone" })).toContainText("(not in the upstream list)");
+
+    await field.getByRole("checkbox", { name: "gone" }).uncheck();
+    await page.getByRole("button", { name: "Save Changes" }).click();
+
+    await expect(page.getByText("Settings saved.")).toBeVisible();
+    await expect(field.getByRole("checkbox", { name: "gone" })).toHaveCount(0);
+    expect(JSON.parse(wp("option", "get", "tia_predictive_cycles_assets", "--format=json"))).toEqual([{ id: "btc", group: "Crypto" }]);
 });

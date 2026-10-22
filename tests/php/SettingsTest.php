@@ -332,7 +332,7 @@ final class SettingsTest extends TestCase {
 	}
 
 	/**
-	 * Every upstream asset once, enabled from the list, ordered by group and then by label.
+	 * Every upstream asset once, then each enabled asset upstream lacks, by group and then label; no group comes last.
 	 */
 	public function test_asset_rows(): void {
 		$rows     = array(
@@ -386,19 +386,25 @@ final class SettingsTest extends TestCase {
 				'quote' => 'usd',
 				'group' => 'Crypto',
 			),
+			array(
+				'base'  => 'gone',
+				'quote' => 'usd',
+				'group' => 'Metals',
+			),
 		);
 		$defaults = ( new TIA_Elements_Settings( array(), array() ) )->forward_returns_assets();
 
 		$this->assertSame(
 			array(
-				array( 'btc/usd', 'bitcoin - BTC', 'Crypto', true ),
-				array( 'eth/usd', 'Ethereum - ETH', 'Crypto', false ),
-				array( 'new/usd', 'New - NEW', 'Crypto', false ),
-				array( 'aapl/usd', 'Apple - AAPL', 'Stocks', true ),
-				array( '^dji/usd', 'Dow - DJI', 'Indices', false ),
+				array( 'btc/usd', 'bitcoin - BTC', 'Crypto', true, true ),
+				array( 'eth/usd', 'Ethereum - ETH', 'Crypto', false, true ),
+				array( 'aapl/usd', 'Apple - AAPL', 'Stocks', true, true ),
+				array( 'gone/usd', 'gone/usd', 'Metals', true, false ),
+				array( '^dji/usd', 'Dow - DJI', 'Indices', false, true ),
+				array( 'new/usd', 'New - NEW', '', false, true ),
 			),
 			array_map(
-				static fn( $row ) => array( implode( '/', $row['asset'] ), $row['label'], $row['group'], $row['enabled'] ),
+				static fn( $row ) => array( implode( '/', $row['asset'] ), $row['label'], $row['group'], $row['enabled'], $row['upstream'] ),
 				TIA_Elements_Settings::asset_rows( $rows, array( 'base', 'quote' ), 'title', $enabled, $defaults )
 			)
 		);
@@ -419,13 +425,14 @@ final class SettingsTest extends TestCase {
 		$this->assertSame(
 			array(
 				array(
-					'asset'   => array( 'id' => 'spx' ),
-					'label'   => 'S&P 500 - SPX',
-					'group'   => 'Indices',
-					'enabled' => true,
+					'asset'    => array( 'id' => 'spx' ),
+					'label'    => 'S&P 500 - SPX',
+					'group'    => 'Indices',
+					'enabled'  => true,
+					'upstream' => true,
 				),
 			),
-			TIA_Elements_Settings::asset_rows( $items, array( 'id' ), 'name', ( new TIA_Elements_Settings( array(), array() ) )->decennial_cycles_assets(), array() )
+			TIA_Elements_Settings::asset_rows( $items, array( 'id' ), 'name', array_slice( ( new TIA_Elements_Settings( array(), array() ) )->decennial_cycles_assets(), 1, 1 ), array() )
 		);
 	}
 
@@ -494,28 +501,35 @@ final class SettingsTest extends TestCase {
 	}
 
 	/**
-	 * A form shows only upstream assets: a stored asset missing from the form stays, a cleared form clears the rest.
+	 * An unchecked row leaves the list, an asset upstream dropped included; an enabled row without a group is reported.
 	 */
-	public function test_submitted_assets_keep_assets_the_form_lacks(): void {
+	public function test_submitted_assets_save_only_checked_rows(): void {
 		$stored = array(
 			array(
 				'id'    => 'gone',
 				'group' => 'Metals',
 			),
-			array(
-				'id'    => 'btc',
-				'group' => 'Crypto',
-			),
-			array( 'id' => 'malformed' ),
 		);
 		$input  = array(
 			array(
-				'id'    => 'btc',
-				'group' => 'Crypto',
+				'id'    => 'gone',
+				'group' => 'Metals',
+			),
+			array(
+				'id'      => 'btc',
+				'group'   => 'Crypto',
+				'enabled' => '1',
+			),
+			array(
+				'id'      => 'new',
+				'group'   => '',
+				'enabled' => '1',
 			),
 		);
 
-		$this->assertSame( array( $stored[0] ), TIA_Elements_Settings::submitted_assets( array( 'rows' => $input ), array( 'id' ), $stored, array() ) );
+		$ungrouped = array();
+		$this->assertSame( array( $input[1] ), array_map( static fn( $asset ) => $asset + array( 'enabled' => '1' ), TIA_Elements_Settings::submitted_assets( array( 'rows' => $input ), array( 'id' ), $stored, array(), $ungrouped ) ) );
+		$this->assertSame( array( 'new' ), $ungrouped );
 	}
 
 	/**
@@ -541,7 +555,7 @@ final class SettingsTest extends TestCase {
 	 */
 	public function test_submitted_assets_keep_default_unsaved(): void {
 		$defaults = ( new TIA_Elements_Settings( array(), array() ) )->decennial_cycles_assets();
-		$shown    = array_map( static fn( $asset ) => $asset + array( 'enabled' => '1' ), array_slice( $defaults, 0, 2 ) );
+		$shown    = array_map( static fn( $asset ) => $asset + array( 'enabled' => '1' ), $defaults );
 
 		$this->assertFalse( TIA_Elements_Settings::submitted_assets( array( 'rows' => array_reverse( $shown ) ), array( 'id' ), false, $defaults ) );
 

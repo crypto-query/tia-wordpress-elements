@@ -21,6 +21,13 @@ final class TIA_Elements_Settings_Page {
 	private const TEST_ACTION = 'tia_elements_test_connection';
 
 	/**
+	 * The data server read that got no answer during this request, if any.
+	 *
+	 * @var WP_Error|null
+	 */
+	private static ?WP_Error $data_server_down = null;
+
+	/**
 	 * Asset fields: the option, the key fields of one asset, and the upstream field that holds its label.
 	 *
 	 * @var array<string, array{option: string, keys: list<string>, label_field: string}>
@@ -128,7 +135,7 @@ final class TIA_Elements_Settings_Page {
 				$option,
 				array(
 					'type'              => 'array',
-					'sanitize_callback' => static fn( $input ) => self::sanitize_assets( $key, $input ),
+					'sanitize_callback' => static fn( $input ) => self::sanitize_assets( $key, $label, $input ),
 				)
 			);
 			add_settings_field(
@@ -251,12 +258,19 @@ final class TIA_Elements_Settings_Page {
 	 * Sanitizes a submitted asset field; an absent field keeps the stored value.
 	 *
 	 * @param string $key   An ASSET_FIELDS key.
+	 * @param string $label The field label.
 	 * @param mixed  $input The submitted rows.
 	 */
-	public static function sanitize_assets( string $key, mixed $input ): mixed {
-		$field = self::ASSET_FIELDS[ $key ];
+	public static function sanitize_assets( string $key, string $label, mixed $input ): mixed {
+		$field     = self::ASSET_FIELDS[ $key ];
+		$ungrouped = array();
+		$value     = TIA_Elements_Settings::submitted_assets( is_array( $input ) ? map_deep( $input, 'sanitize_text_field' ) : $input, $field['keys'], get_option( $field['option'] ), self::assets( $key, new TIA_Elements_Settings( array(), array() ) ), $ungrouped );
+		if ( array() !== $ungrouped ) {
+			/* translators: 1: the field label, 2: the asset keys, comma-separated. */
+			add_settings_error( $field['option'], 'tia_asset_group', sprintf( __( '%1$s: choose a group to enable %2$s.', 'tia-wordpress-elements' ), $label, implode( ', ', $ungrouped ) ) );
+		}
 
-		return TIA_Elements_Settings::submitted_assets( is_array( $input ) ? map_deep( $input, 'sanitize_text_field' ) : $input, $field['keys'], get_option( $field['option'] ), self::assets( $key, new TIA_Elements_Settings( array(), array() ) ) );
+		return $value;
 	}
 
 	/**
@@ -271,7 +285,7 @@ final class TIA_Elements_Settings_Page {
 		$rows    = is_wp_error( $items ) ? array() : TIA_Elements_Settings::asset_rows( $items, $field['keys'], $field['label_field'], $enabled, self::assets( $args['key'], new TIA_Elements_Settings( array(), array() ) ) );
 
 		echo '<fieldset><legend class="screen-reader-text">' . esc_html( $args['label'] ) . '</legend>';
-		if ( array() === $rows ) {
+		if ( ! in_array( true, array_column( $rows, 'upstream' ), true ) ) {
 			echo '<div class="notice notice-warning inline"><p>' . esc_html__( 'The upstream asset list is not available now. The saved list shows read-only. Saving the page keeps it.', 'tia-wordpress-elements' ) . '</p></div>';
 			echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Asset', 'tia-wordpress-elements' ) . '</th><th>' . esc_html__( 'Group', 'tia-wordpress-elements' ) . '</th></tr></thead><tbody>';
 			foreach ( $enabled as $asset ) {
@@ -289,15 +303,19 @@ final class TIA_Elements_Settings_Page {
 					printf( '<input type="hidden" name="%1$s" value="%2$s" />', esc_attr( $name . '[' . $part . ']' ), esc_attr( $value ) );
 				}
 				printf(
-					'<label><input type="checkbox" name="%1$s" value="1"%2$s /> %3$s</label> <code>%4$s</code></td><td><select name="%5$s" aria-label="%6$s">',
+					'<label><input type="checkbox" name="%1$s" value="1"%2$s /> %3$s</label> %4$s</td><td><select name="%5$s" aria-label="%6$s">',
 					esc_attr( $name . '[enabled]' ),
 					checked( $row['enabled'], true, false ),
 					esc_html( $row['label'] ),
-					esc_html( implode( '/', $row['asset'] ) ),
+					// A row upstream lacks is labelled by its key already.
+					$row['upstream'] ? '<code>' . esc_html( implode( '/', $row['asset'] ) ) . '</code>' : '<span class="description">' . esc_html__( '(not in the upstream list)', 'tia-wordpress-elements' ) . '</span>',
 					esc_attr( $name . '[group]' ),
 					/* translators: %s: the asset label. */
 					esc_attr( sprintf( __( 'Group of %s', 'tia-wordpress-elements' ), $row['label'] ) )
 				);
+				if ( '' === $row['group'] ) {
+					echo '<option value="" selected="selected">' . esc_html__( 'Choose a group', 'tia-wordpress-elements' ) . '</option>';
+				}
 				foreach ( TIA_Elements_Settings::ASSET_GROUPS as $group ) {
 					printf( '<option value="%1$s"%2$s>%1$s</option>', esc_attr( $group ), selected( $row['group'], $group, false ) );
 				}
@@ -340,8 +358,14 @@ final class TIA_Elements_Settings_Page {
 				)
 			);
 		}
-		$body = TIA_Elements_Data_Server::get( 'predictive_cycles_assets' === $key ? '/forecast_curves_assets' : '/decennial_assets' );
+		// Both lists come from the data server; after a read with no answer, the second read would only wait again.
+		if ( null !== self::$data_server_down ) {
+			return self::$data_server_down;
+		}
+		$status = 0;
+		$body   = TIA_Elements_Data_Server::get( 'predictive_cycles_assets' === $key ? '/forecast_curves_assets' : '/decennial_assets', $status );
 		if ( is_wp_error( $body ) ) {
+			self::$data_server_down = 0 === $status ? $body : null;
 			return $body;
 		}
 
