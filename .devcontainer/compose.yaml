@@ -15,8 +15,10 @@ services:
             - ${HOME}/.ssh:${HOME}/.ssh:ro
         command: sleep infinity
 
-    # WordPress core and the database live in named volumes; this repo (the plugin) and the TIA theme are bind-mounted.
-    # The theme and plugins come from the wordpress/ submodule; run `git submodule update --init wordpress` before the first start.
+    # WordPress core and the database live in named volumes; this repo (the plugin) and the site code are bind-mounted.
+    # The site code comes from the wordpress/ submodule; run `git submodule update --init wordpress` before the first start.
+    # The constants match the site repo's wp-config.example.php, so live integrations stay off. Outbound HTTP
+    # reaches only the hosts this plugin calls; licence checks to other hosts would stall every wp-admin request.
     wordpress:
         image: wordpress:php8.3
         depends_on:
@@ -24,12 +26,12 @@ services:
                 condition: service_healthy
         volumes:
             - wordpress:/var/www/html
+            - ./php-opcache.ini:/usr/local/etc/php/conf.d/zz-opcache.ini:ro
+            - ../wordpress/wp-content/plugins:/var/www/html/wp-content/plugins
             - ..:/var/www/html/wp-content/plugins/tia-wordpress-elements
+            - ../wordpress/wp-content/mu-plugins:/var/www/html/wp-content/mu-plugins
+            - ../wordpress/wp-content/my-apps:/var/www/html/wp-content/my-apps
             - ../wordpress/wp-content/themes/tia:/var/www/html/wp-content/themes/tia
-            - ../wordpress/wp-content/plugins/woocommerce:/var/www/html/wp-content/plugins/woocommerce
-            - ../wordpress/wp-content/plugins/woocommerce-subscriptions:/var/www/html/wp-content/plugins/woocommerce-subscriptions
-            - ../wordpress/wp-content/plugins/block-visibility:/var/www/html/wp-content/plugins/block-visibility
-            - ../wordpress/wp-content/plugins/spectra-pro:/var/www/html/wp-content/plugins/spectra-pro
         ports:
             - 8000:80
         restart: always
@@ -38,7 +40,24 @@ services:
             WORDPRESS_DB_NAME: wordpress
             WORDPRESS_DB_PASSWORD: wordpress
             WORDPRESS_DB_HOST: database:3306
-            WORDPRESS_CONFIG_EXTRA: "define('SCRIPT_DEBUG', true);"
+            WORDPRESS_CONFIG_EXTRA: |
+                define('SCRIPT_DEBUG', true);
+                define('WP_ENVIRONMENT_TYPE', 'local');
+                define('WP_CACHE', false);
+                define('WP_MEMORY_LIMIT', '512M');
+                define('DISABLE_WP_CRON', true);
+                define('WP_HTTP_BLOCK_EXTERNAL', true);
+                define('WP_ACCESSIBLE_HOSTS', 'api.stripe.com,*.supabase.co,tia-data-server.cryptoquery.eu');
+                define('FLUENTMAIL_SIMULATE_EMAILS', true);
+                define('TIA_UPLOADS_FALLBACK_URL', 'https://tiainvestor.com');
+                define('TIA_INDICATORS_API_BASE_URL', '');
+                define('TIA_PRO_PRODUCT_ID', 19339);
+                define('TIA_ELITE_PARENT_ID', 244);
+                define('TIA_ELITE_VARIATION_ID', 19195);
+                if (is_readable('/var/www/html/wp-content/mu-plugins/oidc.key')) {
+                    define('OIDC_PRIVATE_KEY', file_get_contents('/var/www/html/wp-content/mu-plugins/oidc.key'));
+                    define('OIDC_PUBLIC_KEY', file_get_contents('/var/www/html/wp-content/mu-plugins/oidc.public.key'));
+                }
 
     database:
         image: mysql:8.4

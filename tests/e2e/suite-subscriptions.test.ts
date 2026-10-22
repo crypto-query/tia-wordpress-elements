@@ -27,12 +27,14 @@ test("the Suite table renders under the WooCommerce Subscriptions table", async 
     );
     expect(below).toBe(true);
 
+    // The store's own price format: a site can filter the symbol, as the live one does.
+    const price = wp("eval", 'echo html_entity_decode( wp_strip_all_tags( wc_price( 999, array( "currency" => "USD" ) ) ) );');
     await expect(suite(page).getByRole("rowgroup").last().getByRole("row")).toHaveCount(1);
     await expect(suite(page).locator("tbody td")).toHaveText([
         "TIA Indicator Suite",
         "Active",
         /^\s*-\s+Billing paused\. Ends \w+ \d{1,2}, \d{4}\s*$/,
-        "$999.00 / year",
+        `${price} / year`,
         ""
     ]);
 });

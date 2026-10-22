@@ -286,7 +286,7 @@ final class TIA_Elements_Settings_Page {
 
 		echo '<fieldset><legend class="screen-reader-text">' . esc_html( $args['label'] ) . '</legend>';
 		if ( ! in_array( true, array_column( $rows, 'upstream' ), true ) ) {
-			echo '<div class="notice notice-warning inline"><p>' . esc_html__( 'The upstream asset list is not available now. The saved list shows read-only. Saving the page keeps it.', 'tia-wordpress-elements' ) . '</p></div>';
+			echo '<section class="notice notice-warning inline"><p>' . esc_html__( 'The upstream asset list is not available now. The saved list shows read-only. Saving the page keeps it.', 'tia-wordpress-elements' ) . '</p></section>';
 			echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Asset', 'tia-wordpress-elements' ) . '</th><th>' . esc_html__( 'Group', 'tia-wordpress-elements' ) . '</th></tr></thead><tbody>';
 			foreach ( $enabled as $asset ) {
 				$group = $asset['group'];

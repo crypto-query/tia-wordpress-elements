@@ -17,12 +17,15 @@ if [ -z "$site" ]; then
 fi
 if [ "$(sed -n 2p <<<"$state" | cut -d ' ' -f 2-)" != "true $site" ]; then
     docker rm -f "$H" >/dev/null 2>&1 || true
+    # wp-config.php reads its local constants from this variable, so wp-cli needs it too.
+    extra=$(docker exec "$C" printenv WORDPRESS_CONFIG_EXTRA || true)
     # A parallel call may have started it first; the exec below works either way.
     docker run -d --name "$H" --label "tia.site=$site" --user 33:33 --volumes-from "$C" --network "container:$C" \
         -e WORDPRESS_DB_HOST=database:3306 \
         -e WORDPRESS_DB_USER=wordpress \
         -e WORDPRESS_DB_PASSWORD=wordpress \
         -e WORDPRESS_DB_NAME=wordpress \
+        -e WORDPRESS_CONFIG_EXTRA="$extra" \
         wordpress:cli sleep infinity >/dev/null 2>&1 || true
 fi
 
