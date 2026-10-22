@@ -672,7 +672,7 @@ function tia_elements_seed_check( $fixtures, $products ) {
 		$out  = array();
 		$bad  = array();
 
-		if ( array( $fixture['role'] ) !== array_values( $user->roles ) ) {
+		if ( tia_elements_seed_roles( $fixture['role'] ) !== array_values( $user->roles ) ) {
 			$bad[] = 'role';
 		}
 		$want = array_map( $spec_key, $fixture['subs'] );
@@ -715,6 +715,16 @@ function tia_elements_seed_check( $fixtures, $products ) {
 		);
 	}
 	return $errors;
+}
+
+/**
+ * The roles a fixture user holds: live Pro members also hold `active_membership`, which opens the Indicator Suite page.
+ *
+ * @param string $role The fixture role.
+ * @return array<int, string>
+ */
+function tia_elements_seed_roles( $role ) {
+	return 'tia_pro_-_annual' === $role ? array( $role, 'active_membership' ) : array( $role );
 }
 
 /**
@@ -772,6 +782,9 @@ function tia_elements_seed_run( $cli_args ) {
 		);
 		if ( is_wp_error( $user_id ) ) {
 			WP_CLI::error( $user_id->get_error_message() );
+		}
+		foreach ( array_slice( tia_elements_seed_roles( $fixture['role'] ), 1 ) as $role ) {
+			get_userdata( $user_id )->add_role( $role );
 		}
 		foreach ( $fixture['subs'] as $spec ) {
 			tia_elements_seed_subscription( $user_id, $products[ $spec['product'] ], $spec );
