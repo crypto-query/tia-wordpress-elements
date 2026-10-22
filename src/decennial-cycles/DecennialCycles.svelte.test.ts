@@ -163,6 +163,24 @@ describe("DecennialCycles", () => {
             expect(within(menu).getByRole("menuitemcheckbox", { name: "Log scale" })).toHaveAttribute("aria-checked", "false");
         });
 
+        it('opens the help from the "?" after Settings, and Esc closes it and returns focus', async () => {
+            await open();
+            const help = screen.getByRole("button", { name: "How to use this chart" });
+            expect(screen.getByRole("button", { name: "Settings" }).nextElementSibling).toBe(help);
+            await userEvent.click(help);
+            const panel = await screen.findByRole("dialog", { name: "How to use this chart" });
+            expect(help).toHaveAttribute("aria-controls", panel.id);
+            expect(
+                within(panel)
+                    .getAllByRole("listitem")
+                    .map((item) => item.firstElementChild?.textContent)
+            ).toEqual(["10-Year Cycle", "Today", "Read a value", "Zoom", "Settings"]);
+
+            await userEvent.keyboard("{Escape}");
+            await waitFor(() => expect(help).toHaveFocus());
+            await waitFor(() => expect(screen.queryByRole("dialog", { name: "How to use this chart" })).not.toBeInTheDocument());
+        });
+
         it("zooms x only, by slider and drag, with the wheel off and a window under one year", async () => {
             await open();
             const [inside, slider] = (await chartOption())?.dataZoom as Zoom[];

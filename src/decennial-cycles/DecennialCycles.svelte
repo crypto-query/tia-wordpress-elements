@@ -30,6 +30,7 @@
     import { format, type ECharts } from "echarts/core";
     import { RotateCcw, Settings, Spline } from "lucide-svelte";
     import { onMount } from "svelte";
+    import { MediaQuery } from "svelte/reactivity";
     import Alert from "tia-design-system/ui/alert/Alert.svelte";
     import Button from "tia-design-system/ui/button/Button.svelte";
     import Card from "tia-design-system/ui/card/Card.svelte";
@@ -40,6 +41,7 @@
     import DropdownMenuGroup from "tia-design-system/ui/dropdown-menu/DropdownMenuGroup.svelte";
     import DropdownMenuItem from "tia-design-system/ui/dropdown-menu/DropdownMenuItem.svelte";
     import DropdownMenuSeparator from "tia-design-system/ui/dropdown-menu/DropdownMenuSeparator.svelte";
+    import Popover from "tia-design-system/ui/popover/Popover.svelte";
     import Spinner from "tia-design-system/ui/spinner/Spinner.svelte";
     import AccessCard from "../shared/AccessCard.svelte";
     import { ApiError, type ErrorKind } from "../shared/api";
@@ -71,6 +73,10 @@
 
     const uid = $props.id();
     let root = $state<HTMLDivElement>();
+    let width = $state(0);
+    const coarse = new MediaQuery("(pointer: coarse)");
+    // Below the `@lg` container step, the help opens as a bottom sheet.
+    const narrow = $derived(width > 0 && width < 512);
     let chart = $state<ECharts>();
     let theme = $state.raw<ChartTheme | null>(null);
     let assets = $state.raw<Asset[]>([]);
@@ -345,6 +351,37 @@
     </Alert>
 {/snippet}
 
+{#snippet helpItem(title: string, text: string)}
+    <li><span class="block text-sm font-semibold text-foreground">{title}</span>{text}</li>
+{/snippet}
+
+{#snippet help()}
+    <Popover title="How to use this chart" sheet={narrow} align="end" class={narrow ? undefined : "w-85"} portalTarget={root}>
+        {#snippet trigger({ props })}
+            <button
+                {...props}
+                type="button"
+                aria-label="How to use this chart"
+                class="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-border-input bg-surface text-sm font-semibold text-foreground hover:bg-muted aria-expanded:border-primary aria-expanded:bg-background @max-lg:size-11 @max-lg:text-base pointer-coarse:size-11">
+                ?
+            </button>
+        {/snippet}
+        <ul class="grid gap-2 text-xs/normal text-foreground-muted">
+            {@render helpItem(
+                "10-Year Cycle",
+                "The line averages all past full years by their last digit. Each year starts where the one before it ended, so the returns add up across the decade."
+            )}
+            {@render helpItem("Today", "The dashed line marks where today falls in the decade.")}
+            {@render helpItem("Read a value", coarse.current ? "Tap the chart." : "Hover the chart.")}
+            {@render helpItem("Zoom", "Drag the handles of the slider under the chart. Drag the chart to move along the decade.")}
+            {@render helpItem(
+                "Settings",
+                "The cog holds Reset and Log scale. Reset shows the whole decade again and keeps the asset and Log scale."
+            )}
+        </ul>
+    </Popover>
+{/snippet}
+
 {#snippet settings()}
     <DropdownMenu aria-label="Settings" portalTarget={root}>
         {#snippet trigger({ props })}
@@ -371,7 +408,7 @@
 {/snippet}
 
 <!-- Positioned, so panels portalled here are placed from it; floating-ui misplaces them by the admin bar's html margin otherwise. -->
-<div bind:this={root} class="relative" {@attach readTheme}>
+<div bind:this={root} bind:clientWidth={width} class="relative" {@attach readTheme}>
     {#if card}
         <AccessCard feature="Decennial Cycles" {card} />
     {:else}
@@ -390,6 +427,7 @@
                     </div>
                     <div class="ml-auto flex shrink-0 items-center gap-2">
                         {@render settings()}
+                        {@render help()}
                     </div>
                 </div>
             {/if}
