@@ -21,7 +21,6 @@
         "test:unit": "vitest run --project=server",
         "test:php": "vendor/bin/phpunit",
         "test:e2e": "playwright test",
-        "wp:plugins": "bash scripts/wp-plugins.sh",
         "wp:seed": "bash scripts/wp-seed.sh",
         "wp:seed:fixture": "bash scripts/wp-seed-fixture.sh",
         "wp:use": "bash scripts/wp-use.sh"

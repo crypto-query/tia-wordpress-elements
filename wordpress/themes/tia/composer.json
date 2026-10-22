@@ -1,8 +1,0 @@
-{
-	"name": "tcc/base-theme",
-	"description": "TCC Base Theme",
-	"version": "2.0.0",
-	"require": {
-		"php": ">=8.0.0"
-	}
-}

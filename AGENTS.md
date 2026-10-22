@@ -12,7 +12,6 @@
   | `bun run check` | svelte-check | no |
   | `bun run test` | Vitest (`server` and `client` projects), then PHPUnit 12 (`phpunit.xml.dist`, `tests/php/`, no WordPress bootstrap) | no |
   | `bun run test:e2e` | Playwright (`tests/e2e/`) against the Docker site at `http://localhost:8000`; run `bun run wp:use` and `bun run wp:seed` first | yes |
-  | `bun run wp:plugins` | Copies the third-party plugins from the live server into `wordpress/plugins/` | no |
   | `bun run wp:seed` | Seeds the Docker site with test users, products and subscriptions | yes |
   | `bun run wp:use` | Points the Docker site's plugin at the checkout you run it from (see worktrees below) | yes |
 
@@ -25,10 +24,12 @@
 - **The browser pass** — a slice that touched a component, a Block or a page is done once it has been **seen rendered in a real browser**. Check design-system components on the design-system playground: every variant, size and state, in both themes. Check plugin Blocks on the Docker site with the TIA theme: every state, light theme only. Lint, `check` and the test suite read markup and computed values; none of them can see that a control draws at half size, clips its own content, overflows its container, or disappears against the dark canvas. This holds for a new component and for an edit to an existing one alike. The `tia-design-system` skill carries the how — the browser mode (headless unless explicitly asked otherwise), and the defect classes only a browser catches.
 - **Worktrees live at `.agents/worktrees/<branch>`**, gitignored, so they stay inside the project instead of scattering beside it. A new one holds only tracked files, so create and prepare it in one go — without the design-system submodule, `node_modules` and `vendor` no gate runs:
   ```bash
-  B=my-branch; git worktree add .agents/worktrees/$B -b $B && (cd .agents/worktrees/$B && git submodule update --init && bun install && composer install)
+  B=my-branch; git worktree add .agents/worktrees/$B -b $B && (cd .agents/worktrees/$B && git submodule update --init packages/tia-design-system && bun install && composer install)
   ```
+  The recipe skips the `wordpress/` submodule (the site repo, about 785 MB). Only the main checkout needs it, because the Docker site mounts the theme and plugins from there.
   Give every later command an explicit `cd` into it — the shell's cwd stays in the main checkout. `git worktree remove` once the branch merges.
 - **Docker site and worktrees**: the Docker site mounts the main checkout, so every worktree is already inside the container. Before `bun run test:e2e` or a browser pass from a worktree, run `bun run wp:use` in that worktree. It deactivates the active copy and activates the worktree's copy through a symlink `wp-content/plugins/tia-wordpress-elements--<branch>`. Only one copy is active at a time. Run `bun run wp:use` in the main checkout to switch back. Switch back before you remove a worktree, or the site keeps a broken symlink. The e2e smoke test fails when the active copy is not the one of the checkout it runs from.
+- **Site code**: `wordpress/` is a submodule of the private site repo `crypto-query/tia-investor-site`, branch `main`. The Docker site mounts the `tia` theme and four plugins from `wordpress/wp-content/`. To change their versions, bump the submodule commit.
 - **Dev site**: assume the Docker site (`.devcontainer/compose.yaml`) is already running at `http://localhost:8000` (admin / admin). Never start, restart, or manage its containers. `scripts/wp-cli.sh` keeps its own idle helper container, `tia-wordpress-elements-wp-cli`, and replaces it when needed; leave that to the script. `bun run wp:use` and `bun run wp:seed` are the only changes you make to it.
 
 ## Operating rules
