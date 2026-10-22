@@ -152,7 +152,7 @@
             color: theme.color,
             textStyle: theme.textStyle,
             animation: false,
-            grid: { left: 8, right: 16, top: 24, bottom: 76 },
+            grid: { left: 8, right: 16, top: 24, bottom: 88 },
             tooltip: {
                 ...theme.tooltip,
                 trigger: "axis",
@@ -188,7 +188,7 @@
                 max: 10,
                 name: showLabels ? axisName(start, end) : "",
                 nameLocation: "middle",
-                nameGap: 28,
+                nameGap: 32,
                 nameTextStyle: label,
                 splitLine: { ...theme.axis.splitLine, show: true },
                 // Only a hovered line draws thicker; the tooltip's pointer would draw it so all the time.
