@@ -21,6 +21,29 @@ final class TIA_Elements_Settings_Page {
 	private const TEST_ACTION = 'tia_elements_test_connection';
 
 	/**
+	 * Asset fields: the option, the key fields of one asset, and the upstream field that holds its label.
+	 *
+	 * @var array<string, array{option: string, keys: list<string>, label_field: string}>
+	 */
+	private const ASSET_FIELDS = array(
+		'forward_returns_assets'   => array(
+			'option'      => TIA_Elements_Settings::FORWARD_RETURNS_ASSETS_OPTION,
+			'keys'        => array( 'base', 'quote' ),
+			'label_field' => 'title',
+		),
+		'predictive_cycles_assets' => array(
+			'option'      => TIA_Elements_Settings::PREDICTIVE_CYCLES_ASSETS_OPTION,
+			'keys'        => array( 'id' ),
+			'label_field' => 'name',
+		),
+		'decennial_cycles_assets'  => array(
+			'option'      => TIA_Elements_Settings::DECENNIAL_CYCLES_ASSETS_OPTION,
+			'keys'        => array( 'id' ),
+			'label_field' => 'name',
+		),
+	);
+
+	/**
 	 * Hooks the page into the admin.
 	 */
 	public static function register(): void {
@@ -62,6 +85,7 @@ final class TIA_Elements_Settings_Page {
 					)
 				);
 				add_settings_field( TIA_Elements_Settings::MEMBER_ROLES_OPTION, $label, array( self::class, 'render_roles_field' ), self::SLUG, self::SECTION );
+				self::register_asset_fields();
 				continue;
 			}
 
@@ -83,6 +107,39 @@ final class TIA_Elements_Settings_Page {
 				array(
 					'label_for' => $option,
 					'key'       => $key,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Registers one asset field per Block.
+	 */
+	private static function register_asset_fields(): void {
+		$labels = array(
+			'forward_returns_assets'   => __( 'Forward Returns assets', 'tia-wordpress-elements' ),
+			'predictive_cycles_assets' => __( 'Predictive Cycles assets', 'tia-wordpress-elements' ),
+			'decennial_cycles_assets'  => __( 'Decennial Cycles assets', 'tia-wordpress-elements' ),
+		);
+		foreach ( $labels as $key => $label ) {
+			$option = self::ASSET_FIELDS[ $key ]['option'];
+			register_setting(
+				self::GROUP,
+				$option,
+				array(
+					'type'              => 'array',
+					'sanitize_callback' => static fn( $input ) => self::sanitize_assets( $key, $input ),
+				)
+			);
+			add_settings_field(
+				$option,
+				$label,
+				array( self::class, 'render_assets_field' ),
+				self::SLUG,
+				self::SECTION,
+				array(
+					'key'   => $key,
+					'label' => $label,
 				)
 			);
 		}
@@ -188,6 +245,107 @@ final class TIA_Elements_Settings_Page {
 		echo '</fieldset>';
 
 		self::render_source( $stored['source'] );
+	}
+
+	/**
+	 * Sanitizes a submitted asset field; an absent field keeps the stored value.
+	 *
+	 * @param string $key   An ASSET_FIELDS key.
+	 * @param mixed  $input The submitted rows.
+	 */
+	public static function sanitize_assets( string $key, mixed $input ): mixed {
+		$field = self::ASSET_FIELDS[ $key ];
+
+		return TIA_Elements_Settings::submitted_assets( is_array( $input ) ? map_deep( $input, 'sanitize_text_field' ) : $input, $field['keys'], get_option( $field['option'] ), self::assets( $key, new TIA_Elements_Settings( array(), array() ) ) );
+	}
+
+	/**
+	 * Renders every upstream asset with Enabled and Group, or the saved list read-only when upstream is down.
+	 *
+	 * @param array{key: string, label: string} $args The field arguments.
+	 */
+	public static function render_assets_field( array $args ): void {
+		$field   = self::ASSET_FIELDS[ $args['key'] ];
+		$enabled = self::assets( $args['key'], TIA_Elements_Settings::from_wordpress() );
+		$items   = self::upstream_assets( $args['key'] );
+		$rows    = is_wp_error( $items ) ? array() : TIA_Elements_Settings::asset_rows( $items, $field['keys'], $field['label_field'], $enabled, self::assets( $args['key'], new TIA_Elements_Settings( array(), array() ) ) );
+
+		echo '<fieldset><legend class="screen-reader-text">' . esc_html( $args['label'] ) . '</legend>';
+		if ( array() === $rows ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html__( 'The upstream asset list is not available now. The saved list shows read-only. Saving the page keeps it.', 'tia-wordpress-elements' ) . '</p></div>';
+			echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Asset', 'tia-wordpress-elements' ) . '</th><th>' . esc_html__( 'Group', 'tia-wordpress-elements' ) . '</th></tr></thead><tbody>';
+			foreach ( $enabled as $asset ) {
+				$group = $asset['group'];
+				unset( $asset['group'] );
+				echo '<tr><td><code>' . esc_html( implode( '/', $asset ) ) . '</code></td><td>' . esc_html( $group ) . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Enabled', 'tia-wordpress-elements' ) . '</th><th>' . esc_html__( 'Group', 'tia-wordpress-elements' ) . '</th></tr></thead><tbody>';
+			foreach ( $rows as $index => $row ) {
+				$name = $field['option'] . '[rows][' . $index . ']';
+				echo '<tr><td>';
+				foreach ( $row['asset'] as $part => $value ) {
+					printf( '<input type="hidden" name="%1$s" value="%2$s" />', esc_attr( $name . '[' . $part . ']' ), esc_attr( $value ) );
+				}
+				printf(
+					'<label><input type="checkbox" name="%1$s" value="1"%2$s /> %3$s</label> <code>%4$s</code></td><td><select name="%5$s" aria-label="%6$s">',
+					esc_attr( $name . '[enabled]' ),
+					checked( $row['enabled'], true, false ),
+					esc_html( $row['label'] ),
+					esc_html( implode( '/', $row['asset'] ) ),
+					esc_attr( $name . '[group]' ),
+					/* translators: %s: the asset label. */
+					esc_attr( sprintf( __( 'Group of %s', 'tia-wordpress-elements' ), $row['label'] ) )
+				);
+				foreach ( TIA_Elements_Settings::ASSET_GROUPS as $group ) {
+					printf( '<option value="%1$s"%2$s>%1$s</option>', esc_attr( $group ), selected( $row['group'], $group, false ) );
+				}
+				echo '</select></td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+		echo '</fieldset>';
+
+		self::render_source( is_array( get_option( $field['option'] ) ) ? 'option' : 'default' );
+	}
+
+	/**
+	 * One asset field's list from the settings.
+	 *
+	 * @param string                $key      An ASSET_FIELDS key.
+	 * @param TIA_Elements_Settings $settings The settings; empty ones give the default list.
+	 * @return list<array<string, string>>
+	 */
+	private static function assets( string $key, TIA_Elements_Settings $settings ): array {
+		return match ( $key ) {
+			'forward_returns_assets'   => $settings->forward_returns_assets(),
+			'predictive_cycles_assets' => $settings->predictive_cycles_assets(),
+			default                    => $settings->decennial_cycles_assets(),
+		};
+	}
+
+	/**
+	 * One live read of a Block's upstream asset list.
+	 *
+	 * @param string $key An ASSET_FIELDS key.
+	 * @return array<mixed>|WP_Error
+	 */
+	private static function upstream_assets( string $key ): array|WP_Error {
+		if ( 'forward_returns_assets' === $key ) {
+			return TIA_Elements_Supabase::read(
+				array(
+					'select' => 'title,base,quote',
+					'period' => 'in.(1,3,6,12)',
+				)
+			);
+		}
+		$body = TIA_Elements_Data_Server::get( 'predictive_cycles_assets' === $key ? '/forecast_curves_assets' : '/decennial_assets' );
+		if ( is_wp_error( $body ) ) {
+			return $body;
+		}
+
+		return is_array( $body['assets'] ?? null ) ? $body['assets'] : array();
 	}
 
 	/**

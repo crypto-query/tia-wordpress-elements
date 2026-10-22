@@ -332,6 +332,224 @@ final class SettingsTest extends TestCase {
 	}
 
 	/**
+	 * Every upstream asset once, enabled from the list, ordered by group and then by label.
+	 */
+	public function test_asset_rows(): void {
+		$rows     = array(
+			array(
+				'title'  => 'Ethereum - ETH',
+				'base'   => 'eth',
+				'quote'  => 'usd',
+				'period' => 1,
+			),
+			array(
+				'title'  => 'bitcoin - BTC',
+				'base'   => 'btc',
+				'quote'  => 'usd',
+				'period' => 1,
+			),
+			array(
+				'title'  => 'bitcoin - BTC',
+				'base'   => 'btc',
+				'quote'  => 'usd',
+				'period' => 3,
+			),
+			array(
+				'title' => 'Apple - AAPL',
+				'base'  => 'aapl',
+				'quote' => 'usd',
+			),
+			array(
+				'title' => 'Dow - DJI',
+				'base'  => '^dji',
+				'quote' => 'usd',
+			),
+			array(
+				'title' => 'New - NEW',
+				'base'  => 'new',
+				'quote' => 'usd',
+			),
+			array(
+				'title' => 'No quote',
+				'base'  => 'x',
+			),
+			'junk',
+		);
+		$enabled  = array(
+			array(
+				'base'  => 'aapl',
+				'quote' => 'usd',
+				'group' => 'Stocks',
+			),
+			array(
+				'base'  => 'btc',
+				'quote' => 'usd',
+				'group' => 'Crypto',
+			),
+		);
+		$defaults = ( new TIA_Elements_Settings( array(), array() ) )->forward_returns_assets();
+
+		$this->assertSame(
+			array(
+				array( 'btc/usd', 'bitcoin - BTC', 'Crypto', true ),
+				array( 'eth/usd', 'Ethereum - ETH', 'Crypto', false ),
+				array( 'new/usd', 'New - NEW', 'Crypto', false ),
+				array( 'aapl/usd', 'Apple - AAPL', 'Stocks', true ),
+				array( '^dji/usd', 'Dow - DJI', 'Indices', false ),
+			),
+			array_map(
+				static fn( $row ) => array( implode( '/', $row['asset'] ), $row['label'], $row['group'], $row['enabled'] ),
+				TIA_Elements_Settings::asset_rows( $rows, array( 'base', 'quote' ), 'title', $enabled, $defaults )
+			)
+		);
+	}
+
+	/**
+	 * An id-keyed field reads the id and labels by name.
+	 */
+	public function test_asset_rows_by_id(): void {
+		$items = array(
+			array(
+				'id'   => 'spx',
+				'name' => 'S&P 500 - SPX',
+			),
+			array( 'id' => 'nameless' ),
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'asset'   => array( 'id' => 'spx' ),
+					'label'   => 'S&P 500 - SPX',
+					'group'   => 'Indices',
+					'enabled' => true,
+				),
+			),
+			TIA_Elements_Settings::asset_rows( $items, array( 'id' ), 'name', ( new TIA_Elements_Settings( array(), array() ) )->decennial_cycles_assets(), array() )
+		);
+	}
+
+	/**
+	 * An asset field absent from the form, read-only or never rendered, keeps the stored value.
+	 */
+	public function test_absent_asset_field_keeps_stored(): void {
+		$stored = array(
+			array(
+				'id'    => 'btc',
+				'group' => 'Crypto',
+			),
+		);
+
+		$this->assertSame( $stored, TIA_Elements_Settings::submitted_assets( null, array( 'id' ), $stored, array() ) );
+		$this->assertFalse( TIA_Elements_Settings::submitted_assets( null, array( 'id' ), false, array() ) );
+	}
+
+	/**
+	 * Only enabled rows with a valid group and the field's own keys are saved, once each.
+	 */
+	public function test_submitted_assets_keep_valid_rows(): void {
+		$input = array(
+			array(
+				'base'    => 'btc',
+				'quote'   => 'usd',
+				'group'   => 'Crypto',
+				'enabled' => '1',
+				'title'   => 'dropped',
+			),
+			array(
+				'base'    => 'btc',
+				'quote'   => 'usd',
+				'group'   => 'Stocks',
+				'enabled' => '1',
+			),
+			array(
+				'base'    => 'eth',
+				'quote'   => 'usd',
+				'group'   => 'Bonds',
+				'enabled' => '1',
+			),
+			array(
+				'base'    => 'sol',
+				'group'   => 'Crypto',
+				'enabled' => '1',
+			),
+			array(
+				'base'  => 'xag',
+				'quote' => 'usd',
+				'group' => 'Metals',
+			),
+			'junk',
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'base'  => 'btc',
+					'quote' => 'usd',
+					'group' => 'Stocks',
+				),
+			),
+			TIA_Elements_Settings::submitted_assets( array( 'rows' => $input ), array( 'base', 'quote' ), array(), array() )
+		);
+	}
+
+	/**
+	 * A form shows only upstream assets: a stored asset missing from the form stays, a cleared form clears the rest.
+	 */
+	public function test_submitted_assets_keep_assets_the_form_lacks(): void {
+		$stored = array(
+			array(
+				'id'    => 'gone',
+				'group' => 'Metals',
+			),
+			array(
+				'id'    => 'btc',
+				'group' => 'Crypto',
+			),
+			array( 'id' => 'malformed' ),
+		);
+		$input  = array(
+			array(
+				'id'    => 'btc',
+				'group' => 'Crypto',
+			),
+		);
+
+		$this->assertSame( array( $stored[0] ), TIA_Elements_Settings::submitted_assets( array( 'rows' => $input ), array( 'id' ), $stored, array() ) );
+	}
+
+	/**
+	 * An asset list, as add_option() passes the sanitized value back in, keeps its valid assets.
+	 */
+	public function test_submitted_asset_list_is_sanitized_again(): void {
+		$list = array(
+			array(
+				'id'    => 'btc',
+				'group' => 'Crypto',
+			),
+			array(
+				'id'    => 'eth',
+				'group' => 'Bonds',
+			),
+		);
+
+		$this->assertSame( array( $list[0] ), TIA_Elements_Settings::submitted_assets( $list, array( 'id' ), false, array() ) );
+	}
+
+	/**
+	 * A never-saved field stays unsaved while the submit equals the default; a change saves it.
+	 */
+	public function test_submitted_assets_keep_default_unsaved(): void {
+		$defaults = ( new TIA_Elements_Settings( array(), array() ) )->decennial_cycles_assets();
+		$shown    = array_map( static fn( $asset ) => $asset + array( 'enabled' => '1' ), array_slice( $defaults, 0, 2 ) );
+
+		$this->assertFalse( TIA_Elements_Settings::submitted_assets( array( 'rows' => array_reverse( $shown ) ), array( 'id' ), false, $defaults ) );
+
+		unset( $shown[0]['enabled'] );
+		$this->assertSame( array_slice( $defaults, 1 ), TIA_Elements_Settings::submitted_assets( array( 'rows' => $shown ), array( 'id' ), false, $defaults ) );
+	}
+
+	/**
 	 * Uninstall deletes exactly these nine options, the asset lists included.
 	 */
 	public function test_options_lists_all_nine(): void {

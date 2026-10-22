@@ -5,13 +5,26 @@ test.describe.configure({ mode: "serial" });
 
 let snapshots: OptionSnapshot[] = [];
 
+// A save under a stub cookie writes the stubbed URLs and keys into the options, so every option is restored.
 test.beforeAll(() => {
-    snapshots = ["tia_stripe_key", "tia_member_roles"].map(snapshotOption);
+    snapshots = [
+        "tia_supabase_url",
+        "tia_supabase_key",
+        "tia_data_server_url",
+        "tia_stripe_key",
+        "tia_stripe_suite_product",
+        "tia_member_roles",
+        "tia_forward_returns_assets",
+        "tia_predictive_cycles_assets",
+        "tia_decennial_cycles_assets"
+    ].map(snapshotOption);
 });
 
 test.afterAll(() => {
     snapshots.forEach(restoreOption);
 });
+
+const cookie = (value: string) => ({ name: "tia_elements_test", value, url: "http://localhost:8000" });
 
 async function openSettings(page: Page) {
     await logIn(page, "admin", "admin");
@@ -44,7 +57,6 @@ test("a saved secret is never shown again, and a blank submit keeps it", async (
 });
 
 test("Test connection reports the data server", async ({ page, context }) => {
-    const cookie = (value: string) => ({ name: "tia_elements_test", value, url: "http://localhost:8000" });
     await openSettings(page);
 
     await context.addCookies([cookie("data-server-stub")]);
@@ -78,4 +90,58 @@ test("saving the page unchanged keeps the member roles default unsaved", async (
 
     await expect(page.getByText("Settings saved.")).toBeVisible();
     await expect(source).toHaveText("Source: option");
+});
+
+test("an admin disables an asset, and the asset route no longer lists it", async ({ page, context }) => {
+    // The earlier tests leave a fake Stripe key and no Member role; both would keep the Member out of the route.
+    for (const option of ["tia_predictive_cycles_assets", "tia_stripe_key", "tia_member_roles"]) {
+        wp("option", "delete", option);
+    }
+    await context.addCookies([cookie("data-server-stub,supabase-stub")]);
+
+    await openSettings(page);
+    const field = page.getByRole("group", { name: "Predictive Cycles assets" });
+    const source = page.locator("tr", { has: field }).getByText(/^Source: /);
+    await expect(source).toHaveText("Source: default");
+    // Group, then label; `foo` is in no list, so it is off in the first group.
+    await expect(field.locator("label")).toHaveText(["Bitcoin - BTC", "Foo - not enabled", "Gold - XAU", "Dow Jones Industrial - DJI"]);
+    await expect(field.getByRole("combobox", { name: "Group of Gold - XAU" })).toHaveValue("Metals");
+
+    await field.getByRole("checkbox", { name: "Gold - XAU" }).uncheck();
+    await page.getByRole("button", { name: "Save Changes" }).click();
+
+    await expect(page.getByText("Settings saved.")).toBeVisible();
+    await expect(source).toHaveText("Source: option");
+    await expect(field.getByRole("checkbox", { name: "Gold - XAU" })).not.toBeChecked();
+
+    await context.clearCookies();
+    await logIn(page, "fx-pro-active");
+    const nonce = await (await page.request.get("/wp-admin/admin-ajax.php?action=rest-nonce")).text();
+    const response = await page.request.get("/wp-json/tia-data/v1/predictive-cycles/assets", {
+        headers: { "X-WP-Nonce": nonce, "X-Tia-Elements-Test": "data-server-stub" }
+    });
+    expect(response.status(), await response.text()).toBe(200);
+    expect(((await response.json()) as { id: string }[]).map(({ id }) => id)).toEqual(["btc", "dji"]);
+});
+
+test("with upstream down the saved list shows read-only, and a save of another field keeps it", async ({ page, context }) => {
+    const saved = [
+        { id: "btc", group: "Crypto" },
+        { id: "gone", group: "Metals" }
+    ];
+    wp("option", "update", "tia_predictive_cycles_assets", JSON.stringify(saved), "--format=json");
+    await context.addCookies([cookie("data-server-forbidden,supabase-stub")]);
+
+    await openSettings(page);
+    const field = page.getByRole("group", { name: "Predictive Cycles assets" });
+    await expect(field.getByText("The upstream asset list is not available now.")).toBeVisible();
+    await expect(field.getByRole("row")).toHaveText([/Asset\s*Group/, /btc\s*Crypto/, /gone\s*Metals/]);
+    await expect(field.getByRole("checkbox")).toHaveCount(0);
+
+    await page.getByLabel("Suite product ID").fill("prod_e2e");
+    await page.getByRole("button", { name: "Save Changes" }).click();
+
+    await expect(page.getByText("Settings saved.")).toBeVisible();
+    await expect(page.getByLabel("Suite product ID")).toHaveValue("prod_e2e");
+    expect(JSON.parse(wp("option", "get", "tia_predictive_cycles_assets", "--format=json"))).toEqual(saved);
 });

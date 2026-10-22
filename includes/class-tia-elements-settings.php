@@ -63,6 +63,9 @@ final class TIA_Elements_Settings {
 
 	public const MEMBER_ROLES_DEFAULT = array( 'tia_pro_-_annual' );
 
+	/** The asset groups, in display order. */
+	public const ASSET_GROUPS = array( 'Crypto', 'Stocks', 'Metals', 'Indices' );
+
 	public const FORWARD_RETURNS_ASSETS_OPTION = 'tia_forward_returns_assets';
 
 	/** Base, quote and group of each default Forward Returns asset. */
@@ -342,6 +345,143 @@ final class TIA_Elements_Settings {
 		$roles = array_filter( $input, static fn( $role ) => is_string( $role ) && in_array( $role, $existing, true ) );
 
 		return array_values( array_unique( $roles ) );
+	}
+
+	/**
+	 * One asset field's rows: every upstream asset once, ordered by group and then by label.
+	 *
+	 * @param array<mixed>                $items    Upstream rows or assets; malformed items are skipped.
+	 * @param array<string>               $keys     The field's key fields, such as base and quote.
+	 * @param string                      $label    The upstream field that holds the label.
+	 * @param array<array<string, mixed>> $enabled  The enabled assets.
+	 * @param array<array<string, mixed>> $defaults The default assets; they give a group to an asset the list lacks.
+	 * @return list<array{asset: array<string, string>, label: string, group: string, enabled: bool}>
+	 */
+	public static function asset_rows( array $items, array $keys, string $label, array $enabled, array $defaults ): array {
+		$groups = array();
+		foreach ( array( $defaults, $enabled ) as $list ) {
+			foreach ( self::valid_assets( $list, $keys ) as $key => $asset ) {
+				$groups[ $key ] = $asset['group'];
+			}
+		}
+		$enabled = self::valid_assets( $enabled, $keys );
+
+		$rows = array();
+		foreach ( $items as $item ) {
+			$asset = is_array( $item ) && is_string( $item[ $label ] ?? null ) ? self::asset_of( $item, $keys ) : null;
+			if ( null === $asset ) {
+				continue;
+			}
+			$key            = implode( "\0", $asset );
+			$rows[ $key ] ??= array(
+				'asset'   => $asset,
+				'label'   => $item[ $label ],
+				'group'   => $groups[ $key ] ?? self::ASSET_GROUPS[0],
+				'enabled' => isset( $enabled[ $key ] ),
+			);
+		}
+		usort(
+			$rows,
+			static fn( $a, $b ) => array( array_search( $a['group'], self::ASSET_GROUPS, true ), strtolower( $a['label'] ) ) <=> array( array_search( $b['group'], self::ASSET_GROUPS, true ), strtolower( $b['label'] ) )
+		);
+
+		return $rows;
+	}
+
+	/**
+	 * The value to save for a submitted asset field.
+	 *
+	 * The form lists only upstream assets, so a stored asset the form lacks stays enabled.
+	 *
+	 * @param mixed                       $input    The form's `rows`, or an asset list; not an array when the field was absent from the form.
+	 * @param array<string>               $keys     The field's key fields, such as base and quote.
+	 * @param mixed                       $stored   The stored value; false when never saved.
+	 * @param array<array<string, mixed>> $defaults The default assets.
+	 * @return mixed The stored value when the field was absent or a never-saved field equals the default, else the enabled assets.
+	 */
+	public static function submitted_assets( mixed $input, array $keys, mixed $stored, array $defaults ): mixed {
+		// WordPress passes null for a registered option absent from $_POST; saving it would wipe the list.
+		if ( ! is_array( $input ) ) {
+			return $stored;
+		}
+		// add_option() sanitizes the sanitized list a second time.
+		if ( ! is_array( $input['rows'] ?? null ) ) {
+			return array_values( self::valid_assets( $input, $keys ) );
+		}
+
+		$shown  = array();
+		$assets = array();
+		foreach ( $input['rows'] as $row ) {
+			$asset = is_array( $row ) ? self::asset_of( $row, $keys ) : null;
+			if ( null === $asset ) {
+				continue;
+			}
+			$key           = implode( "\0", $asset );
+			$shown[ $key ] = true;
+			if ( ! empty( $row['enabled'] ) && in_array( $row['group'] ?? null, self::ASSET_GROUPS, true ) ) {
+				$assets[ $key ] = $asset + array( 'group' => $row['group'] );
+			}
+		}
+
+		$current = self::valid_assets( is_array( $stored ) ? $stored : $defaults, $keys );
+		$assets += array_diff_key( $current, $shown );
+
+		if ( false === $stored && self::same_assets( $assets, self::valid_assets( $defaults, $keys ) ) ) {
+			return false;
+		}
+
+		return array_values( $assets );
+	}
+
+	/**
+	 * Whether two keyed asset lists hold the same assets in the same groups, in any order.
+	 *
+	 * @param array<string, array<string, string>> $a One list.
+	 * @param array<string, array<string, string>> $b The other list.
+	 */
+	private static function same_assets( array $a, array $b ): bool {
+		ksort( $a );
+		ksort( $b );
+
+		return $a === $b;
+	}
+
+	/**
+	 * The assets with the given key fields and a valid group, keyed by their key fields.
+	 *
+	 * @param array<mixed>  $items Assets.
+	 * @param array<string> $keys The key fields.
+	 * @return array<string, array<string, string>>
+	 */
+	private static function valid_assets( array $items, array $keys ): array {
+		$assets = array();
+		foreach ( $items as $item ) {
+			$asset = is_array( $item ) ? self::asset_of( $item, $keys ) : null;
+			if ( null !== $asset && in_array( $item['group'] ?? null, self::ASSET_GROUPS, true ) ) {
+				$assets[ implode( "\0", $asset ) ] = $asset + array( 'group' => $item['group'] );
+			}
+		}
+
+		return $assets;
+	}
+
+	/**
+	 * The item's key fields in key order, or null when one is not a non-empty string.
+	 *
+	 * @param array<mixed>  $item An asset, row or submitted row.
+	 * @param array<string> $keys The key fields.
+	 * @return array<string, string>|null
+	 */
+	private static function asset_of( array $item, array $keys ): ?array {
+		$asset = array();
+		foreach ( $keys as $key ) {
+			if ( ! is_string( $item[ $key ] ?? null ) || '' === $item[ $key ] ) {
+				return null;
+			}
+			$asset[ $key ] = $item[ $key ];
+		}
+
+		return $asset;
 	}
 
 	/**
