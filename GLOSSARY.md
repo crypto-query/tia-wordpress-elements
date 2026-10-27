@@ -11,22 +11,26 @@ Any unit the plugin ships to the site: a Block, a shortcode, a REST service, a s
 _Avoid_: Module, feature, widget
 
 **Block**:
-An Element that is a Gutenberg block an editor places on a page.
+An Element that is a Gutenberg block an editor places in a post or page.
 _Avoid_: Widget, component
+
+**Page**:
+A URL the plugin provides that shows one Tool to Members.
+_Avoid_: Feature Page, dashboard, screen
 
 ### Access
 
 **Member**:
-A WordPress user with access to the indicator Blocks, through TIA Pro, TIA Elite or the TIA Indicator Suite. Through TIA Pro or TIA Elite: the user holds the TIA Pro role, and either a live TIA Pro or TIA Elite subscription (`active`, `on-hold`, `pending-cancel`) or none at all (a manual grant); a user whose TIA Pro and TIA Elite subscriptions have all ended is not a Member. Other subscriptions, such as TIA Premium, do not count. Through the TIA Indicator Suite: the user has a Suite subscription that is active, past due or in a Trial. The granting subscription sets the access level and the Access Cut-off; when both apply, TIA Pro sets them.
+A WordPress user with access to the indicator Blocks, through TIA Pro, TIA Elite or TIA Suite. Through TIA Pro or TIA Elite: the user holds the TIA Pro role, and either a live TIA Pro or TIA Elite subscription (`active`, `on-hold`, `pending-cancel`) or none at all (a manual grant); a user whose TIA Pro and TIA Elite subscriptions have all ended is not a Member. Other subscriptions, such as TIA Premium, do not count. Through TIA Suite: the user has a TIA Suite subscription that is active, past due or in a Trial. The granting subscription sets the access level and the Access Cut-off; when both apply, TIA Pro sets them.
 _Avoid_: Subscriber (a WordPress role name), customer, user
 
 **TIA Pro**:
 The TIA subscription product sold on the WordPress site. It gives a Member access to the indicator Blocks.
 _Avoid_: Pro plan, premium
 
-**TIA Indicator Suite**:
+**TIA Suite**:
 The TIA subscription product sold in the TIA apps. Like TIA Pro, it makes a WordPress user a Member.
-_Avoid_: Suite plan, Stripe subscription, Indicators plan
+_Avoid_: TIA Indicator Suite (the old name), Indicator Suite, Suite plan, Stripe subscription, Indicators plan
 
 **TIA Elite**:
 A TIA membership sold on the WordPress site that gives the same access as TIA Pro.
@@ -43,6 +47,16 @@ _Avoid_: Trialing (the Stripe status), free period
 **Access Cut-off**:
 The last moment of indicator data a Member may see; data after it stays hidden.
 _Avoid_: Access until, expiry, paywall date
+
+### TIA Suite catalog
+
+**Tool**:
+One of the three TIA Suite analyses a Member opens on a Page: Forward Returns, Predictive Cycles, Decennial Cycles.
+_Avoid_: Dashboard, indicator, feature
+
+**TradingView Indicator**:
+A TIA script that a user adds to their TradingView charts after they link their TradingView username.
+_Avoid_: Indicator (alone), tool, dashboard
 
 ### Forward Returns
 
